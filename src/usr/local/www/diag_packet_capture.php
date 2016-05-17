@@ -126,8 +126,8 @@ $snaplen = 0;//default packet length
 $count = 100;//default number of packets to capture
 
 $fams = array('ip', 'ip6');
-$protos = array('icmp', 'icmp6', 'tcp', 'udp', 'arp', 'carp', 'esp',
-		        '!icmp', '!icmp6', '!tcp', '!udp', '!arp', '!carp', '!esp');
+$protos = array('icmp', 'icmp6', 'tcp', 'udp', 'arp', 'carp', 'esp', 'pfsync',
+		        '!icmp', '!icmp6', '!tcp', '!udp', '!arp', '!carp', '!esp', '!pfsync');
 
 $input_errors = array();
 
@@ -149,6 +149,7 @@ foreach (array('server', 'client') as $mode) {
 if ($_POST) {
 	$host = $_POST['host'];
 	$selectedif = $_POST['interface'];
+	$promiscuous = isset($_POST['promiscuous']);
 	$count = $_POST['count'];
 	$snaplen = $_POST['snaplen'];
 	$port = $_POST['port'];
@@ -162,6 +163,18 @@ if ($_POST) {
 
 	if ($fam !== "" && $fam !== "ip" && $fam !== "ip6") {
 		$input_errors[] = gettext("Invalid address family.");
+	}
+
+	if ($fam !== "" && $proto !== "") {
+		if ($fam == "ip" && $proto == "icmp6") {
+			$input_errors[] = gettext("IPv4 with ICMPv6 is not valid.");
+		}
+		if ($fam == "ip6" && $proto == "icmp") {
+			$input_errors[] = gettext("IPv6 with ICMP is not valid.");
+		}
+		if ($fam == "ip6" && $proto =="arp") {
+			$input_errors[] = gettext("IPv6 with ARP is not valid.");
+		}
 	}
 
 	if ($proto !== "" && !in_array(strip_not($proto), $protos)) {
@@ -263,21 +276,26 @@ if ($_POST) {
 	$do_tcpdump = false;
 }
 
+$excl = gettext("Exclude");
+
 $protocollist = array(
 	'' => 'Any',
 	'icmp' => 'ICMP',
-	'!icmp' => 'Exclude ICMP',
+	'!icmp' => $excl . ' ICMP',
 	'icmp6' => 'ICMPv6',
-	'!icmp6' => 'Exclude ICMPv6',
+	'!icmp6' => $excl . ' ICMPv6',
 	'tcp' => 'TCP',
-	'!tcp' => 'Exclude TCP',
+	'!tcp' => $excl . ' TCP',
 	'udp' => 'UDP',
-	'!udp' => 'Exclude UDP',
+	'!udp' => $excl . ' UDP',
 	'arp' => 'ARP',
-	'!arp' => 'Exclude ARP',
-	'carp' => 'CARP (VRRP)',
-	'!carp' => 'Exclude CARP (VRRP)',
-	'esp' => 'ESP'
+	'!arp' => $excl . ' ARP',
+	'carp' => 'CARP',
+	'!carp' => $excl . ' CARP',
+	'pfsync' => 'pfsync',
+	'!pfsync' => $excl . ' pfsync',
+	'esp' => 'ESP',
+	'!esp' => $excl . ' ESP'
 );
 
 include("head.inc");
@@ -300,9 +318,10 @@ $section->addInput(new Form_Select(
 $section->addInput(new Form_Checkbox(
 	'promiscuous',
 	'Promiscuous',
-	'Packet capture will be performed using promiscuous mode',
-	$pconfig['promiscuous']
-))->setHelp('Note: Some network adapters do not support or work well in promiscuous mode.'. '<br />' .
+	'Enable promiscuous mode',
+	$promiscuous
+))->setHelp('The packet capture will be performed using promiscuous mode.<br />' .
+			'Note: Some network adapters do not support or work well in promiscuous mode.'. '<br />' .
 			'More: ' . '<a target="_blank" href="http://www.freebsd.org/cgi/man.cgi?query=tcpdump&amp;apropos=0&amp;sektion=0&amp;manpath=FreeBSD+8.3-stable&amp;arch=default&amp;format=html">' .
 			'Packet capture' . '</a>');
 
@@ -311,10 +330,10 @@ $section->addInput(new Form_Select(
 	'Address Family',
 	$fam,
 	array('' => 'Any',
-		  'ip' => 'IPv4 Only',
-		  'ip6' => 'IPv6 Only'
+		  'ip' => gettext('IPv4 Only'),
+		  'ip6' => gettext('IPv6 Only')
 	)
-))->setHelp('Select the type of traffic to be captured');
+))->setHelp('Select the type of traffic to be captured.');
 
 $section->addInput(new Form_Select(
 	'proto',
@@ -331,7 +350,7 @@ $section->addInput(new Form_Input(
 ))->setHelp('This value is either the Source or Destination IP address or subnet in CIDR notation. The packet capture will look for this address in either field.' . '<br />' .
 			'Matching can be negated by preceding the value with "!". Multiple IP addresses or CIDR subnets may be specified. Comma (",") separated values perform a boolean "AND". ' .
 			'Separating with a pipe ("|") performs a boolean "OR".' . '<br />' .
-			'If you leave this field blank, all packets on the specified interface will be captured.');
+			'If this field is left blank, all packets on the specified interface will be captured.');
 
 $section->addInput(new Form_Input(
 	'port',
@@ -339,7 +358,7 @@ $section->addInput(new Form_Input(
 	'text',
 	$port
 ))->setHelp('The port can be either the source or destination port. The packet capture will look for this port in either field. ' .
-			'Leave blank if you do not want to filter by port.');
+			'Leave blank if not filtering by port.');
 
 $section->addInput(new Form_Input(
 	'snaplen',
@@ -361,10 +380,10 @@ $section->addInput(new Form_Select(
 	'detail',
 	'Level of detail',
 	$detail,
-	array('normal' => 'Normal',
-		  'medium' => 'Medium',
-		  'high' => 'High',
-		  'full' => 'Full',
+	array('normal' => gettext('Normal'),
+		  'medium' => gettext('Medium'),
+		  'high' => gettext('High'),
+		  'full' => gettext('Full'),
 	)
 ))->setHelp('This is the level of detail that will be displayed after hitting "Stop" when the packets have been captured.' . '<br />' .
 			'This option does not affect the level of detail when downloading the packet capture. ');
@@ -374,7 +393,7 @@ $section->addInput(new Form_Checkbox(
 	'Reverse DNS Lookup',
 	'Do reverse DNS lookup',
 	$_POST['dnsquery']
-))->setHelp('This check box will cause the packet capture to perform a reverse DNS lookup associated with all IP addresses.' . '<br />' .
+))->setHelp('The packet capture will perform a reverse DNS lookup associated with all IP addresses.' . '<br />' .
 			'This option can cause delays for large packet captures.');
 
 $form->add($section);
@@ -387,25 +406,33 @@ $processisrunning = ($processcheck != "");
 if (($action == gettext("Stop") or $action == "") and $processisrunning != true) {
 	$form->addGlobal(new Form_Button(
 		'startbtn',
-		'Start'
-	))->removeClass('btn-primary')->addClass('btn-success');
+		'Start',
+		null,
+		'fa-play-circle'
+	))->addClass('btn-success');
 } else {
 	$form->addGlobal(new Form_Button(
 		'stopbtn',
-		'Stop'
-	))->removeClass('btn-primary')->addClass('btn-warning');
+		'Stop',
+		null,
+		'fa-stop-circle'
+	))->addClass('btn-warning');
 }
 
 if (file_exists($fp.$fn) and $processisrunning != true) {
 	$form->addGlobal(new Form_Button(
 		'viewbtn',
-		'View Capture'
-	))->removeClass('btn-primary');
+		'View Capture',
+		null,
+		'fa-file-text-o'
+	))->addClass('btn-primary');
 
 	$form->addGlobal(new Form_Button(
 		'downloadbtn',
-		'Download Capture'
-	))->removeClass('btn-primary');
+		'Download Capture',
+		null,
+		'fa-download'
+	))->addClass('btn-primary');
 
 	$section->addInput(new Form_StaticText(
 		'Last capture',
@@ -458,7 +485,7 @@ if ($do_tcpdump) :
 	if ($action == gettext("Start")) {
 		$matchstr = implode($matches, " and ");
 
-		print_info_box(gettext('Packet Capture is running'), 'info');
+		print_info_box(gettext('Packet capture is running.'), 'info');
 
 		$cmd = "/usr/sbin/tcpdump -i {$selectedif} {$disablepromiscuous} {$searchcount} -s {$snaplen} -w {$fp}{$fn} " . escapeshellarg($matchstr);
 		// Debug
@@ -472,6 +499,11 @@ if ($do_tcpdump) :
 	<div class="panel-body">
 		<div class="form-group">
 <?php
+		if ($proto == "carp") {
+			$iscarp = "-T carp";
+		} else {
+			$iscarp = "";
+		}
 		$detail_args = "";
 		switch ($detail) {
 			case "full":
@@ -490,7 +522,7 @@ if ($do_tcpdump) :
 		}
 
 		print('<textarea class="form-control" rows="20" style="font-size: 13px; font-family: consolas,monaco,roboto mono,liberation mono,courier;">');
-		system("/usr/sbin/tcpdump {$disabledns} {$detail_args} -r {$fp}{$fn}");
+		system("/usr/sbin/tcpdump {$disabledns} {$detail_args} {$iscarp} -r {$fp}{$fn}");
 		print('</textarea>');
 
 		conf_mount_ro();

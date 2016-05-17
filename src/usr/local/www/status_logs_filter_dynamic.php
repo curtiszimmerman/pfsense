@@ -63,27 +63,84 @@
 ##|*MATCH=status_logs_filter_dynamic.php*
 ##|-PRIV
 
-require("guiconfig.inc");
-require_once("filter_log.inc");
-
-$filter_logfile = "{$g['varlog_path']}/filter.log";
-
-/* Hardcode this. AJAX doesn't do so well with large numbers */
-$nentries = 50;
 
 /* AJAX related routines */
-handle_ajax($nentries, $nentries + 20);
+require_once("guiconfig.inc");
+require_once("filter_log.inc");
+handle_ajax();
 
-if ($_POST['clear']) {
-	clear_log_file($filter_logfile);
+
+require_once("status_logs_common.inc");
+
+/*
+Build a list of allowed log files so we can reject others to prevent the page
+from acting on unauthorized files.
+*/
+$allowed_logs = array(
+	"filter" => array("name" => "Firewall",
+		    "shortcut" => "filter"),
+);
+
+// The logs to display are specified in a GET argument. Default to 'system' logs
+if (!$_GET['logfile']) {
+	$logfile = 'filter';
+	$view = 'normal';
+} else {
+	$logfile = $_GET['logfile'];
+	$view = $_GET['view'];
+	if (!array_key_exists($logfile, $allowed_logs)) {
+		/* Do not let someone attempt to load an unauthorized log. */
+		$logfile = 'filter';
+		$view = 'normal';
+	}
 }
 
-$filterlog = conv_log_filter($filter_logfile, $nentries, $nentries + 100);
+if ($view == 'normal')  { $view_title = gettext("Normal View"); }
+if ($view == 'dynamic') { $view_title = gettext("Dynamic View"); }
+if ($view == 'summary') { $view_title = gettext("Summary View"); }
 
-$pgtitle = array(gettext("Status"), gettext("System logs"), gettext("Firewall"), gettext("Dynamic View"));
-$shortcut_section = "firewall";
+
+// Log Filter Submit - Firewall
+log_filter_form_firewall_submit();
+
+
+// Manage Log Section - Code
+manage_log_code();
+
+
+// Status Logs Common - Code
+status_logs_common_code();
+
+
+$pgtitle = array(gettext("Status"), gettext("System Logs"), gettext($allowed_logs[$logfile]["name"]), $view_title);
 include("head.inc");
 
+if (!$input_errors && $savemsg) {
+	print_info_box($savemsg, 'success');
+	$manage_log_active = false;
+}
+
+
+// Tab Array
+tab_array_logs_common();
+
+
+// Manage Log - Section/Form
+if ($system_logs_manage_log_form_hidden) {
+	manage_log_section();
+}
+
+
+// Force the formatted mode filter and form.  Raw mode is not applicable in the dynamic view.
+$rawfilter = false;
+
+
+// Log Filter Submit - Firewall
+filter_form_firewall();
+
+
+// Now the forms are complete we can draw the log table and its controls
+system_log_filter();
 ?>
 
 <script type="text/javascript">
@@ -95,13 +152,27 @@ include("head.inc");
 	var isBusy = false;
 	var isPaused = false;
 	var nentries = <?=$nentries; ?>;
+
 <?php
-	if (isset($config['syslog']['reverse'])) {
-		echo "var isReverse = true;\n";
-	} else {
-		echo "var isReverse = false;\n";
+	# Build query string.
+	if ($filterlogentries_submit) {	# Formatted mode.
+		$filter_query_string = "type=formatted&filter=" . urlencode(json_encode($filterfieldsarray ));
 	}
+	if ($filtersubmit) {	# Raw mode.
+		$filter_query_string = "type=raw&filter=" . urlencode(json_encode($filtertext )) . "&interfacefilter=" . $interfacefilter;
+	}
+
+
+	# First get the "General Logging Options" (global) chronological order setting.  Then apply specific log override if set.
+	$reverse = isset($config['syslog']['reverse']);
+	$specific_log = basename($logfile, '.log') . '_settings';
+	if ($config['syslog'][$specific_log]['cronorder'] == 'forward') $reverse = false;
+	if ($config['syslog'][$specific_log]['cronorder'] == 'reverse') $reverse = true;
 ?>
+	var filter_query_string = "<?=$filter_query_string . '&logfile=' . $logfile_path . '&nentries=' . $nentries?>";
+
+	var isReverse = "<?=$reverse?>";
+
 	/* Called by the AJAX updater */
 	function format_log_line(row) {
 		if (row[8] == '6') {
@@ -183,7 +254,7 @@ function fetch_new_rules() {
 		return;
 	}
 	isBusy = true;
-	getURL('status_logs_filter_dynamic.php?lastsawtime=' + lastsawtime, fetch_new_rules_callback);
+	getURL('status_logs_filter_dynamic.php?' + filter_query_string + '&lastsawtime=' + lastsawtime, fetch_new_rules_callback);
 }
 
 function fetch_new_rules_callback(callback_data) {
@@ -226,7 +297,7 @@ function in_arrayi(needle, haystack) {
 }
 
 function update_table_rows(data) {
-	if (isPaused) {
+	if ((isPaused) || (data.length < 1)) {
 		return;
 	}
 
@@ -247,7 +318,7 @@ function update_table_rows(data) {
 
 	data = data.slice(startat, data.length);
 
-	var rows = jQuery('#filter-log-entries>tr');
+	var rows = $('#filter-log-entries>tr');
 
 	// Number of rows to move by
 	var move = rows.length + data.length - nentries;
@@ -256,43 +327,48 @@ function update_table_rows(data) {
 		move = 0;
 	}
 
+	if (($("#count").text() == 0) && (data.length < nentries)){
+		move += rows.length;
+	}
+
+	var tr_classes = 'text-nowrap';
+
 	if (isReverse == false) {
 		for (var i = move; i < rows.length; i++) {
-			jQuery(rows[i - move]).html(jQuery(rows[i]).html());
+			$(rows[i - move]).html($(rows[i]).html());
 		}
 
-		var tbody = jQuery('#filter-log-entries');
+		var tbody = $('#filter-log-entries');
 
 		for (var i = 0; i < data.length; i++) {
 			var rowIndex = rows.length - move + i;
 			if (rowIndex < rows.length) {
-				jQuery(rows[rowIndex]).html(data[i]);
+				$(rows[rowIndex]).html(data[i]);
+				$(rows[rowIndex]).className = tr_classes;
 			} else {
-				jQuery(tbody).append('<tr>' + data[i] + '</tr>');
+				$(tbody).append('<tr class="' + tr_classes + '">' + data[i] + '</tr>');
 			}
 		}
 	} else {
 		for (var i = rows.length - 1; i >= move; i--) {
-			jQuery(rows[i]).html(jQuery(rows[i - move]).html());
+			$(rows[i]).html($(rows[i - move]).html());
 		}
 
-		var tbody = jQuery('#filter-log-entries');
+		var tbody = $('#filter-log-entries');
 
 		for (var i = 0; i < data.length; i++) {
 			var rowIndex = move - 1 - i;
 			if (rowIndex >= 0) {
-				jQuery(rows[rowIndex]).html(data[i]);
+				$(rows[rowIndex]).html(data[i]);
+				$(rows[rowIndex]).className = tr_classes;
 			} else {
-				jQuery(tbody).prepend('<tr>' + data[i] + '</tr>');
+				$(tbody).prepend('<tr class="' + tr_classes + '">' + data[i] + '</tr>');
 			}
 		}
 	}
 
-	// Much easier to go through each of the rows once they've all be added.
-	rows = jQuery('#filter-log-entries>tr');
-	for (var i = 0; i < rows.length; i++) {
-		rows[i].className = i % 2 == 0 ? 'listMRodd' : 'listMReven';
-	}
+	var rowCount = $('#filter-log-entries>tr').length;
+	$("#count").html(rowCount);
 
 	$('.fa').tooltip();
 }
@@ -325,45 +401,30 @@ function toggleListDescriptions() {
 //]]>
 </script>
 
-<?php
-$tab_array = array();
-$tab_array[] = array(gettext("System"), false, "status_logs.php");
-$tab_array[] = array(gettext("Firewall"), true, "status_logs_filter.php");
-$tab_array[] = array(gettext("DHCP"), false, "status_logs.php?logfile=dhcpd");
-$tab_array[] = array(gettext("Portal Auth"), false, "status_logs.php?logfile=portalauth");
-$tab_array[] = array(gettext("IPsec"), false, "status_logs.php?logfile=ipsec");
-$tab_array[] = array(gettext("PPP"), false, "status_logs.php?logfile=ppp");
-$tab_array[] = array(gettext("VPN"), false, "status_logs_vpn.php");
-$tab_array[] = array(gettext("Load Balancer"), false, "status_logs.php?logfile=relayd");
-$tab_array[] = array(gettext("OpenVPN"), false, "status_logs.php?logfile=openvpn");
-$tab_array[] = array(gettext("NTP"), false, "status_logs.php?logfile=ntpd");
-$tab_array[] = array(gettext("Settings"), false, "status_logs_settings.php");
-display_top_tabs($tab_array);
-
-$tab_array = array();
-$tab_array[] = array(gettext("Normal View"), false, "/status_logs_filter.php");
-$tab_array[] = array(gettext("Dynamic View"), true, "/status_logs_filter_dynamic.php");
-$tab_array[] = array(gettext("Summary View"), false, "/status_logs_filter_summary.php");
-display_top_tabs($tab_array, false, 'nav nav-tabs');
-?>
 
 <div class="panel panel-default">
 	<div class="panel-heading">
 		<h2 class="panel-title">
-			<?=gettext('Last ') . $nentries . gettext(' records. ') . gettext('Pause ')?><input type="checkbox" onclick="javascript:toggle_pause();" />
+<?php
+	// Force the raw mode table panel title so that JQuery can update it dynamically.
+	$rawfilter = true;
+
+	print(system_log_table_panel_title());
+?>
+<?=" " . gettext('Pause') . " "?><input type="checkbox" onclick="javascript:toggle_pause();" />
 		</h2>
 	</div>
 	<div class="panel-body">
 		<div class="table-responsive">
 			<table class="table table-striped table-hover table-condensed">
 				<thead>
-					<tr>
-						<th><?=gettext("Act")?></th>
+					<tr class="text-nowrap">
+						<th><?=gettext("Action")?></th>
 						<th><?=gettext("Time")?></th>
-						<th><?=gettext("IF")?></th>
+						<th><?=gettext("Interface")?></th>
 						<th><?=gettext("Source")?></th>
 						<th><?=gettext("Destination")?></th>
-						<th><?=gettext("Proto")?></th>
+						<th><?=gettext("Protocol")?></th>
 					</tr>
 				</thead>
 				<tbody id="filter-log-entries">
@@ -372,7 +433,6 @@ display_top_tabs($tab_array, false, 'nav nav-tabs');
 				$tcpcnt = 0;
 
 				foreach ($filterlog as $filterent) {
-					$evenRowClass = $rowIndex % 2 ? " listMReven" : " listMRodd";
 					$rowIndex++;
 					if ($filterent['version'] == '6') {
 						$srcIP = "[" . htmlspecialchars($filterent['srcip']) . "]";
@@ -394,7 +454,7 @@ display_top_tabs($tab_array, false, 'nav nav-tabs');
 						$dstPort = "";
 					}
 ?>
-					<tr>
+					<tr class="text-nowrap">
 						<td>
 <?php
 							if ($filterent['act'] == "block") {
@@ -403,7 +463,7 @@ display_top_tabs($tab_array, false, 'nav nav-tabs');
 								$icon_act = "fa-check text-success";
 							}
 ?>
-							<i class="fa <?php echo $icon_act;?> icon-pointer" title="<?php echo $filterent['act'] .'/'. $filterent['tracker'];?>" onclick="javascript:getURL('status_logs_filter.php?getrulenum=<?="{$filterent['rulenum']},{$filterent['tracker']},{$filterent['act']}"; ?>', outputrule);"></i>
+							<i class="fa <?=$icon_act;?> icon-pointer" title="<?php echo $filterent['act'] .'/'. $filterent['tracker'];?>" onclick="javascript:getURL('status_logs_filter.php?getrulenum=<?="{$filterent['rulenum']},{$filterent['tracker']},{$filterent['act']}"; ?>', outputrule);"></i>
 						</td>
 						<td><?=htmlspecialchars($filterent['time'])?></td>
 						<td><?=htmlspecialchars($filterent['interface'])?></td>
@@ -419,17 +479,43 @@ display_top_tabs($tab_array, false, 'nav nav-tabs');
 					</tr>
 <?php
 				} // e-o-foreach()
+
+	if (count($filterlog) == 0) {
+		print '<tr class="text-nowrap"><td colspan=6>';
+		print_info_box(gettext('No logs to display.'));
+		print '</td></tr>';
+	}
 ?>
 				</tbody>
 			</table>
+
+<script type="text/javascript">
+//<![CDATA[
+events.push(function() {
+	$("#count").html(<?=count($filterlog);?>);
+});
+//]]>
+</script>
+
 		</div>
 	</div>
 </div>
-<?php
 
+<?php
 if ($tcpcnt > 0) {
+?>
+<div class="infoblock">
+<?php
 	print_info_box('<a href="https://doc.pfsense.org/index.php/What_are_TCP_Flags%3F">' .
-					gettext("TCP Flags") . '</a>: F - FIN, S - SYN, A or . - ACK, R - RST, P - PSH, U - URG, E - ECE, C - CWR');
+					gettext("TCP Flags") . '</a>: F - FIN, S - SYN, A or . - ACK, R - RST, P - PSH, U - URG, E - ECE, C - CWR.', 'info', false);
+?>
+</div>
+<?php
+}
+
+# Manage Log - Section/Form
+if (!$system_logs_manage_log_form_hidden) {
+	manage_log_section();
 }
 ?>
 

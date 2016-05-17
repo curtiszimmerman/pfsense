@@ -78,7 +78,10 @@ if ($_POST) {
 </div><div id="widget-<?=$widgetname?>_panel-footer" class="panel-footer collapse">
 
 <form action="/widgets/widgets/picture.widget.php" method="post" enctype="multipart/form-data" class="form-inline">
-	<label for="pictfile">New picture: </label>
+	<label for="pictfile"><?=gettext('New picture:')?> </label>
 	<input id="pictfile" name="pictfile" type="file" class="form-control" />
-	<button type="submit" class="btn btn-default">Upload</button>
+	<button type="submit" class="btn btn-primary btn-xs">
+		<i class="fa fa-upload icon-embed-btn"></i>
+		<?=gettext('Upload')?>
+	</button>
 </form>

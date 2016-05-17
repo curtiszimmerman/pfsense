@@ -92,8 +92,8 @@ if ($config['installedpackages']['olsrd']) {
 }
 
 if (!$_GET['if']) {
-	$savemsg = "<p><b>" . gettext("The DHCPv6 Server can only be enabled on interfaces configured with static, non unique local IP addresses") . ".</b></p>" .
-		"<p><b>" . gettext("Only interfaces configured with a static IP will be shown") . ".</b></p>";
+	$savemsg = gettext("The DHCPv6 Server can only be enabled on interfaces configured with static, non unique local IP addresses.") . "<br />" .
+	    gettext("Only interfaces configured with a static IP will be shown.");
 }
 
 $iflist = get_configured_interface_with_descr();
@@ -102,8 +102,13 @@ $iflist = get_configured_interface_with_descr();
 if (!$if || !isset($iflist[$if])) {
 	foreach ($iflist as $ifent => $ifname) {
 		$oc = $config['interfaces'][$ifent];
-		if ((is_array($config['dhcpdv6'][$ifent]) && !isset($config['dhcpdv6'][$ifent]['enable']) && !(is_ipaddrv6($oc['ipaddrv6']) && (!is_linklocal($oc['ipaddrv6'])))) ||
-		    (!is_array($config['dhcpdv6'][$ifent]) && !(is_ipaddrv6($oc['ipaddrv6']) && (!is_linklocal($oc['ipaddrv6']))))) {
+		$valid_if_ipaddrv6 = (bool) ($oc['ipaddrv6'] == 'track6' ||
+		    (is_ipaddrv6($oc['ipaddrv6']) &&
+		    !is_linklocal($oc['ipaddrv6'])));
+
+		if ((!is_array($config['dhcpdv6'][$ifent]) ||
+		    !isset($config['dhcpdv6'][$ifent]['enable'])) &&
+		    !$valid_if_ipaddrv6) {
 			continue;
 		}
 		$if = $ifent;
@@ -115,10 +120,14 @@ if (is_array($config['dhcpdv6'][$if])) {
 	/* RA specific */
 	$pconfig['ramode'] = $config['dhcpdv6'][$if]['ramode'];
 	$pconfig['rapriority'] = $config['dhcpdv6'][$if]['rapriority'];
+	$pconfig['rainterface'] = $config['dhcpdv6'][$if]['rainterface'];
 	if ($pconfig['rapriority'] == "") {
 		$pconfig['rapriority'] = "medium";
 	}
-	$pconfig['rainterface'] = $config['dhcpdv6'][$if]['rainterface'];
+
+	$pconfig['ravalidlifetime'] = $config['dhcpdv6'][$if]['ravalidlifetime'];
+	$pconfig['rapreferredlifetime'] = $config['dhcpdv6'][$if]['rapreferredlifetime'];
+
 	$pconfig['radomainsearchlist'] = $config['dhcpdv6'][$if]['radomainsearchlist'];
 	list($pconfig['radns1'], $pconfig['radns2'], $pconfig['radns3']) = $config['dhcpdv6'][$if]['radnsserver'];
 	$pconfig['rasamednsasdhcp6'] = isset($config['dhcpdv6'][$if]['rasamednsasdhcp6']);
@@ -129,22 +138,24 @@ if (!is_array($pconfig['subnets'])) {
 	$pconfig['subnets'] = array();
 }
 
-$advertise_modes = array("disabled" => "Disabled",
-	"router" => "Router Only",
-	"unmanaged" => "Unmanaged",
-	"managed" => "Managed",
-	"assist" => "Assisted",
-	"stateless_dhcp" => "Stateless DHCP");
-$priority_modes = array("low" => "Low",
-	"medium" => "Normal",
-	"high" => "High");
-$carplist = get_configured_carp_interface_list();
+$advertise_modes = array(
+	"disabled" => 	gettext("Disabled"),
+	"router" => 	gettext("Router Only"),
+	"unmanaged" => 	gettext("Unmanaged"),
+	"managed" => 	gettext("Managed"),
+	"assist" => 	gettext("Assisted"),
+	"stateless_dhcp" => gettext("Stateless DHCP"));
+$priority_modes = array(
+	"low" => 	gettext("Low"),
+	"medium" => gettext("Normal"),
+	"high" => 	gettext("High"));
 
-$subnets_help = '<span class="help-block">' . gettext("Subnets are specified in CIDR format.  " .
-	"Select the CIDR mask that pertains to each entry.	" .
-	"/128 specifies a single IPv6 host; /64 specifies a normal IPv6 network; etc.  " .
-	"If no subnets are specified here, the Router Advertisement (RA) Daemon will advertise to the subnet to which the router's interface is assigned." .
-	'</span>');
+$subnets_help = '<span class="help-block">' .
+	gettext("Subnets are specified in CIDR format.  " .
+		"Select the CIDR mask that pertains to each entry.	" .
+		"/128 specifies a single IPv6 host; /64 specifies a normal IPv6 network; etc.  " .
+		"If no subnets are specified here, the Router Advertisement (RA) Daemon will advertise to the subnet to which the router's interface is assigned.") .
+	'</span>';
 
 if ($_POST) {
 	unset($input_errors);
@@ -188,6 +199,10 @@ if ($_POST) {
 		}
 	}
 
+	if ($_POST['ravalidlifetime'] && (!is_numeric($_POST['ravalidlifetime']) || ($_POST['ravalidlifetime'] < 7200))) {
+		$input_errors[] = gettext("A valid lifetime below 2 hrs will be ignored by clients (RFC 4862 Section 5.5.3 point e)");
+	}
+
 	if (!$input_errors) {
 		if (!is_array($config['dhcpdv6'][$if])) {
 			$config['dhcpdv6'][$if] = array();
@@ -196,6 +211,9 @@ if ($_POST) {
 		$config['dhcpdv6'][$if]['ramode'] = $_POST['ramode'];
 		$config['dhcpdv6'][$if]['rapriority'] = $_POST['rapriority'];
 		$config['dhcpdv6'][$if]['rainterface'] = $_POST['rainterface'];
+
+		$config['dhcpdv6'][$if]['ravalidlifetime'] = $_POST['ravalidlifetime'];
+		$config['dhcpdv6'][$if]['rapreferredlifetime'] = $_POST['rapreferredlifetime'];
 
 		$config['dhcpdv6'][$if]['radomainsearchlist'] = $_POST['radomainsearchlist'];
 		unset($config['dhcpdv6'][$if]['radnsserver']);
@@ -223,7 +241,12 @@ if ($_POST) {
 	}
 }
 
-$pgtitle = array(gettext("Services"), gettext("Router Advertisements"));
+$pgtitle = array(gettext("Services"), htmlspecialchars(gettext("DHCPv6 Server & RA")));
+
+if (!empty($if) && isset($iflist[$if])) {
+	$pgtitle[] = $iflist[$if];
+}
+$pgtitle[] = gettext("Router Advertisements");
 
 include("head.inc");
 
@@ -241,9 +264,8 @@ $tabscounter = 0;
 $i = 0;
 foreach ($iflist as $ifent => $ifname) {
 	$oc = $config['interfaces'][$ifent];
-	// We need at least one interface configured with a NON-LOCAL IPv6 static address. fd80:8dba:82e1::/64 fits the bill
-	if ((is_array($config['dhcpdv6'][$ifent]) && !isset($config['dhcpdv6'][$ifent]['enable']) && !(is_ipaddrv6($oc['ipaddrv6']) && (!is_linklocal($oc['ipaddrv6'])))) ||
-	    (!is_array($config['dhcpdv6'][$ifent]) && !(is_ipaddrv6($oc['ipaddrv6']) && (!is_linklocal($oc['ipaddrv6']))))) {
+	// We need interfaces configured with a static IPv6 address or track6 for PD.
+	if (!is_ipaddrv6($oc['ipaddrv6']) && $oc['ipaddrv6'] != "track6") {
 		continue;
 	}
 
@@ -269,10 +291,7 @@ $tab_array[] = array(gettext("DHCPv6 Server"),		 false, "services_dhcpv6.php?if=
 $tab_array[] = array(gettext("Router Advertisements"), true,  "services_router_advertisements.php?if={$if}");
 display_top_tabs($tab_array, false, 'nav nav-tabs');
 
-$form = new Form(new Form_Button(
-	'Submit',
-	gettext("Save")
-));
+$form = new Form();
 
 $section = new Form_Section('Advertisements');
 
@@ -285,7 +304,7 @@ $section->addInput(new Form_Select(
 			'&nbsp;<strong>Router Only</strong> to only advertise this router' . '<br />' .
 			'&nbsp;<strong>Unmanaged</strong> for Router Advertising with Stateless Autoconfig' . '<br />' .
 			'&nbsp;<strong>Managed</strong> for assignment through a DHCPv6 Server' . '<br />' .
-			'&nbsp;<strong>Assisted</strong> for DHCPv6 Server assignment combined with Stateless Autoconfig.' .
+			'&nbsp;<strong>Assisted</strong> for DHCPv6 Server assignment combined with Stateless Autoconfig. ' .
 			'It is not required to activate this DHCPv6 server when set to "Managed", this can be another host on the network');
 
 $section->addInput(new Form_Select(
@@ -295,36 +314,54 @@ $section->addInput(new Form_Select(
 	$priority_modes
 ))->setHelp('Select the Priority for the Router Advertisement (RA) Daemon.');
 
+$carplist = get_configured_vip_list("inet6", VIP_CARP);
+
 $carplistif = array();
-if (count($carplist) > 0) {
-	foreach ($carplist as $ifname => $vip) {
-		if ((preg_match("/^{$if}_/", $ifname)) && (is_ipaddrv6($vip))) {
+
+if(count($carplist) > 0) {
+	foreach($carplist as $ifname => $vip) {
+		if (get_configured_vip_interface($ifname) == $if) {
 			$carplistif[$ifname] = $vip;
 		}
 	}
 }
 
 if (count($carplistif) > 0) {
-	$list = array();
+	$iflist = array();
 
-	foreach ($carplistif as $ifname => $vip) {
-		$list['interface'] = strtoupper($if);
-		$list[$ifname] = $ifname . ' - ' . $vip;
+	$iflist['interface'] = strtoupper($if);
+	foreach($carplistif as $ifname => $vip) {
+		$iflist[$ifname] = get_vip_descr($vip) . " - " . $vip;
 	}
 
 	$section->addInput(new Form_Select(
 		'rainterface',
 		'RA Interface',
 		$pconfig['rainterface'],
-		$list
+		$iflist
 	))->setHelp('Select the Interface for the Router Advertisement (RA) Daemon.');
 }
+
+$section->addInput(new Form_Input(
+	'ravalidlifetime',
+	'Default valid lifetime',
+	'text',
+	$pconfig['ravalidlifetime']
+))->setHelp('Seconds. The length of time in seconds (relative to the time the packet is sent) that the prefix is valid for the purpose of on-link determination.' . ' <br />' .
+'The default is 86400 seconds.');
+
+$section->addInput(new Form_Input(
+	'rapreferredlifetime',
+	'Default preferred lifetime',
+	'text',
+	$pconfig['rapreferredlifetime']
+))->setHelp('Seconds. The length of time in seconds (relative to the time the packet is sent) that addresses generated from the prefix via stateless address autoconfiguration remain preferred.' . ' <br />' .
+			'The default is 14400 seconds.');
 
 $section->addInput(new Form_StaticText(
 	'RA Subnets',
 	$subnets_help
 ));
-
 
 if (empty($pconfig['subnets'])) {
 	$pconfig['subnets'] = array('0' => '/128');
@@ -348,7 +385,9 @@ foreach ($pconfig['subnets'] as $subnet) {
 
 	$group->add(new Form_Button(
 		'deleterow' . $counter,
-		'Delete'
+		'Delete',
+		null,
+		'fa-trash'
 	))->removeClass('btn-primary')->addClass('btn-warning');
 
 	$group->addClass('repeatable');
@@ -360,8 +399,10 @@ foreach ($pconfig['subnets'] as $subnet) {
 
 $section->addInput(new Form_Button(
 	'addrow',
-	'Add'
-))->removeClass('btn-primary')->addClass('btn-success');
+	'Add',
+	null,
+	'fa-plus'
+))->addClass('btn-success');
 
 $form->add($section);
 
@@ -372,7 +413,7 @@ for ($idx=1; $idx<=3; $idx++) {
 		'radns' . $idx,
 		'Server ' . $idx,
 		$pconfig['radns' . $idx]
-	))->setPattern('[0-9, a-z, A-Z and .')->setHelp(($idx < 3) ? '':'Leave blank to use the system default DNS servers - this interface\'s IP if DNS Forwarder or Resolver is enabled, otherwise the servers configured on the General page');
+	))->setPattern('[a-zA-Z0-9\_\.\:]+')->setHelp(($idx < 3) ? '':'Leave blank to use the system default DNS servers - this interface\'s IP if DNS Forwarder or Resolver is enabled, otherwise the servers configured on the General page');
 }
 
 $section->addInput(new Form_Input(
@@ -380,7 +421,7 @@ $section->addInput(new Form_Input(
 	'Domain search list',
 	'text',
 	$pconfig['radomainsearchlist']
-))->setHelp('The RA server can optionally provide a domain search list. Use the semicolon character as separator ');
+))->setHelp('The RA server can optionally provide a domain search list. Use the semicolon character as separator.');
 
 $section->addInput(new Form_Checkbox(
 	'rasamednsasdhcp6',

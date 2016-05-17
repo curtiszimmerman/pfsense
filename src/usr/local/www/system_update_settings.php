@@ -64,51 +64,81 @@
 require("guiconfig.inc");
 require("pkg-utils.inc");
 
+$repos = pkg_list_repos();
+
 if ($_POST) {
-	unset($input_errors);
 
-	/* input validation */
-	if (($_POST['alturlenable'] == "yes") && (empty($_POST['firmwareurl']))) {
-		$input_errors[] = gettext("A Firmware Auto Update Base URL must be specified when \"Use an unofficial server for firmware upgrades\" is enabled.");
+	// Set the firmware branch, but only if we are not using it already
+	if ($_POST['fwbranch']) {
+		if (($_POST['fwbranch'] == "development") && !is_pkg_installed($g['product_name'] . "-repo-devel")) {
+			pkg_switch_repo(true);
+		} else if (($_POST['fwbranch'] == "stable") && !is_pkg_installed($g['product_name'] . "-repo")) {
+			pkg_switch_repo(false);
+		}
 	}
 
-	if (!$input_errors) {
-		// Set the firmware branch, but only if we are not using it already
-		if ($_POST['fwbranch']) {
-			if (($_POST['fwbranch'] == "development") && is_pkg_installed($g['product_name'] . "-repo")) {
-				pkg_switch_repo(true);
-			} else if (($_POST['fwbranch'] == "stable") && is_pkg_installed($g['product_name'] . "-repo-devel")) {
-				pkg_switch_repo(false);
-			}
-		}
-
-		if ($_POST['disablecheck'] == "yes") {
-			$config['system']['firmware']['disablecheck'] = true;
-		} else {
-			unset($config['system']['firmware']['disablecheck']);
-		}
-
-		if ($_POST['synconupgrade'] == "yes") {
-			$config['system']['gitsync']['synconupgrade'] = true;
-		} else {
-			unset($config['system']['gitsync']['synconupgrade']);
-		}
-		$config['system']['gitsync']['repositoryurl'] = $_POST['repositoryurl'];
-		$config['system']['gitsync']['branch'] = $_POST['branch'];
-
-		write_config();
+	if ($_POST['disablecheck'] == "yes") {
+		$config['system']['firmware']['disablecheck'] = true;
+	} elseif (isset($config['system']['firmware']['disablecheck'])) {
+		unset($config['system']['firmware']['disablecheck']);
 	}
+
+	if ($_POST['synconupgrade'] == "yes") {
+		$config['system']['gitsync']['synconupgrade'] = true;
+	} elseif (isset($config['system']['gitsync']['synconupgrade'])) {
+		unset($config['system']['gitsync']['synconupgrade']);
+	}
+
+	$config['system']['gitsync']['repositoryurl'] = $_POST['repositoryurl'];
+	$config['system']['gitsync']['branch'] = $_POST['branch'];
+
+	foreach ($repos as $repo) {
+		if ($repo['name'] == $_POST['fwbranch']) {
+			$config['system']['pkg_repo_conf_path'] = $repo['path'];
+			pkg_switch_repo($repo['path']);
+			break;
+		}
+	}
+
+	write_config();
+
+	$savemsg = gettext("Changes have been saved successfully");
 }
 
 $curcfg = $config['system']['firmware'];
 $gitcfg = $config['system']['gitsync'];
 
 $pgtitle = array(gettext("System"), gettext("Update"), gettext("Update Settings"));
-$closehead = false;
 
 exec("/usr/bin/fetch -q -o {$g['tmp_path']}/manifest \"{$g['update_manifest']}\"");
 if (file_exists("{$g['tmp_path']}/manifest")) {
 	$preset_urls_split = explode("\n", file_get_contents("{$g['tmp_path']}/manifest"));
+}
+
+// Create an array of repo names and descriptions to populate the "Branch" selector
+function build_repo_list() {
+	global $repos;
+
+	$list = array();
+
+	foreach ($repos as $repo) {
+		$list[$repo['name']] = $repo['descr'];
+	}
+
+	return($list);
+}
+
+function get_repo_name($path) {
+	global $repos;
+
+	foreach ($repos as $repo) {
+		if ($repo['path'] == $path) {
+			return $repo['name'];
+		}
+	}
+
+	/* Default */
+	return $repos[0]['name'];
 }
 
 include("head.inc");
@@ -133,22 +163,15 @@ $section = new Form_Section('Firmware Branch');
 $section->addInput(new Form_Select(
 	fwbranch,
 	'Branch',
-	(is_pkg_installed($g['product_name'] . "-repo")) ? "stable":"development",
-	["stable" => "Stable", "development" => "Development"]
+	get_repo_name($config['system']['pkg_repo_conf_path']),
+	build_repo_list()
 ))->setHelp('Please select the stable, or the development branch from which to update the system firmware. ' . ' <br />' .
 			'Use of the development version is at your own risk!');
 
 $form->add($section);
 
 $section = new Form_Section('Updates');
-/*
-$section->addInput(new Form_Checkbox(
-	'allowinvalidsig',
-	'Unsigned images',
-	'Allow auto-update firmware images with a missing or invalid digital signature to be used',
-	isset($curcfg['allowinvalidsig'])
-	));
-*/
+
 $section->addInput(new Form_Checkbox(
 	'disablecheck',
 	'Dashboard check',
@@ -164,9 +187,9 @@ if (file_exists("/usr/local/bin/git") && $g['platform'] == $g['product_name']) {
 	$section->addInput(new Form_Checkbox(
 		'synconupgrade',
 		'Auto sync on update',
-		'After updating, sync with the following repository/branch before reboot',
+		'Enable repository/branch sync before reboot',
 		isset($gitcfg['synconupgrade'])
-		))->setHelp('After updating, sync with the following repository/branch before reboot');
+		))->setHelp('After updating, sync with the following repository/branch before reboot.');
 
 	if (is_dir("/root/pfsense/pfSenseGITREPO/pfSenseGITREPO")) {
 		exec("cd /root/pfsense/pfSenseGITREPO/pfSenseGITREPO && git config remote.origin.url", $output_str);
@@ -203,40 +226,11 @@ if (file_exists("/usr/local/bin/git") && $g['platform'] == $g['product_name']) {
 		'text',
 		($gitcfg['branch'] ? $gitcfg['branch'] : '')
 		))->setHelp('The most recently used branch was "%s". (Usually the branch name is master)' .
-					'<br />Note: Sync will not be performed if a branch is not specified', [$lastbranch]);
+					'<br />Note: Sync will not be performed if a branch is not specified.', [$lastbranch]);
 
 	$form->add($section);
 } // e-o-if(file_exista()
 
 print($form);
-?>
-
-<script type="text/javascript">
-//<![CDATA[
-events.push(function() {
-	// Update firmwareurl from preseturls or from the saved alternate if "Unofficial" is checked
-	function update_firmwareurl() {
-		if (!$('#alturlenable').prop('checked')) {
-			$('#firmwareurl').prop('readonly', true)
-			$('#firmwareurl').val($('#preseturls').val());
-		} else {
-			$('#firmwareurl').prop('readonly', false)
-			$('#firmwareurl').val("<?=$config['system']['firmware']['alturl']['firmwareurl']?>");
-		}
-	}
-
-	// Call it when preseturls changes
-
-	$('#preseturls, #alturlenable').on('change', function() {
-	update_firmwareurl();
-	})
-
-	// And call it on page load
-	update_firmwareurl();
-});
-
-//]]>
-</script>
-<?php
 
 include("foot.inc");

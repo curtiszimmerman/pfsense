@@ -77,13 +77,12 @@ require("captiveportal.inc");
 
 global $cpzone, $cpzoneid;
 
-$pgtitle = array(gettext("Services"), gettext("Captive Portal"), gettext("Edit allowed Hostname"));
-$shortcut_section = "captiveportal";
-
 $cpzone = $_GET['zone'];
 if (isset($_POST['zone'])) {
 	$cpzone = $_POST['zone'];
 }
+$cpzone = strtolower($cpzone);
+
 $cpzoneid = $config['captiveportal'][$cpzone]['zoneid'];
 
 if (empty($cpzone) || empty($config['captiveportal'][$cpzone])) {
@@ -95,6 +94,9 @@ if (!is_array($config['captiveportal'])) {
 	$config['captiveportal'] = array();
 }
 $a_cp =& $config['captiveportal'];
+
+$pgtitle = array(gettext("Services"), gettext("Captive Portal"), $a_cp[$cpzone]['zone'], gettext("Allowed Hostnames"), gettext("Edit"));
+$shortcut_section = "captiveportal";
 
 if (is_numericint($_GET['id'])) {
 	$id = $_GET['id'];
@@ -145,7 +147,7 @@ if ($_POST) {
 		}
 
 		if ($ipent['hostname'] == $_POST['hostname']) {
-			$input_errors[] = sprintf("[%s] %s.", $_POST['hostname'], gettext("already allowed")) ;
+			$input_errors[] = sprintf(gettext("Hostname [%s] already allowed."), $_POST['hostname']) ;
 			break ;
 		}
 	}
@@ -199,12 +201,9 @@ if ($input_errors) {
 	print_input_errors($input_errors);
 }
 
-$form = new Form(new Form_Button(
-	'Submit',
-	gettext("Save")
-));
+$form = new Form();
 
-$section = new Form_Section('Captive Portal Hostname settings');
+$section = new Form_Section('Captive Portal Hostname Settings');
 
 $section->addInput(new Form_Select(
 	'dir',
@@ -226,7 +225,7 @@ $section->addInput(new Form_Input(
 	'Description',
 	'text',
 	$pconfig['descr']
-))->setHelp('You may enter a description here for your reference (not parsed).');
+))->setHelp('A description may be entered here for administrative reference (not parsed).');
 
 $section->addInput(new Form_Input(
 	'bw_up',

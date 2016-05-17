@@ -65,10 +65,6 @@ require_once("pfsense-utils.inc");
 require_once("functions.inc");
 require_once("captiveportal.inc");
 
-?>
-
-<?php
-
 if (!is_array($config['captiveportal'])) {
 	$config['captiveportal'] = array();
 }
@@ -78,6 +74,7 @@ $cpzone = $_GET['zone'];
 if (isset($_POST['zone'])) {
 	$cpzone = $_POST['zone'];
 }
+$cpzone = strtolower($cpzone);
 
 if (isset($cpzone) && !empty($cpzone) && isset($a_cp[$cpzone]['zoneid'])) {
 	$cpzoneid = $a_cp[$cpzone]['zoneid'];
@@ -130,8 +127,8 @@ if ($_GET['order']) {
 <table class="table table-condensed sortable-theme-bootstrap" data-sortable>
 	<thead>
 	<tr>
-		<th><a href="?order=ip&amp;showact=<?=$showact;?>">IP address</a></th>
-		<th><a href="?order=mac&amp;showact=<?=$showact;?>">MAC address</a></th>
+		<th><a href="?order=ip&amp;showact=<?=$showact;?>"><?=gettext("IP address");?></a></th>
+		<th><a href="?order=mac&amp;showact=<?=$showact;?>"><?=gettext("MAC address");?></a></th>
 		<th><a href="?order=user&amp;showact=<?=$showact;?>"><?=gettext("Username");?></a></th>
 <?php if ($showact == 1): ?>
 		<th><a href="?order=start&amp;showact=<?=$showact;?>"><?=gettext("Session start");?></a></th>
@@ -150,8 +147,8 @@ if ($_GET['order']) {
 		<td><?php if ($cpent[11] && ($cpent[11] > 0)) echo date("m/d/Y H:i:s", $cpent[11]);?></td>
 <?php endif; ?>
 		<td>
-			<a href="?order=<?=htmlspecialchars($_GET['order']);?>&amp;showact=<?=$showact;?>&amp;act=del&amp;zone=<?=$cpent[10];?>&amp;id=<?=$cpent[5];?>" class="btn btn-xs btn-danger">
-				delete
+			<a href="?order=<?=htmlspecialchars($_GET['order']);?>&amp;showact=<?=$showact;?>&amp;act=del&amp;zone=<?=$cpent[10];?>&amp;id=<?=$cpent[5];?>">
+				<i class="fa fa-trash" title="<?=gettext("delete");?>"></i>
 			</a>
 		</td>
 	</tr>

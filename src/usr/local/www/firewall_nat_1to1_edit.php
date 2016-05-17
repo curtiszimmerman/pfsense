@@ -103,6 +103,7 @@ if (isset($_GET['dup'])) {
 }
 
 if (isset($id) && $a_1to1[$id]) {
+	$pconfig['nobinat'] = isset($a_1to1[$id]['nobinat']);
 	$pconfig['disabled'] = isset($a_1to1[$id]['disabled']);
 
 	address_to_pconfig($a_1to1[$id]['source'], $pconfig['src'],
@@ -146,8 +147,13 @@ if ($_POST) {
 	}
 
 	/* input validation */
-	$reqdfields = explode(" ", "interface external");
-	$reqdfieldsn = array(gettext("Interface"), gettext("External subnet"));
+	if (isset($_POST['nobinat'])) {
+		$reqdfields = explode(" ", "interface");
+		$reqdfieldsn = array(gettext("Interface"));
+	} else {
+		$reqdfields = explode(" ", "interface external");
+		$reqdfieldsn = array(gettext("Interface"), gettext("External subnet"));
+	}
 
 	if ($_POST['srctype'] == "single" || $_POST['srctype'] == "network") {
 		$reqdfields[] = "src";
@@ -196,7 +202,7 @@ if ($_POST) {
 
 	/* For dst, if user enters an alias and selects "network" then disallow. */
 	if ($_POST['dsttype'] == "network" && is_alias($_POST['dst'])) {
-		$input_errors[] = gettext("You must specify single host or alias for alias entries.");
+		$input_errors[] = gettext("Alias entries must specify a single host or alias.");
 	}
 
 	/* For src, user can enter only ip's or networks */
@@ -236,6 +242,7 @@ if ($_POST) {
 	if (!$input_errors) {
 		$natent = array();
 
+		$natent['nobinat'] = isset($_POST['nobinat']) ? true:false;
 		$natent['disabled'] = isset($_POST['disabled']) ? true:false;
 		$natent['external'] = $_POST['external'];
 		$natent['descr'] = $_POST['descr'];
@@ -277,16 +284,16 @@ include("head.inc");
 function build_srctype_list() {
 	global $pconfig, $ifdisp;
 
-	$list = array('any' => 'Any', 'single' => 'Single host or alias', 'network' => 'Network');
+	$list = array('any' => gettext('Any'), 'single' => gettext('Single host'), 'network' => gettext('Network'));
 
 	$sel = is_specialnet($pconfig['src']);
 
 	if (have_ruleint_access("pppoe")) {
-		$list['pppoe'] = 'PPPoE clients';
+		$list['pppoe'] = gettext('PPPoE clients');
 	}
 
 	if (have_ruleint_access("l2tp")) {
-		$list['l2tp'] = 'L2TP clients';
+		$list['l2tp'] = gettext('L2TP clients');
 	}
 
 	foreach ($ifdisp as $ifent => $ifdesc) {
@@ -319,14 +326,14 @@ function build_dsttype_list() {
 	global $pconfig, $config, $ifdisp;
 
 	$sel = is_specialnet($pconfig['dst']);
-	$list = array('any' => 'Any', 'single' => 'Single host or alias', 'network' => 'Network', '(self)' => 'This Firewall (self)');
+	$list = array('any' => gettext('Any'), 'single' => gettext('Single host or alias'), 'network' => gettext('Network'), '(self)' => gettext('This Firewall (self)'));
 
 	if (have_ruleint_access("pppoe")) {
-		$list['pppoe'] = 'PPPoE clients';
+		$list['pppoe'] = gettext('PPPoE clients');
 	}
 
 	if (have_ruleint_access("l2tp")) {
-		$list['l2tp'] = 'L2TP clients';
+		$list['l2tp'] = gettext('L2TP clients');
 	}
 
 	foreach ($ifdisp as $if => $ifdesc) {
@@ -366,7 +373,7 @@ function dsttype_selected() {
 
 	$sel = is_specialnet($pconfig['dst']);
 
-	if (empty($pconfig['dst'] || $pconfig['dst'] == "any")) {
+	if (empty($pconfig['dst']) || $pconfig['dst'] == "any") {
 		return('any');
 	}
 
@@ -385,19 +392,23 @@ if ($input_errors) {
 	print_input_errors($input_errors);
 }
 
-$form = new Form(new Form_Button(
-	'Submit',
-	gettext("Save")
-));
+$form = new Form();
 
-$section = new Form_Section('Edit NAT 1 to 1 entry');
+$section = new Form_Section('Edit NAT 1:1 Entry');
 
 $section->addInput(new Form_Checkbox(
-	'nordr',
-	'No RDR (NOT)',
-	'Disable redirection for traffic matching this rule',
-	$pconfig['nordr']
-))->setHelp('This option is rarely needed, don\'t use this unless you know what you\'re doing.');
+	'disabled',
+	'Disabled',
+	'Disable this rule',
+	$pconfig['disabled']
+))->setHelp('When disabled, the rule will not have any effect.');
+
+$section->addInput(new Form_Checkbox(
+	'nobinat',
+	'No BINAT (NOT)',
+	'Do not perform binat for the specified address',
+	$pconfig['nobinat']
+))->setHelp('Excludes the address from a later, more general, rule.');
 
 $iflist = get_configured_interface_with_descr(false, true);
 
@@ -409,22 +420,22 @@ foreach ($iflist as $if => $ifdesc) {
 
 if ($config['l2tp']['mode'] == "server") {
 	if (have_ruleint_access("l2tp")) {
-		$interfaces['l2tp'] = "L2TP VPN";
+		$interfaces['l2tp'] = gettext("L2TP VPN");
 	}
 }
 
 if (is_pppoe_server_enabled() && have_ruleint_access("pppoe")) {
-	$interfaces['pppoe'] = "PPPoE Server";
+	$interfaces['pppoe'] = gettext("PPPoE Server");
 }
 
 /* add ipsec interfaces */
 if (ipsec_enabled() && have_ruleint_access("enc0")) {
-	$interfaces["enc0"] = "IPsec";
+	$interfaces["enc0"] = gettext("IPsec");
 }
 
 /* add openvpn/tun interfaces */
 if	($config['openvpn']["openvpn-server"] || $config['openvpn']["openvpn-client"]) {
-	$interfaces["openvpn"] = "OpenVPN";
+	$interfaces["openvpn"] = gettext("OpenVPN");
 }
 
 $section->addInput(new Form_Select(
@@ -461,7 +472,7 @@ $group->add(new Form_IpAddress(
 	'src',
 	null,
 	is_specialnet($pconfig['src']) ? '': $pconfig['src']
-))->addMask('srcmask', $pconfig['srcmask'], 31)->setHelp('Address/mask')->setPattern('[0-9, a-z, A-Z and .');
+))->addMask('srcmask', $pconfig['srcmask'], 31)->setHelp('Address/mask')->setPattern('[a-zA-Z0-9\.\:\_]+');
 
 $group->setHelp('Enter the internal (LAN) subnet for the 1:1 mapping. ' .
 				'The subnet size specified for the internal subnet will be applied to the external subnet.');
@@ -488,7 +499,7 @@ $group->add(new Form_IpAddress(
 	'dst',
 	null,
 	is_specialnet($pconfig['dst']) ? '': $pconfig['dst']
-))->addMask('dstmask', $pconfig['dstmask'], 31)->setHelp('Address/mask')->setPattern('[0-9, a-z, A-Z and .');
+))->addMask('dstmask', $pconfig['dstmask'], 31)->setHelp('Address/mask')->setPattern('[a-zA-Z0-9\.\:\_]+');
 
 $group->setHelp('The 1:1 mapping will only be used for connections to or from the specified destination. Hint: this is usually "Any".');
 
@@ -499,16 +510,16 @@ $section->addInput(new Form_Input(
 	'Description',
 	'text',
 	$pconfig['descr']
-))->setHelp('You may enter a description here for your reference (not parsed).');
+))->setHelp('A description may be entered here for administrative reference (not parsed).');
 
 $section->addInput(new Form_Select(
 	'natreflection',
 	'NAT reflection',
 	$pconfig['natreflection'],
 	array(
-		'default' => 'Use system default',
-		'enable'  => 'Enable',
-		'disable' => 'Disable'
+		'default' => gettext('Use system default'),
+		'enable'  => gettext('Enable'),
+		'disable' => gettext('Disable')
 	)
 ));
 
@@ -566,11 +577,11 @@ events.push(function() {
 
 	// ---------- Click checkbox handlers ---------------------------------------------------------
 
-	$('#srctype').click(function () {
+	$('#srctype').change(function () {
 		typesel_change();
 	});
 
-	$('#dsttype').click(function () {
+	$('#dsttype').change(function () {
 		typesel_change();
 	});
 

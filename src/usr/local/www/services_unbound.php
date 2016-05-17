@@ -137,26 +137,47 @@ if ($_POST) {
 
 		if (isset($pconfig['enable']) && isset($config['dnsmasq']['enable'])) {
 			if ($pconfig['port'] == $config['dnsmasq']['port']) {
-				$input_errors[] = "The DNS Forwarder is enabled using this port. Choose a non-conflicting port, or disable the DNS Forwarder.";
+				$input_errors[] = gettext("The DNS Forwarder is enabled using this port. Choose a non-conflicting port, or disable the DNS Forwarder.");
+			}
+		}
+
+		// forwarding mode requires having valid DNS servers
+		if (isset($pconfig['forwarding'])) {
+			$founddns = false;
+			if (isset($config['system']['dnsallowoverride'])) {
+				$dns_servers = get_dns_servers();
+				if (is_array($dns_servers)) {
+					foreach ($dns_servers as $dns_server) {
+						if (!ip_in_subnet($dns_server, "127.0.0.0/8")) {
+							$founddns = true;
+						}
+					}
+				}
+			}
+			if (is_array($config['system']['dnsserver'])) {
+				foreach ($config['system']['dnsserver'] as $dnsserver) {
+					if (is_ipaddr($dnsserver)) {
+						$founddns = true;
+					}
+				}
+			}
+			if ($founddns == false) {
+				$input_errors[] = gettext("At least one DNS server must be specified under System>General Setup to enable Forwarding mode.");
 			}
 		}
 
 		if (empty($pconfig['active_interface'])) {
-			$input_errors[] = "One or more Network Interfaces must be selected for binding.";
+			$input_errors[] = gettext("One or more Network Interfaces must be selected for binding.");
 		} else if (!isset($config['system']['dnslocalhost']) && (!in_array("lo0", $pconfig['active_interface']) && !in_array("all", $pconfig['active_interface']))) {
-			$input_errors[] = "This system is configured to use the DNS Resolver as its DNS server, so Localhost or All must be selected in Network Interfaces.";
+			$input_errors[] = gettext("This system is configured to use the DNS Resolver as its DNS server, so Localhost or All must be selected in Network Interfaces.");
 		}
 
 		if (empty($pconfig['outgoing_interface'])) {
-			$input_errors[] = "One or more Outgoing Network Interfaces must be selected.";
-		}
-
-		if (empty($pconfig['system_domain_local_zone_type'])) {
-			$input_errors[] = "A System Domain Local-Zone Type must be selected.";
+			$input_errors[] = gettext("One or more Outgoing Network Interfaces must be selected.");
 		}
 
 		if ($pconfig['port'] && !is_port($pconfig['port'])) {
-			$input_errors[] = gettext("You must specify a valid port number.");
+			$input_errors[] = gettext("A valid port number must be specified.");
 		}
 
 		if (is_array($pconfig['active_interface']) && !empty($pconfig['active_interface'])) {
@@ -170,11 +191,6 @@ if ($_POST) {
 		if (is_array($pconfig['outgoing_interface']) && !empty($pconfig['outgoing_interface'])) {
 			$display_outgoing_interface = $pconfig['outgoing_interface'];
 			$pconfig['outgoing_interface'] = implode(",", $pconfig['outgoing_interface']);
-		}
-
-		if (isset($pconfig['system_domain_local_zone_type']) && !empty($pconfig['system_domain_local_zone_type'])) {
-			$display_system_domain_local_zone_type = $pconfig['system_domain_local_zone_type'];
-			$pconfig['system_domain_local_zone_type'] = $pconfig['system_domain_local_zone_type'];
 		}
 
 		$test_output = array();
@@ -195,15 +211,20 @@ if ($_POST) {
 			$a_unboundcfg['system_domain_local_zone_type'] = $pconfig['system_domain_local_zone_type'];
 			$a_unboundcfg['custom_options'] = $pconfig['custom_options'];
 
-			write_config("DNS Resolver configured.");
+			write_config(gettext("DNS Resolver configured."));
 			mark_subsystem_dirty('unbound');
 		}
 
 		$pconfig['active_interface'] = $display_active_interface;
 		$pconfig['outgoing_interface'] = $display_outgoing_interface;
-		$pconfig['system_domain_local_zone_type'] = $display_system_domain_local_zone_type;
 		$pconfig['custom_options'] = $display_custom_options;
 	}
+}
+
+if ($pconfig['custom_options']) {
+	$customoptions = true;
+} else {
+	$customoptions = false;
 }
 
 if ($_GET['act'] == "del") {
@@ -230,7 +251,7 @@ function build_if_list($selectedifs) {
 	$interface_addresses = get_possible_listen_ips(true);
 	$iflist = array('options' => array(), 'selected' => array());
 
-	$iflist['options']['all']	= "All";
+	$iflist['options']['all']	= gettext("All");
 	if (empty($selectedifs) || empty($selectedifs[0]) || in_array("all", $selectedifs)) {
 		array_push($iflist['selected'], "all");
 	}
@@ -248,8 +269,7 @@ function build_if_list($selectedifs) {
 	return($iflist);
 }
 
-$closehead = false;
-$pgtitle = array(gettext("Services"), gettext("DNS Resolver"), gettext("General"));
+$pgtitle = array(gettext("Services"), gettext("DNS Resolver"), gettext("General Settings"));
 $shortcut_section = "resolver";
 
 include_once("head.inc");
@@ -263,12 +283,12 @@ if ($savemsg) {
 }
 
 if (is_subsystem_dirty('unbound')) {
-	print_info_box_np(gettext("The configuration of the DNS Resolver has been changed. You must apply changes for them to take effect."));
+	print_apply_box(gettext("The DNS resolver configuration has been changed.") . "<br />" . gettext("The changes must be applied for them to take effect."));
 }
 
 $tab_array = array();
-$tab_array[] = array(gettext("General settings"), true, "services_unbound.php");
-$tab_array[] = array(gettext("Advanced settings"), false, "services_unbound_advanced.php");
+$tab_array[] = array(gettext("General Settings"), true, "services_unbound.php");
+$tab_array[] = array(gettext("Advanced Settings"), false, "services_unbound_advanced.php");
 $tab_array[] = array(gettext("Access Lists"), false, "/services_unbound_acls.php");
 display_top_tabs($tab_array, true);
 
@@ -299,7 +319,7 @@ $section->addInput(new Form_Select(
 	$activeiflist['selected'],
 	$activeiflist['options'],
 	true
-))->setHelp('Interface IPs used by the DNS Resolver for responding to queries from clients. If an interface has both IPv4 and IPv6 IPs, both are used. Queries to other interface IPs not selected below are discarded. ' .
+))->addClass('general')->setHelp('Interface IPs used by the DNS Resolver for responding to queries from clients. If an interface has both IPv4 and IPv6 IPs, both are used. Queries to other interface IPs not selected below are discarded. ' .
 			'The default behavior is to respond to queries on every available IPv4 and IPv6 address.');
 
 $outiflist = build_if_list($pconfig['outgoing_interface']);
@@ -310,15 +330,13 @@ $section->addInput(new Form_Select(
 	$outiflist['selected'],
 	$outiflist['options'],
 	true
-))->setHelp('Utilize different network interface(s) that the DNS Resolver will use to send queries to authoritative servers and receive their replies. By default all interfaces are used.');
-
-$unbound_local_zone_types = array("deny" => gettext("Deny"), "refuse" => gettext("Refuse"), "static" => gettext("Static"), "transparent" => gettext("Transparent"), "typetransparent" => gettext("Type Transparent"), "redirect" => gettext("Redirect"), "inform" => gettext("Inform"), "inform_deny" => gettext("Inform Deny"), "nodefault" => gettext("No Default"));
+))->addClass('general')->setHelp('Utilize different network interface(s) that the DNS Resolver will use to send queries to authoritative servers and receive their replies. By default all interfaces are used.');
 
 $section->addInput(new Form_Select(
 	'system_domain_local_zone_type',
 	'System Domain Local Zone Type',
 	$pconfig['system_domain_local_zone_type'],
-	$unbound_local_zone_types
+	unbound_local_zone_types()
 ))->setHelp('The local-zone type used for the pfSense system domain (System | General Setup | Domain).  Transparent is the default.  Local-Zone type descriptions are available in the unbound.conf(5) manual pages.');
 
 $section->addInput(new Form_Checkbox(
@@ -342,34 +360,35 @@ $section->addInput(new Form_Checkbox(
 	$pconfig['regdhcp']
 ))->setHelp(sprintf('If this option is set, then machines that specify their hostname when requesting a DHCP lease will be registered'.
 					' in the DNS Resolver, so that their name can be resolved.'.
-					' You should also set the domain in %sSystem: General setup%s to the proper value.','<a href="system.php">','</a>'));
+					' The domain in %sSystem: General Setup%s should also be set to the proper value.','<a href="system.php">','</a>'));
 
 $section->addInput(new Form_Checkbox(
 	'regdhcpstatic',
 	'Static DHCP',
 	'Register DHCP static mappings in the DNS Resolver',
 	$pconfig['regdhcpstatic']
-))->setHelp(sprintf('If this option is set, then DHCP static mappings will be registered in the DNS Resolver, so that their name can be '.
-					'resolved. You should also set the domain in %s'.
-					'System: General setup%s to the proper value.','<a href="system.php">','</a>'));
+))->setHelp(sprintf('If this option is set, then DHCP static mappings will be registered in the DNS Resolver, so that their name can be resolved. '.
+					'The domain in %sSystem: General Setup%s should also be set to the proper value.','<a href="system.php">','</a>'));
 
-$btnadvdns = new Form_Button(
-	'btnadvdns',
-	'Custom options'
+$btnadv = new Form_Button(
+	'btnadvcustom',
+	'Custom options',
+	null,
+	'fa-cog'
 );
 
-$btnadvdns->removeClass('btn-primary')->addClass('btn-default btn-sm');
+$btnadv->setAttribute('type','button')->addClass('btn-info btn-sm');
 
 $section->addInput(new Form_StaticText(
-	'Custom options',
-	$btnadvdns . '&nbsp;' . 'Show custom options'
+	'Display Custom Options',
+	$btnadv
 ));
 
 $section->addInput(new Form_Textarea (
 	'custom_options',
 	'Custom options',
 	$pconfig['custom_options']
-))->setHelp('Enter any additional configuration parameters to add to the DNS Resolver configuration here, separated by a newline');
+))->setHelp('Enter any additional configuration parameters to add to the DNS Resolver configuration here, separated by a newline.');
 
 $form->add($section);
 print($form);
@@ -379,34 +398,52 @@ print($form);
 //<![CDATA[
 events.push(function() {
 
-	// If the enable checkbox is not checked, disable the next three checkboxes
-	function disableDHCP() {
-		var hide = ! $('#enable').prop('checked');
+	// Show advanced custom options ==============================================
+	var showadvcustom = false;
 
-		disableInput('port', hide);
-		disableInput('active_interface', hide);
-		disableInput('outgoing_interface', hide);
-		disableInput('system_domain_local_zone_type', hide);
-		disableInput('regdhcpstatic', hide);
-		disableInput('dnssec', hide);
-		disableInput('forwarding', hide);
-		disableInput('regdhcp', hide);
-		disableInput('regdhcpstatic', hide);
-		disableInput('btnadvdns', hide);
+	function show_advcustom(ispageload) {
+		var text;
+		// On page load decide the initial state based on the data.
+		if (ispageload) {
+			showadvcustom = <?=($customoptions ? 'true' : 'false');?>;
+		} else {
+			// It was a click, swap the state.
+			showadvcustom = !showadvcustom;
+		}
+
+		hideInput('custom_options', !showadvcustom);
+
+		if (showadvcustom) {
+			text = "<?=gettext('Hide Custom Options');?>";
+		} else {
+			text = "<?=gettext('Display Custom Options');?>";
+		}
+		$('#btnadvcustom').html('<i class="fa fa-cog"></i> ' + text);
 	}
 
-	// Make the 'additional options' button a plain button, not a submit button
-	$("#btnadvdns").prop('type','button');
+	// If the enable checkbox is not checked, hide all inputs
+	function hideGeneral() {
+		var hide = ! $('#enable').prop('checked');
 
-	// Un-hide additional  controls
-	$("#btnadvdns").click(function() {
-		hideInput('custom_options', false);
+		hideMultiClass('general', hide);
+		hideInput('port', hide);
+		hideSelect('system_domain_local_zone_type', hide);
+		hideCheckbox('dnssec', hide);
+		hideCheckbox('forwarding', hide);
+		hideCheckbox('regdhcp', hide);
+		hideCheckbox('regdhcpstatic', hide);
+		hideInput('btnadvcustom', hide);
+		hideInput('custom_options', hide || !showadvcustom);
+	}
 
+	// Un-hide additional controls
+	$('#btnadvcustom').click(function(event) {
+		show_advcustom();
 	});
 
-	// When 'enable' is clicked, disable/enable the following three checkboxes
+	// When 'enable' is clicked, disable/enable the following hide inputs
 	$('#enable').click(function() {
-		disableDHCP();
+		hideGeneral();
 	});
 
 	// On initial load
@@ -414,7 +451,8 @@ events.push(function() {
 		hideInput('custom_options', true);
 	}
 
-	disableDHCP();
+	hideGeneral();
+	show_advcustom(true);
 
 });
 //]]>
@@ -430,7 +468,7 @@ events.push(function() {
 					<th><?=gettext("Domain")?></th>
 					<th><?=gettext("IP")?></th>
 					<th><?=gettext("Description")?></th>
-					<th></th>
+					<th><?=gettext("Actions")?></th>
 				</tr>
 			</thead>
 			<tbody>
@@ -469,7 +507,7 @@ foreach ($a_hosts as $hostent):
 						<?=$alias['domain']?>
 					</td>
 					<td>
-						Alias for <?=$hostent['host'] ? $hostent['host'] . '.' . $hostent['domain'] : $hostent['domain']?>
+						<?=gettext("Alias for ");?><?=$hostent['host'] ? $hostent['host'] . '.' . $hostent['domain'] : $hostent['domain']?>
 					</td>
 					<td>
 						<i class="fa fa-angle-double-right text-info"></i>
@@ -506,7 +544,7 @@ endforeach;
 					<th><?=gettext("Domain")?></th>
 					<th><?=gettext("IP")?></th>
 					<th><?=gettext("Description")?></th>
-					<th></th>
+					<th><?=gettext("Actions")?></th>
 				</tr>
 			</thead>
 
@@ -546,15 +584,15 @@ endforeach;
 	</a>
 </nav>
 
-<div id="infoblock">
-	<?=print_info_box(sprintf(gettext("If the DNS Resolver is enabled, the DHCP".
+<div class="infoblock">
+	<?php print_info_box(sprintf(gettext("If the DNS Resolver is enabled, the DHCP".
 		" service (if enabled) will automatically serve the LAN IP".
 		" address as a DNS server to DHCP clients so they will use".
 		" the DNS Resolver. If Forwarding is enabled, the DNS Resolver will use the DNS servers".
-		" entered in %sSystem: General setup%s".
+		" entered in %sSystem: General Setup%s".
 		" or those obtained via DHCP or PPP on WAN if &quot;Allow".
 		" DNS server list to be overridden by DHCP/PPP on WAN&quot;".
-		" is checked."), '<a href="system.php">', '</a>'), info)?>
+		" is checked."), '<a href="system.php">', '</a>'), 'info', false); ?>
 </div>
 
 <?php include("foot.inc");

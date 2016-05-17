@@ -65,12 +65,6 @@
 ##|-PRIV
 
 define('COLOR', true);
-define('LIGHTGREEN', '#90EE90');
-define('LIGHTCORAL', '#F08080');
-define('KHAKI',		 '#F0E68C');
-define('LIGHTGRAY',	 '#D3D3D3');
-define('LIGHTBLUE',	 '#ADD8E6');
-define('WHITE',		 '#FFFFFF');
 
 require("guiconfig.inc");
 
@@ -83,7 +77,7 @@ $changedesc = gettext("Gateway Groups") . ": ";
 
 $gateways_status = return_gateways_status();
 
-$pgtitle = array(gettext("Status"), gettext("Gateway Groups"));
+$pgtitle = array(gettext("Status"), gettext("Gateways"), gettext("Gateway Groups"));
 $shortcut_section = "gateway-groups";
 include("head.inc");
 
@@ -92,24 +86,26 @@ $tab_array[0] = array(gettext("Gateways"), false, "status_gateways.php");
 $tab_array[1] = array(gettext("Gateway Groups"), true, "status_gateway_groups.php");
 display_top_tabs($tab_array);
 ?>
-
-<div class="table-responsive">
-	<table class="table table-hover table-condensed table-striped">
-		<thead>
-			<tr>
-				<th><?=gettext("Group Name"); ?></th>
-				<th><?=gettext("Gateways"); ?></th>
-				<th><?=gettext("Description"); ?></th>
-			</tr>
-		</thead>
-		<tbody>
-			<?php foreach ($a_gateway_groups as $gateway_group): ?>
-			<tr>
-				<td>
-					<?=htmlspecialchars($gateway_group['name'])?>
-				</td>
-				<td>
-					<table class="table table-bordered table-condensed">
+<div class="panel panel-default">
+	<div class="panel-heading"><h2 class="panel-title"><?=gettext('Gateway Groups')?></h2></div>
+	<div class="panel-body">
+		<div class="table-responsive">
+			<table class="table table-hover table-condensed table-striped">
+				<thead>
+					<tr>
+						<th><?=gettext("Group Name"); ?></th>
+						<th><?=gettext("Gateways"); ?></th>
+						<th><?=gettext("Description"); ?></th>
+					</tr>
+				</thead>
+				<tbody>
+					<?php foreach ($a_gateway_groups as $gateway_group): ?>
+					<tr>
+						<td>
+							<?=htmlspecialchars($gateway_group['name'])?>
+						</td>
+						<td>
+							<table class="table table-bordered table-condensed">
 <?php
 						/* process which priorities we have */
 						$priorities = array();
@@ -120,17 +116,17 @@ display_top_tabs($tab_array);
 						$priority_count = count($priorities);
 						ksort($priorities);
 ?>
-						<thead>
-							<tr>
+								<thead>
+									<tr>
 <?php
 							// Make a column for each tier
 							foreach ($priorities as $number => $tier) {
 								echo "<th>" . sprintf(gettext("Tier %s"), $number) . "</th>";
 							}
 ?>
-							</tr>
-						</thead>
-						<tbody>
+									</tr>
+								</thead>
+								<tbody>
 <?php
 							/* inverse gateway group to gateway priority */
 							$priority_arr = array();
@@ -145,7 +141,7 @@ display_top_tabs($tab_array);
 								foreach ($tier as $member) {
 									/* we always have $priority_count fields */
 ?>
-							<tr>
+									<tr>
 <?php
 									$c = 1;
 									while ($c <= $priority_count) {
@@ -154,54 +150,56 @@ display_top_tabs($tab_array);
 											$status = $gateways_status[$monitor]['status'];
 											if (stristr($status, "down")) {
 													$online = gettext("Offline");
-													$bgcolor = LIGHTCORAL;
+													$bgcolor = "bg-danger";
 											} elseif (stristr($status, "loss")) {
 													$online = gettext("Warning, Packetloss");
-													$bgcolor = KHAKI;
+													$bgcolor = "bg-warning";
 											} elseif (stristr($status, "delay")) {
 													$online = gettext("Warning, Latency");
-													$bgcolor = KHAKI;
+													$bgcolor = "bg-warning";
 											} elseif ($status == "none") {
 													$online = gettext("Online");
-													$bgcolor = LIGHTGREEN;
+													$bgcolor = "bg-success";
 											} else {
 												$online = gettext("Gathering data");
-												$bgcolor = LIGHTBLUE;
+												$bgcolor = "bg-info";
 											}
 
 											if (!COLOR) {
-												$bgcolor = WHITE;
+												$bgcolor = "";
 											}
 ?>
-								<td bgcolor="<?=$bgcolor?>">
-									<?=htmlspecialchars($member);?>,<br/><?=$online?>
-								</td>
+										<td class="<?=$bgcolor?>">
+											<?=htmlspecialchars($member);?><br/><?=$online?>
+										</td>
 
 <?php
 										} else {
 ?>
-								<td>
-								</td>
+										<td>
+										</td>
 <?php							}
 										$c++;
 									}
 ?>
-							</tr>
+									</tr>
 <?php
 								}
 								$p++;
 							}
 ?>
-						</tbody>
-					</table>
-				</td>
-				<td>
-					<?=htmlspecialchars($gateway_group['descr'])?>
-				</td>
-			</tr>
+								</tbody>
+							</table>
+						</td>
+						<td>
+							<?=htmlspecialchars($gateway_group['descr'])?>
+						</td>
+					</tr>
 			<?php endforeach; ?>
-		</tbody>
-	</table>
+				</tbody>
+			</table>
+		</div>
+	</div>
 </div>
 
 <?php include("foot.inc");

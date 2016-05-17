@@ -63,22 +63,14 @@
 ##|-PRIV
 
 require("guiconfig.inc");
-function filterDestinationServers(array $destinationServers) {
-	return array_unique(
-		array_filter($destinationServers)
-	);
-}
 
 $pconfig['enable'] = isset($config['dhcrelay6']['enable']);
+
 if (empty($config['dhcrelay6']['interface'])) {
 	$pconfig['interface'] = array();
 } else {
 	$pconfig['interface'] = explode(",", $config['dhcrelay6']['interface']);
 }
-
-$pconfig['server'] = filterDestinationServers(
-	explode(',', $config['dhcrelay6']['server'])
-);
 
 $pconfig['agentoption'] = isset($config['dhcrelay6']['agentoption']);
 
@@ -100,7 +92,7 @@ $iflist = array_intersect_key(
  */
 $dhcpd_enabled = false;
 if (is_array($config['dhcpdv6'])) {
-	foreach ($config['dhcpdv6'] as $dhcp) {
+	foreach ($config['dhcpdv6'] as $dhcpif => $dhcp) {
 		if (isset($dhcp['enable']) && isset($config['interfaces'][$dhcpif]['enable'])) {
 			$dhcpd_enabled = true;
 			break;
@@ -112,10 +104,6 @@ if ($_POST) {
 
 	unset($input_errors);
 
-	if ($_POST['server']) {
-		$_POST['server'] = filterDestinationServers($_POST['server']);
-	}
-
 	$pconfig = $_POST;
 
 	/* input validation */
@@ -125,10 +113,21 @@ if ($_POST) {
 
 		do_input_validation($_POST, $reqdfields, $reqdfieldsn, $input_errors);
 
+		$svrlist = '';
+
 		if ($_POST['server']) {
-			foreach ($_POST['server'] as $srv) {
-				if (!is_ipaddrv6($srv)) {
-					$input_errors[] = gettext("A valid Destination Server IPv6 address  must be specified.");
+			foreach ($_POST['server'] as $checksrv => $srv) {
+				if (!is_ipaddrv6($srv[0])) {
+					$input_errors[] = gettext("A valid Destination Server IPv6 address must be specified.");
+				}
+
+
+				if (!empty($srv[0])) { // Filter out any empties
+					if (!empty($svrlist)) {
+						$svrlist .= ',';
+					}
+
+					$svrlist .= $srv[0];
 				}
 			}
 		}
@@ -138,7 +137,7 @@ if ($_POST) {
 		$config['dhcrelay6']['enable'] = $_POST['enable'] ? true : false;
 		$config['dhcrelay6']['interface'] = implode(",", $_POST['interface']);
 		$config['dhcrelay6']['agentoption'] = $_POST['agentoption'] ? true : false;
-		$config['dhcrelay6']['server'] = $_POST['server'];
+		$config['dhcrelay6']['server'] = $svrlist;
 
 		write_config();
 
@@ -148,13 +147,14 @@ if ($_POST) {
 	}
 }
 
-$closehead = false;
+$pconfig['server'] = $config['dhcrelay6']['server'];
+
 $pgtitle = array(gettext("Services"), gettext("DHCPv6 Relay"));
 $shortcut_section = "dhcp6";
 include("head.inc");
 
 if ($dhcpd_enabled) {
-	echo '<div class="alert alert-danger">DHCPv6 Server is currently enabled. Cannot enable the DHCPv6 Relay service while the DHCPv6 Server is enabled on any interface.</div>';
+	print_info_box(gettext("DHCPv6 Server is currently enabled. Cannot enable the DHCPv6 Relay service while the DHCPv6 Server is enabled on any interface."), 'danger', false);
 	include("foot.inc");
 	exit;
 }
@@ -164,12 +164,12 @@ if ($input_errors) {
 }
 
 if ($savemsg) {
-	print_info_box($savemsg);
+	print_info_box($savemsg, 'success');
 }
 
 $form = new Form;
 
-$section = new Form_Section('DHCPv6 Relay configuration');
+$section = new Form_Section('DHCPv6 Relay Configuration');
 
 $section->addInput(new Form_Checkbox(
 	'enable',
@@ -191,7 +191,6 @@ $section->addInput(new Form_Checkbox(
 	'agentoption',
 	'',
 	'Append circuit ID and agent ID to requests',
-	'yes',
 	$pconfig['agentoption']
 ))->setHelp(
 	'If this is checked, the DHCPv6 relay will append the circuit ID (%s interface number) and the agent ID to the DHCPv6 request.',
@@ -200,23 +199,24 @@ $section->addInput(new Form_Checkbox(
 
 function createDestinationServerInputGroup($value = null) {
 	$group = new Form_Group('Destination server');
-	$group->enableDuplication();
 
 	$group->add(new Form_IpAddress(
 		'server',
 		'Destination server',
 		$value
-	))->setHelp(
-		'This is the IPv6 address of the server to which DHCPv6 requests are relayed.'
-	)->setIsRepeated();
+	))->setWidth(4)
+	  ->setHelp('This is the IPv6 address of the server to which DHCPv6 requests are relayed.')
+	  ->setIsRepeated();
+
+	$group->enableDuplication(null, true); // Buttons are in-line with the input
 
 	return $group;
 }
 
-if (!isset($pconfig['server']) || count($pconfig['server']) < 1) {
+if (!isset($pconfig['server'])) {
 	$section->add(createDestinationServerInputGroup());
 } else {
-	foreach ($pconfig['server'] as $idx => $server) {
+	foreach (explode(',', $pconfig['server']) as $server) {
 		$section->add(createDestinationServerInputGroup($server));
 	}
 }

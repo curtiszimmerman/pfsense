@@ -72,7 +72,7 @@ if ($_GET['reset'] != "") {
 	exit;
 }
 
-$pgtitle = array(gettext("Firewall"), gettext("Traffic Shaper"), gettext("Interfaces"));
+$pgtitle = array(gettext("Firewall"), gettext("Traffic Shaper"), gettext("By Interface"));
 $shortcut_section = "trafficshaper";
 
 $shaperIFlist = get_configured_interface_with_descr();
@@ -157,15 +157,17 @@ if ($_GET) {
 			if (write_config()) {
 				$retval = 0;
 				$retval |= filter_configure();
-				$savemsg = get_std_save_message($retval);
 
 				if (stristr($retval, "error") <> true) {
 					$savemsg = get_std_save_message($retval);
+					$class = 'success';
 				} else {
 					$savemsg = $retval;
+					$class = 'warning';
 				}
 			} else {
-				$savemsg = gettext("Unable to write config.xml (Access Denied?)");
+				$savemsg = gettext("Unable to write config.xml (Access Denied?).");
+				$class = 'warning';
 			}
 
 			$dfltmsg = true;
@@ -198,7 +200,7 @@ if ($_GET) {
 		} else if ($addnewaltq) {
 			$q = new altq_root_queue();
 		} else {
-			$input_errors[] = gettext("Could not create new queue/discipline!");
+			$input_errors[] = gettext("Could not create new queue/discipline! Any recent changes may need to be applied first.");
 		}
 
 		if ($q) {
@@ -258,27 +260,6 @@ if ($_POST) {
 	if ($addnewaltq) {
 		$altq =& new altq_root_queue();
 		$altq->SetInterface($interface);
-
-		switch ($altq->GetBwscale()) {
-				case "Mb":
-					$factor = 1000 * 1000;
-					break;
-				case "Kb":
-					$factor = 1000;
-					break;
-				case "b":
-					$factor = 1;
-					break;
-				case "Gb":
-					$factor = 1000 * 1000 * 1000;
-					break;
-				case "%": /* We don't use it for root_XXX queues. */
-				default: /* XXX assume Kb by default. */
-					$factor = 1000;
-					break;
-			}
-
-		$altq->SetAvailableBandwidth($altq->GetBandwidth() * $factor);
 		$altq->ReadConfig($_POST);
 		$altq->validate_input($_POST, $input_errors);
 		if (!$input_errors) {
@@ -336,12 +317,13 @@ if ($_POST) {
 
 		$retval = 0;
 		$retval = filter_configure();
-		$savemsg = get_std_save_message($retval);
 
 		if (stristr($retval, "error") <> true) {
 			$savemsg = get_std_save_message($retval);
+			$class = 'success';
 		} else {
 			$savemsg = $retval;
+			$class = 'warning';
 		}
 
 		/* reset rrd queues */
@@ -399,8 +381,6 @@ if ($queue) {
 	}
 }
 
-//$pgtitle = "Firewall: Shaper: By Interface View";
-$closehead = false;
 include("head.inc");
 
 $tree = '<ul class="tree" >';
@@ -424,22 +404,22 @@ if ($input_errors) {
 }
 
 if ($savemsg) {
-	print_info_box($savemsg, 'success');
+	print_info_box($savemsg, $class);
 }
 
 if (is_subsystem_dirty('shaper')) {
-	print_info_box_np(gettext("The traffic shaper configuration has been changed. You must apply the changes in order for them to take effect."));
+	print_apply_box(gettext("The traffic shaper configuration has been changed.") . "<br />" . gettext("The changes must be applied for them to take effect."));
 }
 
 $tab_array = array();
 $tab_array[] = array(gettext("By Interface"), true, "firewall_shaper.php");
 $tab_array[] = array(gettext("By Queue"), false, "firewall_shaper_queues.php");
-$tab_array[] = array(gettext("Limiter"), false, "firewall_shaper_vinterface.php");
+$tab_array[] = array(gettext("Limiters"), false, "firewall_shaper_vinterface.php");
 $tab_array[] = array(gettext("Wizards"), false, "firewall_shaper_wizards.php");
 display_top_tabs($tab_array);
 
 ?>
-<script type="text/javascript" src="./tree/tree.js"></script>
+<script type="text/javascript" src="./vendor/tree/tree.js"></script>
 
 <div class="table-responsive">
 	<table class="table">
@@ -453,6 +433,7 @@ print($tree);
 if (count($altq_list_queues) > 0) {
 ?>
 					<a href="firewall_shaper.php?action=resetall" class="btn btn-sm btn-danger">
+						<i class="fa fa-trash icon-embed-btn"></i>
 						<?=gettext('Remove Shaper')?>
 					</a>
 <?php
@@ -462,7 +443,7 @@ if (count($altq_list_queues) > 0) {
 				<td>
 <?php
 
-if (!$dfltmsg)  {
+if (!$dfltmsg && $sform)  {
 	// Add global buttons
 	if (!$dontshow || $newqueue) {
 		if ($can_add || $addnewaltq) {
@@ -475,8 +456,9 @@ if (!$dfltmsg)  {
 			$sform->addGlobal(new Form_Button(
 				'add',
 				'Add new Queue',
-				$url
-			))->removeClass('btn-default')->addClass('btn-success');
+				$url,
+				'fa-plus'
+			))->addClass('btn-success');
 
 		}
 
@@ -489,8 +471,9 @@ if (!$dfltmsg)  {
 		$sform->addGlobal(new Form_Button(
 			'delete',
 			$queue ? 'Delete this queue':'Disable shaper on interface',
-			$url
-		))->removeClass('btn-default')->addClass('btn-danger');
+			$url,
+			'fa-trash'
+		))->addClass('btn-danger');
 
 	}
 
@@ -507,8 +490,8 @@ if (!$dfltmsg)  {
 if ($dfltmsg) {
 ?>
 <div>
-	<div id="infoblock">
-		<?=print_info_box($default_shaper_msg, info)?>
+	<div class="infoblock">
+		<?php print_info_box($default_shaper_msg, 'info', false); ?>
 	</div>
 </div>
 <?php

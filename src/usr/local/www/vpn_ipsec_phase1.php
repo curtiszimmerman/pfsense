@@ -160,6 +160,18 @@ if (isset($p1index) && $a_phase1[$p1index]) {
 		$pconfig['dpd_delay'] = $a_phase1[$p1index]['dpd_delay'];
 		$pconfig['dpd_maxfail'] = $a_phase1[$p1index]['dpd_maxfail'];
 	}
+
+	if (isset($a_phase1[$p1index]['splitconn'])) {
+		$pconfig['splitconn'] = true;
+	}
+
+	if (isset($a_phase1[$p1index]['tfc_enable'])) {
+		$pconfig['tfc_enable'] = true;
+	}
+
+	if (isset($a_phase1[$p1index]['tfc_bytes'])) {
+		$pconfig['tfc_bytes'] = $a_phase1[$p1index]['tfc_bytes'];
+	}
 } else {
 	/* defaults */
 	$pconfig['interface'] = "wan";
@@ -253,7 +265,7 @@ if ($_POST) {
 		$input_errors[] = gettext("Pre-Shared Key contains invalid characters.");
 	}
 
-	if (($pconfig['lifetime'] && !is_numeric($pconfig['lifetime']))) {
+	if (($pconfig['lifetime'] && !is_numericint($pconfig['lifetime']))) {
 		$input_errors[] = gettext("The P1 lifetime must be an integer.");
 	}
 
@@ -261,9 +273,9 @@ if ($_POST) {
 		if (!is_ipaddr($pconfig['remotegw']) && !is_domain($pconfig['remotegw'])) {
 			$input_errors[] = gettext("A valid remote gateway address or host name must be specified.");
 		} elseif (is_ipaddrv4($pconfig['remotegw']) && ($pconfig['protocol'] != "inet")) {
-			$input_errors[] = gettext("A valid remote gateway IPv4 address must be specified or you need to change protocol to IPv6");
+			$input_errors[] = gettext("A valid remote gateway IPv4 address must be specified or protocol needs to be changed to IPv6");
 		} elseif (is_ipaddrv6($pconfig['remotegw']) && ($pconfig['protocol'] != "inet6")) {
-			$input_errors[] = gettext("A valid remote gateway IPv6 address must be specified or you need to change protocol to IPv4");
+			$input_errors[] = gettext("A valid remote gateway IPv6 address must be specified or protocol needs to be changed to IPv4");
 		}
 	}
 
@@ -284,11 +296,11 @@ if ($_POST) {
 		foreach ($a_phase2 as $phase2) {
 			if ($phase2['ikeid'] == $pconfig['ikeid']) {
 				if (($pconfig['protocol'] == "inet") && ($phase2['mode'] == "tunnel6")) {
-					$input_errors[] = gettext("There is a Phase 2 using IPv6, you cannot use IPv4.");
+					$input_errors[] = gettext("There is a Phase 2 using IPv6, cannot use IPv4.");
 					break;
 				}
 				if (($pconfig['protocol'] == "inet6") && ($phase2['mode'] == "tunnel")) {
-					$input_errors[] = gettext("There is a Phase 2 using IPv4, you cannot use IPv6.");
+					$input_errors[] = gettext("There is a Phase 2 using IPv4, cannot use IPv6.");
 					break;
 				}
 			}
@@ -395,17 +407,21 @@ if ($_POST) {
 	}
 
 	if ($pconfig['dpd_enable']) {
-		if (!is_numeric($pconfig['dpd_delay'])) {
+		if (!is_numericint($pconfig['dpd_delay'])) {
 			$input_errors[] = gettext("A numeric value must be specified for DPD delay.");
 		}
 
-		if (!is_numeric($pconfig['dpd_maxfail'])) {
+		if (!is_numericint($pconfig['dpd_maxfail'])) {
 			$input_errors[] = gettext("A numeric value must be specified for DPD retries.");
 		}
 	}
 
-	if (!empty($pconfig['iketype']) && $pconfig['iketype'] != "ikev1" && $pconfig['iketype'] != "ikev2") {
-		$input_errors[] = gettext("Valid arguments for IKE type is v1 or v2");
+	if ($pconfig['tfc_bytes'] && !is_numericint($pconfig['tfc_bytes'])) {
+		$input_errors[] = gettext("A numeric value must be specified for TFC bytes.");
+	}
+
+	if (!empty($pconfig['iketype']) && $pconfig['iketype'] != "ikev1" && $pconfig['iketype'] != "ikev2" && $pconfig['iketype'] != "auto") {
+		$input_errors[] = gettext("Valid arguments for IKE type are v1, v2 or auto");
 	}
 
 	if (!empty($_POST['ealgo']) && isset($config['system']['crypto_hardware'])) {
@@ -502,6 +518,20 @@ if ($_POST) {
 			$ph1ent['dpd_maxfail'] = $pconfig['dpd_maxfail'];
 		}
 
+		if (isset($pconfig['splitconn'])) {
+			$ph1ent['splitconn'] = true;
+		} else {
+			unset($ph1ent['splitconn']);
+		}
+
+		if (isset($pconfig['tfc_enable'])) {
+			$ph1ent['tfc_enable'] = true;
+		}
+
+		if (isset($pconfig['tfc_bytes'])) {
+			$ph1ent['tfc_bytes'] = $pconfig['tfc_bytes'];
+		}
+
 		/* generate unique phase1 ikeid */
 		if ($ph1ent['ikeid'] == 0) {
 			$ph1ent['ikeid'] = ipsec_ikeid_next();
@@ -524,16 +554,12 @@ if ($_POST) {
 function build_interface_list() {
 	$interfaces = get_configured_interface_with_descr();
 
-	$carplist = get_configured_carp_interface_list();
-
-	foreach ($carplist as $cif => $carpip) {
-		$interfaces[$cif] = $carpip . " (" . get_vip_descr($carpip) . ")";
-	}
-
-	$aliaslist = get_configured_ip_aliases_list();
-
-	foreach ($aliaslist as $aliasip => $aliasif) {
-		$interfaces[$aliasip] = $aliasip." (".get_vip_descr($aliasip).")";
+	$viplist = get_configured_vip_list();
+	foreach ($viplist as $vip => $address) {
+		$interfaces[$vip] = $address;
+		if (get_vip_descr($address)) {
+			$interfaces[$vip] .= " (". get_vip_descr($address) .")";
+		}
 	}
 
 	$grouplist = return_gateway_groups_array();
@@ -545,7 +571,7 @@ function build_interface_list() {
 			$vipif = $group[0]['int'];
 		}
 
-		$interfaces[$name] = "GW Group {$name}";
+		$interfaces[$name] = sprintf(gettext("GW Group %s"), $name);
 	}
 
 	return($interfaces);
@@ -635,11 +661,9 @@ function build_eal_list() {
 }
 
 if ($pconfig['mobile']) {
-	$pgtitle = array(gettext("VPN"), gettext("IPsec"), gettext("Mobile Client"), gettext("Edit Phase 1"));
-	$editing_mobile = true;
+	$pgtitle = array(gettext("VPN"), gettext("IPsec"), gettext("Mobile Clients"), gettext("Edit Phase 1"));
 } else {
-	$pgtitle = array(gettext("VPN"), gettext("IPsec"), gettext("Tunnel"), gettext("Edit Phase 1"));
-	$editing_mobile = false;
+	$pgtitle = array(gettext("VPN"), gettext("IPsec"), gettext("Tunnels"), gettext("Edit Phase 1"));
 }
 
 $shortcut_section = "ipsec";
@@ -651,8 +675,8 @@ if ($input_errors) {
 }
 
 $tab_array = array();
-$tab_array[] = array(gettext("Tunnels"), !$editing_mobile, "vpn_ipsec.php");
-$tab_array[] = array(gettext("Mobile Clients"), $editing_mobile, "vpn_ipsec_mobile.php");
+$tab_array[] = array(gettext("Tunnels"), true, "vpn_ipsec.php");
+$tab_array[] = array(gettext("Mobile Clients"), false, "vpn_ipsec_mobile.php");
 $tab_array[] = array(gettext("Pre-Shared Keys"), false, "vpn_ipsec_keys.php");
 $tab_array[] = array(gettext("Advanced Settings"), false, "vpn_ipsec_settings.php");
 display_top_tabs($tab_array);
@@ -672,8 +696,8 @@ $section->addInput(new Form_Select(
 	'iketype',
 	'Key Exchange version',
 	$pconfig['iketype'],
-	array("ikev1" => "V1", "ikev2" => "V2", "auto" => "Auto")
-))->setHelp('Select the Internet Key Exchange protocol version to be used, IKEv1 or IKEv2.');
+	array("ikev1" => "V1", "ikev2" => "V2", "auto" => gettext("Auto"))
+))->setHelp('Select the Internet Key Exchange protocol version to be used. Auto uses IKEv2 when initiator, and accepts either IKEv1 or IKEv2 as responder.');
 
 $section->addInput(new Form_Select(
 	'protocol',
@@ -695,7 +719,7 @@ if (!$pconfig['mobile']) {
 		'Remote Gateway',
 		'text',
 		$pconfig['remotegw']
-	))->setHelp('Enter the public IP address or host name of the remote gateway');
+	))->setHelp('Enter the public IP address or host name of the remote gateway.');
 }
 
 $section->addInput(new Form_Input(
@@ -703,11 +727,11 @@ $section->addInput(new Form_Input(
 	'Description',
 	'text',
 	$pconfig['descr']
-))->setHelp('You may enter a description here for your reference (not parsed).');
+))->setHelp('A description may be entered here for administrative reference (not parsed).');
 
 $form->add($section);
 
-$section = new Form_Section('Phase 1 proposal (Authentication)');
+$section = new Form_Section('Phase 1 Proposal (Authentication)');
 
 $section->addInput(new Form_Select(
 	'authentication_method',
@@ -720,7 +744,7 @@ $section->addInput(new Form_Select(
 	'mode',
 	'Negotiation mode',
 	$pconfig['mode'],
-	array("main" => "Main", "aggressive" => "Aggressive")
+	array("main" => gettext("Main"), "aggressive" => gettext("Aggressive"))
 ))->setHelp('Aggressive is more flexible, but less secure.');
 
 $group = new Form_Group('My identifier');
@@ -769,7 +793,7 @@ $section->addInput(new Form_Input(
 	'Pre-Shared Key',
 	'text',
 	$pconfig['pskey']
-))->setHelp('Enter your Pre-Shared Key string.');
+))->setHelp('Enter the Pre-Shared Key string.');
 
 $section->addInput(new Form_Select(
 	'certref',
@@ -787,7 +811,7 @@ $section->addInput(new Form_Select(
 
 $form->add($section);
 
-$section = new Form_Section('Phase 1 proposal (Algorithms)');
+$section = new Form_Section('Phase 1 Proposal (Algorithms)');
 
 $group = new Form_Group('Encryption Algorithm');
 
@@ -857,7 +881,7 @@ $section->addInput(new Form_Select(
 	'nat_traversal',
 	'NAT Traversal',
 	$pconfig['nat_traversal'],
-	array('on' => 'Auto', 'force' => 'Force')
+	array('on' => gettext('Auto'), 'force' => gettext('Force'))
 ))->setHelp('Set this option to enable the use of NAT-T (i.e. the encapsulation of ESP in UDP packets) if needed, ' .
 			'which can help with clients that are behind restrictive firewalls.');
 
@@ -865,8 +889,34 @@ $section->addInput(new Form_Select(
 	'mobike',
 	'MOBIKE',
 	$pconfig['mobike'],
-	array('on' => 'Enable', 'off' => 'Disable')
+	array('on' => gettext('Enable'), 'off' => gettext('Disable'))
 ))->setHelp('Set this option to control the use of MOBIKE');
+
+$section->addInput(new Form_Checkbox(
+	'splitconn',
+	'Split connections',
+	'Enable this to split connection entries with multiple phase 2 configurations. Required for remote endpoints that support only a single traffic selector per child SA.',
+	$pconfig['splitconn']
+));
+
+/* FreeBSD doesn't yet have TFC support. this is ready to go once it does
+https://redmine.pfsense.org/issues/4688
+
+$section->addInput(new Form_Checkbox(
+	'tfc_enable',
+	'Traffic Flow Confidentiality',
+	'Enable TFC',
+	$pconfig['tfc_enable']
+))->setHelp('Enable Traffic Flow Confidentiality');
+
+$section->addInput(new Form_Input(
+	'tfc_bytes',
+	'TFC Bytes',
+	'Bytes TFC',
+	$pconfig['tfc_bytes']
+))->setHelp('Enter the number of bytes to pad ESP data to, or leave blank to fill to MTU size');
+
+*/
 
 $section->addInput(new Form_Checkbox(
 	'dpd_enable',
@@ -921,7 +971,7 @@ print($form);
 /* determine if we should init the key length */
 $keyset = '';
 if (isset($pconfig['ealgo']['keylen'])) {
-	if (is_numeric($pconfig['ealgo']['keylen'])) {
+	if (is_numericint($pconfig['ealgo']['keylen'])) {
 		$keyset = $pconfig['ealgo']['keylen'];
 	}
 }
@@ -944,12 +994,17 @@ events.push(function() {
 			hideInput('mode', true);
 			hideInput('mobike', false);
 			hideInput('nat_traversal', true);
+			//hideCheckbox('tfc_enable', false);
 			hideCheckbox('reauth_enable', false);
+			hideCheckbox('splitconn', false);
 		} else {
 			hideInput('mode', false);
 			hideInput('mobike', true);
 			hideInput('nat_traversal', false);
+			//hideCheckbox('tfc_enable', true);
+			//hideInput('tfc_bytes', true);
 			hideCheckbox('reauth_enable', true);
+			hideCheckbox('splitconn', true);
 		}
 	}
 
@@ -1060,12 +1115,23 @@ events.push(function() {
 		}
 	}
 
+	//function tfcchkbox_change() {
+	//	hide = !$('#tfc_enable').prop('checked');
+	//
+	//	hideInput('tfc_bytes', hide);
+	//}
+
 	// ---------- Monitor elements for change and call the appropriate display functions ----------
 
 	 // Enable DPD
 	$('#dpd_enable').click(function () {
 		dpdchkbox_change();
 	});
+
+	 // TFC
+	//$('#tfc_enable').click(function () {
+	//	tfcchkbox_change();
+	//});
 
 	 // Peer identifier
 	$('#peerid_type').click(function () {
@@ -1106,6 +1172,7 @@ events.push(function() {
 });
 //]]>
 </script>
+</form>
 <?php
 
 include("foot.inc");

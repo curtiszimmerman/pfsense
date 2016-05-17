@@ -115,6 +115,18 @@ if ($_POST) {
 			$input_errors[] = gettext("A valid RADIUS server address must be specified.");
 		}
 
+		if ($_POST['secret'] != $_POST['secret_confirm']) {
+			$input_errors[] = gettext("Secret and confirmation must match");
+		}
+
+		if ($_POST['radiussecret'] != $_POST['radiussecret_confirm']) {
+			$input_errors[] = gettext("RADIUS secret and confirmation must match");
+		}
+
+		if (!is_numericint($_POST['n_l2tp_units']) || $_POST['n_l2tp_units'] > 255) {
+			$input_errors[] = gettext("Number of L2TP users must be between 1 and 255");
+		}
+
 		/* if this is an AJAX caller then handle via JSON */
 		if (isAjax() && is_array($input_errors)) {
 			input_errors2Ajax($input_errors);
@@ -123,11 +135,7 @@ if ($_POST) {
 
 		if (!$input_errors) {
 			$_POST['remoteip'] = $pconfig['remoteip'] = gen_subnet($_POST['remoteip'], $_POST['l2tp_subnet']);
-			$subnet_start = ip2ulong($_POST['remoteip']);
-			$subnet_end = ip2ulong($_POST['remoteip']) + $_POST['n_l2tp_units'] - 1;
-
-			if ((ip2ulong($_POST['localip']) >= $subnet_start) &&
-			    (ip2ulong($_POST['localip']) <= $subnet_end)) {
+			if (is_inrange_v4($_POST['localip'], $_POST['remoteip'], ip_after($_POST['remoteip'], $_POST['n_l2tp_units'] - 1))) {
 				$input_errors[] = gettext("The specified server address lies in the remote subnet.");
 			}
 			if ($_POST['localip'] == get_interface_ip("lan")) {
@@ -150,8 +158,14 @@ if ($_POST) {
 		$l2tpcfg['interface'] = $_POST['interface'];
 		$l2tpcfg['n_l2tp_units'] = $_POST['n_l2tp_units'];
 		$l2tpcfg['radius']['server'] = $_POST['radiusserver'];
-		$l2tpcfg['radius']['secret'] = $_POST['radiussecret'];
-		$l2tpcfg['secret'] = $_POST['secret'];
+		if ($_POST['radiussecret'] != DMYPWD) {
+			$l2tpcfg['radius']['secret'] = $_POST['radiussecret'];
+		}
+
+		if ($_POST['secret'] != DMYPWD) {
+			$l2tpcfg['secret'] = $_POST['secret'];
+		}
+
 		$l2tpcfg['paporchap'] = $_POST['paporchap'];
 
 
@@ -197,7 +211,7 @@ if ($_POST) {
 
 		/* if ajax is calling, give them an update message */
 		if (isAjax()) {
-			print_info_box_np($savemsg);
+			print_info_box($savemsg, 'success');
 		}
 	}
 }
@@ -211,7 +225,7 @@ if ($input_errors) {
 }
 
 if ($savemsg) {
-	print_info_box($savemsg);
+	print_info_box($savemsg, 'success');
 }
 
 $tab_array = array();
@@ -219,10 +233,7 @@ $tab_array[] = array(gettext("Configuration"), true, "vpn_l2tp.php");
 $tab_array[] = array(gettext("Users"), false, "vpn_l2tp_users.php");
 display_top_tabs($tab_array);
 
-$form = new Form(new Form_Button(
-	'Submit',
-	gettext("Save")
-));
+$form = new Form();
 
 $section = new Form_Section("Enable L2TP");
 
@@ -268,15 +279,14 @@ $section->addInput(new Form_IpAddress(
 ))->addMask(l2tp_subnet, $pconfig['l2tp_subnet'])
   ->setHelp('Specify the starting address for the client IP address subnet.');
 
-$section->addInput(new Form_Input(
+$section->addInput(new Form_Select(
 	'n_l2tp_units',
 	'Number of L2TP users',
-	'number',
 	$pconfig['n_l2tp_units'],
-	['min' => 0, 'max' => 255]
+	array_combine(range(1, 255, 1), range(1, 255, 1))
 ));
 
-$section->addInput(new Form_Input(
+$section->addPassword(new Form_Input(
 	'secret',
 	'Secret',
 	'password',
@@ -296,14 +306,14 @@ $section->addInput(new Form_Select(
 
 $section->addInput(new Form_Input(
 	'l2tp_dns1',
-	'Primary L2TM DNS server',
+	'Primary L2TP DNS server',
 	'text',
 	$pconfig['l2tp_dns1']
 ));
 
 $section->addInput(new Form_Input(
 	'l2tp_dns2',
-	'Secondary L2TM DNS server',
+	'Secondary L2TP DNS server',
 	'text',
 	$pconfig['l2tp_dns2']
 ));
@@ -333,7 +343,7 @@ $section->addInput(new Form_IpAddress(
 	$pconfig['radiusserver']
 ))->setHelp('Enter the IP address of the RADIUS server.');
 
-$section->addInput(new Form_Input(
+$section->addPassword(new Form_Input(
 	'radiussecret',
 	'Secret',
 	'password',
@@ -350,9 +360,12 @@ $section->addInput(new Form_Checkbox(
 $form->add($section);
 
 print($form);
-
-print_info_box(gettext("Don't forget to add a firewall rule to permit traffic from L2TP clients!"), info);
 ?>
+<div class="infoblock blockopen">
+<?php
+	print_info_box(gettext("Don't forget to add a firewall rule to permit traffic from L2TP clients."), 'info', false);
+?>
+</div>
 
 <script type="text/javascript">
 //<![CDATA[

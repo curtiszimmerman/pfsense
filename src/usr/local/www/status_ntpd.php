@@ -81,28 +81,28 @@ if (!isset($config['ntpd']['noquery'])) {
 
 		switch (substr($line, 0, 1)) {
 			case " ":
-				$server['status'] = "Unreach/Pending";
+				$server['status'] = gettext("Unreach/Pending");
 				break;
 			case "*":
-				$server['status'] = "Active Peer";
+				$server['status'] = gettext("Active Peer");
 				break;
 			case "+":
-				$server['status'] = "Candidate";
+				$server['status'] = gettext("Candidate");
 				break;
 			case "o":
-				$server['status'] = "PPS Peer";
+				$server['status'] = gettext("PPS Peer");
 				break;
 			case "#":
-				$server['status'] = "Selected";
+				$server['status'] = gettext("Selected");
 				break;
 			case ".":
-				$server['status'] = "Excess Peer";
+				$server['status'] = gettext("Excess Peer");
 				break;
 			case "x":
-				$server['status'] = "False Ticker";
+				$server['status'] = gettext("False Ticker");
 				break;
 			case "-":
-				$server['status'] = "Outlier";
+				$server['status'] = gettext("Outlier");
 				break;
 		}
 
@@ -183,6 +183,107 @@ if (isset($config['ntpd']['gps']['type']) && ($config['ntpd']['gps']['type'] == 
 	}
 }
 
+// Responding to an AJAX call, we return the GPS data or the status data depending on $_REQUEST['dogps']
+if ($_REQUEST['ajax']) {
+
+	if ($_REQUEST['dogps'] == "yes") {
+		print_gps();
+	} else {
+		print_status();
+	}
+
+	exit;
+}
+
+function print_status() {
+	global $config, $ntpq_servers;
+
+	if (isset($config['ntpd']['noquery'])):
+
+		print("<tr>\n");
+		print('<td class="warning" colspan="11">');
+		printf(gettext("Statistics unavailable because ntpq and ntpdc queries are disabled in the %sNTP service settings%s"), '<a href="services_ntpd.php">', '</a>');
+		print("</td>\n");
+		print("</tr>\n");
+	elseif (count($ntpq_servers) == 0):
+		print("<tr>\n");
+		print('<td class="warning" colspan="11">');
+		printf(gettext("No peers found, %sis the ntp service running?%s"), '<a href="status_services.php">', '</a>');
+		print("</td>\n");
+		print("</tr>\n");
+	else:
+
+		$i = 0;
+		foreach ($ntpq_servers as $server):
+			print("<tr>\n");
+			print("<td>" . $server['status'] . "</td>\n");
+			print("<td>" . $server['server'] . "</td>\n");
+			print("<td>" . $server['refid'] . "</td>\n");
+			print("<td>" . $server['stratum'] . "</td>\n");
+			print("<td>" . $server['type'] . "</td>\n");
+			print("<td>" . $server['when'] . "</td>\n");
+			print("<td>" . $server['poll'] . "</td>\n");
+			print("<td>" . $server['reach'] . "</td>\n");
+			print("<td>" . $server['delay'] . "</td>\n");
+			print("<td>" . $server['offset'] . "</td>\n");
+			print("<td>" . $server['jitter'] . "</td>\n");
+			print("</tr>\n");
+			$i++;
+		endforeach;
+	endif;
+}
+
+function print_gps() {
+	global 	$gps_lat, $gps_lon, $gps_lat_deg, $gps_lon_deg, $gps_lat_min, $gps_lon_min, $gps_vars,
+			$gps_alt, $gps_alt_unit, $gps_sat, $gps_satview, $gps_goo_lnk;
+
+	print("<tr>\n");
+	print("<td>\n");
+	printf("%.5f", $gps_lat);
+	print(" (");
+	printf("%d%s", $gps_lat_deg, "&deg;");
+	printf("%.5f", $gps_lat_min*60);
+	print($gps_vars[4]);
+	print(")");
+	print("</td>\n");
+	print("<td>\n");
+	printf("%.5f", $gps_lon);
+	print(" (");
+	printf("%d%s", $gps_lon_deg, "&deg;");
+	printf("%.5f", $gps_lon_min*60);
+	print($gps_vars[6]);
+	print(")");
+	print("</td>\n");
+
+	if (isset($gps_alt)) {
+		print("<td>\n");
+		print($gps_alt . ' ' . $gps_alt_unit);
+		print("</td>\n");
+	}
+
+	if (isset($gps_sat) || isset($gps_satview)) {
+		print('<td class="text-center">');
+
+		if (isset($gps_satview)) {
+			print(gettext('in view ') . intval($gps_satview));
+		}
+
+		if (isset($gps_sat) && isset($gps_satview)) {
+			print(', ');
+		}
+		if (isset($gps_sat)) {
+			print(gettext('in use ') . $gps_sat);
+		}
+
+		print("</td>\n");
+	}
+
+	print("</tr>\n");
+	print("<tr>\n");
+	print('<td colspan="' . $gps_goo_lnk . '"><a target="_gmaps" href="http://maps.google.com/?q=' . $gps_lat . ',' . $gps_lon . '">' . gettext("Google Maps Link") . '</a></td>');
+	print("</tr>\n");
+}
+
 $pgtitle = array(gettext("Status"), gettext("NTP"));
 $shortcut_section = "ntp";
 
@@ -190,58 +291,26 @@ include("head.inc");
 ?>
 
 <div class="panel panel-default">
-	<div class="panel-heading"><h2 class="panel-title">Network Time Protocol Status</h2></div>
+	<div class="panel-heading"><h2 class="panel-title"><?=gettext("Network Time Protocol Status");?></h2></div>
 	<div class="panel-body">
 		<table class="table table-striped table-hover table-condensed sortable-theme-bootstrap" data-sortable>
 			<thead>
 				<tr>
-					<th><?=gettext("Status"); ?></th>
-					<th><?=gettext("Server"); ?></th>
-					<th><?=gettext("Ref ID"); ?></th>
-					<th><?=gettext("Stratum"); ?></th>
-					<th><?=gettext("Type"); ?></th>
-					<th><?=gettext("When"); ?></th>
-					<th><?=gettext("Poll"); ?></th>
-					<th><?=gettext("Reach"); ?></th>
-					<th><?=gettext("Delay"); ?></th>
-					<th><?=gettext("Offset"); ?></th>
-					<th><?=gettext("Jitter"); ?></th>
+					<th><?=gettext("Status")?></th>
+					<th><?=gettext("Server")?></th>
+					<th><?=gettext("Ref ID")?></th>
+					<th><?=gettext("Stratum")?></th>
+					<th><?=gettext("Type")?></th>
+					<th><?=gettext("When")?></th>
+					<th><?=gettext("Poll")?></th>
+					<th><?=gettext("Reach")?></th>
+					<th><?=gettext("Delay")?></th>
+					<th><?=gettext("Offset")?></th>
+					<th><?=gettext("Jitter")?></th>
 				</tr>
 			</thead>
-			<tbody>
-				<?php if (isset($config['ntpd']['noquery'])): ?>
-				<tr>
-					<td class="warning" colspan="11">
-						Statistics unavailable because ntpq and ntpdc queries are disabled in the <a href="services_ntpd.php">NTP service settings</a>.
-					</td>
-				</tr>
-				<?php elseif (count($ntpq_servers) == 0): ?>
-				<tr>
-					<td class="warning" colspan="11">
-						No peers found, <a href="status_services.php">is the ntp service running?</a>
-					</td>
-				</tr>
-				<?php else:
-
-					$i = 0;
-					foreach ($ntpq_servers as $server): ?>
-						<tr>
-							<td><?=$server['status']?></td>
-							<td><?=$server['server']?></td>
-							<td><?=$server['refid']?></td>
-							<td><?=$server['stratum']?></td>
-							<td><?=$server['type']?></td>
-							<td><?=$server['when']?></td>
-							<td><?=$server['poll']?></td>
-							<td><?=$server['reach']?></td>
-							<td><?=$server['delay']?></td>
-							<td><?=$server['offset']?></td>
-							<td><?=$server['jitter']?></td>
-						</tr> <?php
-					   $i++;
-				   endforeach;
-			   endif;
-?>
+			<tbody id="ntpbody">
+				<?=print_status()?>
 			</tbody>
 		</table>
 	</div>
@@ -250,77 +319,107 @@ include("head.inc");
 
 <?php
 
+$showgps = 0;
+
 // GPS satellite information (if available)
 if (($gps_ok) && ($gps_lat) && ($gps_lon)):
-	$gps_goo_lnk = 2; ?>
+	$gps_goo_lnk = 2;
+	$showgps = 1;
+?>
 
-	<div class="panel panel-default">
-		<div class="panel-heading"><h2 class="panel-title">GPS information</h2></div>
-		<div class="panel-body">
-			<table class="table table-striped table-hover table-condensed">
-				<thead>
+<div class="panel panel-default">
+	<div class="panel-heading"><h2 class="panel-title"><?=gettext("GPS Information");?></h2></div>
+	<div class="panel-body">
+		<table class="table table-striped table-hover table-condensed">
+			<thead>
 				<tr>
-					<th>
-						 <?=gettext("Clock Latitude"); ?>
-					</th>
-					<th>
-						<?=gettext("Clock Longitude"); ?>
-					</th>
-					<?php if (isset($gps_alt)) { ?>
-						 <th>
-							 <?=gettext("Clock Altitude")?>
-						 </th>
-						 <?php $gps_goo_lnk++;
-					 }
+					<th><?=gettext("Clock Latitude")?></th>
+					<th><?=gettext("Clock Longitude")?></th>
+<?php
+	if (isset($gps_alt)) {
+?>
+					<th><?=gettext("Clock Altitude")?></th>
+<?php
+		$gps_goo_lnk++;
+	}
 
-					 if (isset($gps_sat) || isset($gps_satview)) { ?>
-						<th>
-							<?=gettext("Satellites")?>
-						</th> <?php
-						$gps_goo_lnk++;
-					 }?>
-					</tr>
-				</thead>
+	if (isset($gps_sat) || isset($gps_satview)) {
+?>
+					<th><?=gettext("Satellites")?></th>
+<?php
+		$gps_goo_lnk++;
+	}
+?>
+				</tr>
+			</thead>
 
-				<tbody>
-					<tr>
-						<td>
-							<?=printf("%.5f", $gps_lat); ?> (<?=printf("%d", $gps_lat_deg); ?>&deg; <?=printf("%.5f", $gps_lat_min*60); ?><?=$gps_vars[4]; ?>)
-						</td>
-						<td>
-							<?=printf("%.5f", $gps_lon); ?> (<?=printf("%d", $gps_lon_deg); ?>&deg; <?=printf("%.5f", $gps_lon_min*60); ?><?=$gps_vars[6]; ?>)
-						</td>
-
-						<?php if (isset($gps_alt)) { ?>
-							<td>
-								<?=$gps_alt . ' ' . $gps_alt_unit?>
-							</td>
-							}
-
-						if (isset($gps_sat) || isset($gps_satview)) { ?>
-							<td align="center"> <?php
-								if (isset($gps_satview)) {
-									print('in view ' . intval($gps_satview));
-								}
-
-							if (isset($gps_sat) && isset($gps_satview)) {
-								print(', ');
-							}
-							if (isset($gps_sat)) {
-								print('in use ' . $gps_sat);
-							} ?>
-							</td> <?php
-						}
-						?>
-					</tr>
-					<tr>
-						<td colspan="<?=$gps_goo_lnk; ?>"><a target="_gmaps" href="http://maps.google.com/?q=<?=$gps_lat; ?>,<?=$gps_lon; ?>">Google Maps Link</a></td>
-					</tr>
-				</tbody>
-			</table>
-		</div>
+			<tbody id="gpsbody">
+				<?=print_gps()?>
+			</tbody>
+		</table>
 	</div>
+</div>
 
-<?php	endif;
+<?php
+endif;
+?>
 
-include("foot.inc"); ?>
+<script type="text/javascript">
+//<![CDATA[
+events.push(function() {
+	ajax_lock = false;		// Mutex so we don't make a call until the previous call is finished
+	do_gps = "no";
+
+	// Fetch the tbody contents from the server
+	function update_tables() {
+
+		if (ajax_lock) {
+			return;
+		}
+
+		ajax_lock = true;
+
+		ajaxRequest = $.ajax(
+			{
+				url: "/status_ntpd.php",
+				type: "post",
+				data: {
+					ajax: 	"ajax",
+					dogps:  do_gps
+				}
+			}
+		);
+
+		// Deal with the results of the above ajax call
+		ajaxRequest.done(function (response, textStatus, jqXHR) {
+			if (do_gps == "yes") {
+				$('#gpsbody').html(response);
+			} else {
+				$('#ntpbody').html(response);
+			}
+
+			ajax_lock = false;
+
+			// Alternate updating the status table and the gps table (if enabled)
+			if ((do_gps == "yes") || ("<?=$showgps?>" != 1)) {
+				do_gps = "no";
+			} else {
+				do_gps = "yes";
+			}
+
+			// and do it again
+			setTimeout(update_tables, 5000);
+		});
+
+
+	}
+
+	// Populate the tbody on page load
+	update_tables();
+});
+//]]>
+</script>
+
+<?php
+include("foot.inc");
+?>

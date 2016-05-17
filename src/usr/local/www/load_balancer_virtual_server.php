@@ -118,6 +118,26 @@ for ($i = 0; isset($config['load_balancer']['virtual_server'][$i]); $i++) {
 	}
 }
 
+// Return the index of any alias matching the specified name and type
+function alias_idx($name, $type) {
+	global $config;
+
+	if (empty($config['aliases']['alias'])) {
+		return(-1);
+	}
+
+	$idx = 0;
+	foreach ($config['aliases']['alias'] as $alias) {
+		if (($alias['name'] == $name) && ($alias['type'] == $type)) {
+			return($idx);
+		}
+
+		$idx++;
+	}
+
+	return(-1);
+}
+
 $pgtitle = array(gettext("Services"), gettext("Load Balancer"), gettext("Virtual Servers"));
 $shortcut_section = "relayd-virtualservers";
 
@@ -128,11 +148,11 @@ if ($input_errors) {
 }
 
 if ($savemsg) {
-	print_info_box($savemsg);
+	print_info_box($savemsg, 'success');
 }
 
 if (is_subsystem_dirty('loadbalancer')) {
-	print_info_box_np(gettext("The virtual server configuration has been changed") . ".<br />" . gettext("You must apply the changes in order for them to take effect."));
+	print_apply_box(gettext("The virtual server configuration has been changed.") . "<br />" . gettext("The changes must be applied for them to take effect."));
 }
 
 /* active tabs */
@@ -158,7 +178,7 @@ display_top_tabs($tab_array);
 						<th><?=gettext('Pool'); ?></th>
 						<th><?=gettext('Fallback pool'); ?></th>
 						<th><?=gettext('Description'); ?></th>
-						<th><!-- Action buttons --></th>
+						<th><?=gettext('Actions'); ?></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -166,19 +186,32 @@ display_top_tabs($tab_array);
 if (!empty($a_vs)) {
 	$i = 0;
 	foreach ($a_vs as $a_v) {
+
 ?>
 					<tr>
 						<td><?=htmlspecialchars($a_v['name'])?></td>
 						<td><?=htmlspecialchars($a_v['relay_protocol'])?></td>
-						<td><?=htmlspecialchars($a_v['ipaddr'])?></td>
+<?php
+
+		$aidx = alias_idx($a_v['ipaddr'], "host");
+
+		if ($aidx >= 0) {
+			print("<td>\n");
+			print('<a href="/firewall_aliases_edit.php?id=' . $aidx . '" data-toggle="popover" data-trigger="hover focus" title="Alias details" data-content="' . alias_info_popup($aidx) . '" data-html="true">');
+			print(htmlspecialchars($a_v['ipaddr']) . '</a></td>');
+		} else {
+			print('<td>' . htmlspecialchars($a_v['ipaddr']) . '</td>');
+		}
+
+?>
 						<td><?=htmlspecialchars($a_v['port'])?></td>
 						<td><?=$a_v['poolname']?></td>
 						<td><?=$a_v['sitedown']?></td>
 						<td><?=htmlspecialchars($a_v['descr'])?></td>
 						<td>
 							<a class="fa fa-pencil"	title="<?=gettext('Edit virtual server')?>"	href="load_balancer_virtual_server_edit.php?id=<?=$i?>"></a>
-							<a class="fa fa-clone"	title="<?=gettext('Copy virtual server')?>"	href="load_balancer_virtual_server_edit.php?act=dup&id=<?=$i?>"></a>
-							<a class="fa fa-trash"	title="<?=gettext('Delete virtual server')?>"	href="load_balancer_virtual_server.php?act=del&id=<?=$i?>"></a>
+							<a class="fa fa-clone"	title="<?=gettext('Copy virtual server')?>"	href="load_balancer_virtual_server_edit.php?act=dup&amp;id=<?=$i?>"></a>
+							<a class="fa fa-trash"	title="<?=gettext('Delete virtual server')?>"	href="load_balancer_virtual_server.php?act=del&amp;id=<?=$i?>"></a>
 						</td>
 					</tr>
 <?php
@@ -187,7 +220,7 @@ if (!empty($a_vs)) {
 } else {
 ?>						<tr>
 							<td	 colspan="8"> <?php
-								print_info_box(gettext('No virtual servers have been configured'));
+								print_info_box(gettext('No virtual servers have been configured.'));
 ?>							</td>
 						</tr> <?php
 }

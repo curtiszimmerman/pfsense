@@ -94,6 +94,8 @@ $certs_available = false;
 
 if (is_array($a_cert) && count($a_cert)) {
 	$certs_available = true;
+} else {
+	$a_cert = array();
 }
 
 if (!$pconfig['webguiproto'] || !$certs_available) {
@@ -108,7 +110,7 @@ if ($_POST) {
 	/* input validation */
 	if ($_POST['webguiport']) {
 		if (!is_port($_POST['webguiport'])) {
-			$input_errors[] = gettext("You must specify a valid webConfigurator port number");
+			$input_errors[] = gettext("A valid webConfigurator port number must be specified");
 		}
 	}
 
@@ -121,7 +123,7 @@ if ($_POST) {
 	if ($_POST['althostnames']) {
 		$althosts = explode(" ", $_POST['althostnames']);
 		foreach ($althosts as $ah) {
-			if (!is_hostname($ah)) {
+			if (!is_ipaddr($ah) && !is_hostname($ah)) {
 				$input_errors[] = sprintf(gettext("Alternate hostname %s is not a valid hostname."), htmlspecialchars($ah));
 			}
 		}
@@ -129,7 +131,7 @@ if ($_POST) {
 
 	if ($_POST['sshport']) {
 		if (!is_port($_POST['sshport'])) {
-			$input_errors[] = gettext("You must specify a valid port number");
+			$input_errors[] = gettext("A valid port number must be specified");
 		}
 	}
 
@@ -326,7 +328,7 @@ if ($savemsg) {
 
 $tab_array = array();
 $tab_array[] = array(gettext("Admin Access"), true, "system_advanced_admin.php");
-$tab_array[] = array(gettext("Firewall / NAT"), false, "system_advanced_firewall.php");
+$tab_array[] = array(htmlspecialchars(gettext("Firewall & NAT")), false, "system_advanced_firewall.php");
 $tab_array[] = array(gettext("Networking"), false, "system_advanced_network.php");
 $tab_array[] = array(gettext("Miscellaneous"), false, "system_advanced_misc.php");
 $tab_array[] = array(gettext("System Tunables"), false, "system_advanced_sysctl.php");
@@ -336,7 +338,7 @@ display_top_tabs($tab_array);
 ?><div id="container"><?php
 
 $form = new Form;
-$section = new Form_Section('WebConfigurator');
+$section = new Form_Section('webConfigurator');
 $group = new Form_Group('Protocol');
 
 $group->add(new Form_Checkbox(
@@ -355,9 +357,8 @@ $group->add(new Form_Checkbox(
 	'https'
 ))->displayAsRadio();
 
-$group->setHelp($certs_available ? '':'No Certificates have been defined. You must '.
-	'<a href="system_certmanager.php">'. gettext("Create or Import").'</a> '.
-	'a Certificate before SSL can be enabled.');
+$group->setHelp($certs_available ? '':'No Certificates have been defined. A certificate is required before SSL can be enabled. '.
+	'<a href="system_certmanager.php">'. gettext("Create or Import").'</a> '.' a Certificate.');
 
 $section->add($group);
 
@@ -380,20 +381,20 @@ $section->addInput(new Form_Input(
 	$config['system']['webgui']['port'],
 	['min' => 1, 'max' => 65535]
 ))->setHelp('Enter a custom port number for the webConfigurator '.
-	'above if you want to override the default (80 for HTTP, 443 '.
-	'for HTTPS). Changes will take effect immediately after save.');
+	'above to override the default (80 for HTTP, 443 for HTTPS). '.
+	'Changes will take effect immediately after save.');
 
 $section->addInput(new Form_Input(
 	'max_procs',
 	'Max Processes',
 	'number',
 	$pconfig['max_procs']
-))->setHelp('Enter the number of webConfigurator processes you '.
-	'want to run. This defaults to 2. Increasing this will allow more '.
+))->setHelp('Enter the number of webConfigurator processes to run. '.
+	'This defaults to 2. Increasing this will allow more '.
 	'users/browsers to access the GUI concurrently.');
 
 $section->addInput(new Form_Checkbox(
-	'disablehttpredirect',
+	'webgui-redirect',
 	'WebGUI redirect',
 	'Disable webConfigurator redirect rule',
 	$pconfig['disablehttpredirect']
@@ -413,7 +414,7 @@ $section->addInput(new Form_Checkbox(
 	'this option).');
 
 $section->addInput(new Form_Checkbox(
-	'quietlogin',
+	'webgui-login-messages',
 	'WebGUI login messages',
 	'Disable logging of webConfigurator successful logins',
 	$pconfig['quietlogin']
@@ -435,8 +436,8 @@ $section->addInput(new Form_Checkbox(
 	'unchecked, access to the webConfigurator on the %s interface is always '.
 	'permitted, regardless of the user-defined firewall rule set. Check this box to '.
 	'disable this automatically added rule, so access to the webConfigurator is '.
-	'controlled by the user-defined firewall rules (ensure you have a firewall rule '.
-	'in place that allows you in, or you will lock yourself out!)<em>Hint: the &quot;Set interface(s) IP address&quot; '.
+	'controlled by the user-defined firewall rules (ensure a firewall rule is '.
+	'in place that allows access, to avoid being locked out!) <em>Hint: the &quot;Set interface(s) IP address&quot; '.
 	'option in the console menu resets this setting as well.</em>', [$lockout_interface]);
 
 $section->addInput(new Form_Checkbox(
@@ -444,19 +445,19 @@ $section->addInput(new Form_Checkbox(
 	'DNS Rebind Check',
 	'Disable DNS Rebinding Checks',
 	$pconfig['nodnsrebindcheck']
-))->setHelp('When this is unchecked, your system is protected against <a '.
+))->setHelp('When this is unchecked, the system is protected against <a '.
 	'href="http://en.wikipedia.org/wiki/DNS_rebinding">DNS Rebinding attacks</a>. '.
-	'This blocks private IP responses from your configured DNS servers. Check this '.
+	'This blocks private IP responses from the configured DNS servers. Check this '.
 	'box to disable this protection if it interferes with webConfigurator access or '.
-	'name resolution in your environment.');
+	'name resolution in the environment.');
 
 $section->addInput(new Form_Input(
 	'althostnames',
 	'Alternate Hostnames',
 	'text',
 	htmlspecialchars($pconfig['althostnames'])
-))->setHelp('Alternate Hostnames for DNS Rebinding and HTTP_REFERER Checks. Here '.
-	'you can specify alternate hostnames by which the router may be queried, to '.
+))->setHelp('Alternate Hostnames for DNS Rebinding and HTTP_REFERER Checks. '.
+	'Specify alternate hostnames by which the router may be queried, to '.
 	'bypass the DNS Rebinding Attack checks. Separate hostnames with spaces.');
 
 $section->addInput(new Form_Checkbox(
@@ -466,7 +467,7 @@ $section->addInput(new Form_Checkbox(
 	$pconfig['nohttpreferercheck']
 ))->setHelp('When this is unchecked, access to the webConfigurator is protected '.
 	'against HTTP_REFERER redirection attempts. Check this box to disable this '.
-	'protection if you find that it interferes with webConfigurator access in certain '.
+	'protection if it interferes with webConfigurator access in certain '.
 	'corner cases such as using external scripts to interact with this system. More '.
 	'information on HTTP_REFERER is available from <a target="_blank" '.
 	'href="http://en.wikipedia.org/wiki/HTTP_referrer">Wikipedia</a>.');
@@ -508,34 +509,36 @@ $section->addInput(new Form_Input(
 ))->setHelp('Note: Leave this blank for the default of 22.');
 
 
-if (!$g['enableserial_force'] && ($g['platform'] == $g['product_name'] || $g['platform'] == "cdrom")) {
-	$form->add($section);
-	$section = new Form_Section('Serial Communications');
+$form->add($section);
+$section = new Form_Section('Serial Communications');
 
+if (!$g['enableserial_force'] && ($g['platform'] == $g['product_name'] || $g['platform'] == "cdrom")) {
 	$section->addInput(new Form_Checkbox(
 		'enableserial',
 		'Serial Terminal',
 		'Enables the first serial port with 115200/8/N/1 by default, or another speed selectable below.',
 		isset($pconfig['enableserial'])
 	))->setHelp('Note:	This will redirect the console output and messages to '.
-		'the serial port. You can still access the console menu from the internal video '.
+		'the serial port. The console menu can still be accessed from the internal video '.
 		'card/keyboard. A <b>null modem</b> serial cable or adapter is required to use the '.
 		'serial console.');
+}
 
-	$section->addInput(new Form_Select(
-		'serialspeed',
-		'Serial Speed',
-		$pconfig['serialspeed'],
-		array_combine(array(115200, 57600, 38400, 19200, 14400, 9600), array(115200, 57600, 38400, 19200, 14400, 9600))
-	))->setHelp('Allows selection of different speeds for the serial console port.');
+$section->addInput(new Form_Select(
+	'serialspeed',
+	'Serial Speed',
+	$pconfig['serialspeed'],
+	array_combine(array(115200, 57600, 38400, 19200, 14400, 9600), array(115200, 57600, 38400, 19200, 14400, 9600))
+))->setHelp('Allows selection of different speeds for the serial console port.');
 
+if (!$g['enableserial_force'] && ($g['platform'] == $g['product_name'] || $g['platform'] == "cdrom")) {
 	$section->addInput(new Form_Select(
 		'primaryconsole',
 		'Primary Console',
 		$pconfig['primaryconsole'],
 		array(
-			'serial' => 'Serial Console',
-			'video' => 'VGA Console',
+			'serial' => gettext('Serial Console'),
+			'video' => gettext('VGA Console'),
 		)
 	))->setHelp('Select the preferred console if multiple consoles are present. '.
 		'The preferred console will show pfSense boot script output. All consoles '.
@@ -556,6 +559,7 @@ $form->add($section);
 print $form;
 
 ?>
+</div>
 <script type="text/javascript">
 //<![CDATA[
 events.push(function() {
@@ -596,3 +600,4 @@ if ($restart_webgui) {
 	log_error(gettext("webConfigurator configuration has changed. Restarting webConfigurator."));
 	send_event("service restart webgui");
 }
+?>

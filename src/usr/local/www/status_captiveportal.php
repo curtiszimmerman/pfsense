@@ -73,7 +73,7 @@ $cpzone = $_GET['zone'];
 if (isset($_POST['zone'])) {
 	$cpzone = $_POST['zone'];
 }
-
+$cpzone = strtolower($cpzone);
 
 if (!is_array($config['captiveportal'])) {
 	$config['captiveportal'] = array();
@@ -81,7 +81,7 @@ if (!is_array($config['captiveportal'])) {
 $a_cp =& $config['captiveportal'];
 
 if (count($a_cp) == 1) {
- $cpzone = current(array_keys($a_cp));
+	$cpzone = current(array_keys($a_cp));
 }
 
 /* If the zone does not exist, do not display the invalid zone */
@@ -122,8 +122,15 @@ if (!empty($cpzone)) {
 		usort($cpdb, "clientcmp");
 	}
 }
+$pgtitle = array(gettext("Status"), gettext("Captive Portal"));
 
-$pgtitle = array(gettext("Status"), gettext("Captive portal"));
+if (!empty($cpzone)) {
+	$pgtitle[] = $a_cp[$cpzone]['zone'];
+
+	if (isset($config['voucher'][$cpzone]['enable'])) {
+		$pgtitle[] = gettext("Active Users");
+	}
+}
 $shortcut_section = "captiveportal";
 
 include("head.inc");
@@ -141,7 +148,7 @@ endif;
 // Load MAC-Manufacturer table
 $mac_man = load_mac_manufacturer_table();
 
-if (count($a_cp) >	1) {
+if (count($a_cp) > 1) {
 	$form = new Form(false);
 
 	$section = new Form_Section('Captive Portal Zone');
@@ -167,7 +174,7 @@ if (count($a_cp) >	1) {
 if (!empty($cpzone)): ?>
 
 <div class="panel panel-default">
-	<div class="panel-heading"><h2 class="panel-title"><?=gettext("Captive Portal Status (")?><?=$a_cp[$cpzone]['zone']?>)</h2></div>
+	<div class="panel-heading"><h2 class="panel-title"><?=sprintf(gettext("Users Logged In (%d)"), count($cpdb))?></h2></div>
 	<div class="panel-body table-responsive">
 
 		<table class="table table-striped table-hover table-condensed">
@@ -194,7 +201,7 @@ if (!empty($cpzone)): ?>
 <?php
 	endif;
 ?>
-				<th></th>
+				<th><?=gettext("Actions")?></th>
 			</tr>
 <?php
 
@@ -230,19 +237,18 @@ if (!empty($cpzone)): ?>
 				echo htmlspecialchars(date("m/d/Y H:i:s", $last_act));
 			}
 ?>
-
 				</td>
 <?php
-	   else:
+		else:
 ?>
-				<td colspan="2">
+				<td>
 					<?=htmlspecialchars(date("m/d/Y H:i:s", $cpent[0]))?>
 				</td>
 <?php
-	   endif;
+		endif;
 ?>
 				<td>
-					<a href="?zone=<?=htmlspecialchars($cpzone)?>&amp;order=<?=$_GET['order']?>&amp;showact=<?=htmlspecialchars($_GET['showact'])?>&amp;act=del&amp;id=<?=$cpent[5]?>" class="btn btn-xs brn-danger"><?=gettext("Disconnect")?></a>
+					<a href="?zone=<?=htmlspecialchars($cpzone)?>&amp;order=<?=$_GET['order']?>&amp;showact=<?=htmlspecialchars($_GET['showact'])?>&amp;act=del&amp;id=<?=$cpent[5]?>"><i class="fa fa-trash" title="<?=gettext("Disconnect this User")?>"></i></a>
 				</td>
 			</tr>
 <?php
@@ -253,17 +259,10 @@ if (!empty($cpzone)): ?>
 </div>
 <?php
 else:
-	// If no zones have been defined . .
-?>
-<div class="panel panel-default">
-	<div class="panel-heading"><h2 class="panel-title"><?=gettext("Captive Portal Status")?></h2></div>
-	<div class="panel-body"><br />
-<?php
-	print_info_box(gettext("No captive portal zones have been configured. You may add new zones here: ") . '<a href="services_captiveportal_zones.php">' . 'Services->Captive portal' . '</a>');
-?>
-	</div>
-</div>
-<?php
+	if (empty($a_cp)) {
+		// If no zones have been defined
+		print_info_box(sprintf(gettext('No Captive Portal zones have been configured. New zones may be added here: %1$sServices > Captive Portal%2$s.'), '<a href="services_captiveportal_zones.php">', '</a>'), 'warning', false);
+	}
 endif;
 ?>
 
@@ -275,12 +274,18 @@ endif;
 if (!empty($cpzone)):
 	if ($_GET['showact']): ?>
 		<input type="hidden" name="showact" value="0" />
-		<input type="submit" class="btn btn-default" value="<?=gettext("Don't show last activity")?>" />
+		<button type="submit" class="btn btn-info" value="<?=gettext("Don't show last activity")?>">
+			<i class="fa fa-minus-circle icon-embed-btn"></i>
+			<?=gettext("Hide Last Activity")?>
+		</button>
 <?php
 	else:
 ?>
 		<input type="hidden" name="showact" value="1" />
-		<input type="submit" class="btn btn-default" value="<?=gettext("Show last activity")?>" />
+		<button type="submit" class="btn btn-info" value="<?=gettext("Show last activity")?>">
+			<i class="fa fa-plus-circle icon-embed-btn"></i>
+			<?=gettext("Show Last Activity")?>
+		</button>
 <?php
 	endif;
 ?>

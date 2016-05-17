@@ -67,8 +67,6 @@
 
 require("guiconfig.inc");
 
-$pgtitle = array(gettext("System"), gettext("User Manager"), gettext("Groups"));
-
 if (!is_array($config['system']['group'])) {
 	$config['system']['group'] = array();
 }
@@ -76,6 +74,7 @@ if (!is_array($config['system']['group'])) {
 $a_group = &$config['system']['group'];
 
 unset($id);
+
 if (isset($_POST['groupid']) && is_numericint($_POST['groupid'])) {
 	$id = $_POST['groupid'];
 }
@@ -85,6 +84,20 @@ if (isset($_GET['groupid']) && is_numericint($_GET['groupid'])) {
 }
 
 $act = (isset($_GET['act']) ? $_GET['act'] : '');
+
+function cpusercmp($a, $b) {
+	return strcasecmp($a['name'], $b['name']);
+}
+
+function admin_groups_sort() {
+	global $a_group;
+
+	if (!is_array($a_group)) {
+		return;
+	}
+
+	usort($a_group, "cpusercmp");
+}
 
 if ($act == "delgroup") {
 
@@ -99,8 +112,7 @@ if ($act == "delgroup") {
 	$groupdeleted = $a_group[$id]['name'];
 	unset($a_group[$id]);
 	write_config();
-	$savemsg = gettext("Group") . " {$groupdeleted} " .
-		gettext("successfully deleted") . "<br />";
+	$savemsg = sprintf(gettext("Group %s successfully deleted."), $groupdeleted);
 }
 
 if ($act == "delpriv") {
@@ -124,15 +136,14 @@ if ($act == "delpriv") {
 
 	write_config();
 	$act = "edit";
-	$savemsg = gettext("Privilege") . " {$privdeleted} " .
-		gettext("successfully deleted") . "<br />";
+	$savemsg = sprintf(gettext("Privilege %s successfully deleted."), $privdeleted);
 }
 
 if ($act == "edit") {
 	if (isset($id) && isset($a_group[$id])) {
 		$pconfig['name'] = $a_group[$id]['name'];
 		$pconfig['gid'] = $a_group[$id]['gid'];
-		$pconfig['gtype'] = $a_group[$id]['scope'];
+		$pconfig['gtype'] = empty($a_group[$id]['scope']) ? "local" : $a_group[$id]['scope'];
 		$pconfig['description'] = $a_group[$id]['description'];
 		$pconfig['members'] = $a_group[$id]['member'];
 		$pconfig['priv'] = $a_group[$id]['priv'];
@@ -152,7 +163,7 @@ if (isset($_GET['dellall_x'])) {
 				unset($a_group[$groupid]);
 			}
 		}
-		$savemsg = gettext("Selected groups removed successfully!");
+		$savemsg = gettext("Selected groups removed successfully.");
 		write_config($savemsg);
 	}
 }
@@ -167,9 +178,16 @@ if (isset($_POST['save'])) {
 
 	do_input_validation($_POST, $reqdfields, $reqdfieldsn, $input_errors);
 
-	if (preg_match("/[^a-zA-Z0-9\.\-_ ]/", $_POST['groupname'])) {
-		$input_errors[] = gettext("The group name contains invalid characters.");
+	if ($_POST['gtype'] != "remote") {
+		if (preg_match("/[^a-zA-Z0-9\.\-_]/", $_POST['groupname'])) {
+			$input_errors[] = sprintf(gettext("The (%s) group name contains invalid characters."), $_POST['gtype']);
+		}
+	} else {
+		if (preg_match("/[^a-zA-Z0-9\.\- _]/", $_POST['groupname'])) {
+			$input_errors[] = sprintf(gettext("The (%s) group name contains invalid characters."), $_POST['gtype']);
+		}
 	}
+
 
 	if (strlen($_POST['groupname']) > 16) {
 		$input_errors[] = gettext("The group name is longer than 16 characters.");
@@ -193,6 +211,7 @@ if (isset($_POST['save'])) {
 
 		$group['name'] = $_POST['groupname'];
 		$group['description'] = $_POST['description'];
+		$group['scope'] = $_POST['gtype'];
 
 		if (empty($_POST['members'])) {
 			unset($group['member']);
@@ -206,6 +225,8 @@ if (isset($_POST['save'])) {
 			$group['gid'] = $config['system']['nextgid']++;
 			$a_group[] = $group;
 		}
+
+		admin_groups_sort();
 
 		conf_mount_rw();
 		local_group_set($group);
@@ -226,6 +247,8 @@ if (isset($_POST['save'])) {
 		header("Location: system_groupmanager.php");
 		exit;
 	}
+
+	$pconfig['name'] = $_POST['groupname'];
 }
 
 function build_priv_table() {
@@ -234,8 +257,11 @@ function build_priv_table() {
 	$privhtml = '<div class="table-responsive">';
 	$privhtml .=	'<table class="table table-striped table-hover table-condensed">';
 	$privhtml .=		'<thead>';
-	$privhtml .=			'<th>' . gettext('Name') . '</th>';
-	$privhtml .=			'<th>' . gettext('Description') . '</th>';
+	$privhtml .=			'<tr>';
+	$privhtml .=				'<th>' . gettext('Name') . '</th>';
+	$privhtml .=				'<th>' . gettext('Description') . '</th>';
+	$privhtml .=				'<th>' . gettext('Action') . '</th>';
+	$privhtml .=			'</tr>';
 	$privhtml .=		'</thead>';
 	$privhtml .=		'<tbody>';
 
@@ -243,7 +269,7 @@ function build_priv_table() {
 		$privhtml .=		'<tr>';
 		$privhtml .=			'<td>' . htmlspecialchars($priv['name']) . '</td>';
 		$privhtml .=			'<td>' . htmlspecialchars($priv['descr']) . '</td>';
-		$privhtml .=			'<td><a class="fa fa-trash" title="'.gettext('Delete Privilege').'"	href="system_groupmanager.php?act=delpriv&amp;groupid='.$id.'&amp;privid='.$i.'"></a></td>';
+		$privhtml .=			'<td><a class="fa fa-trash" title="' . gettext('Delete Privilege') . '"	href="system_groupmanager.php?act=delpriv&amp;groupid=' . $id . '&amp;privid=' . $i . '"></a></td>';
 		$privhtml .=		'</tr>';
 
 	}
@@ -253,10 +279,16 @@ function build_priv_table() {
 	$privhtml .= '</div>';
 
 	$privhtml .= '<nav class="action-buttons">';
-	$privhtml .=	'<a href="system_groupmanager_addprivs.php?groupid=' . $id . '" class="btn btn-success">' . gettext("Add") . '</a>';
+	$privhtml .=	'<a href="system_groupmanager_addprivs.php?groupid=' . $id . '" class="btn btn-success"><i class="fa fa-plus icon-embed-btn"></i>' . gettext("Add") . '</a>';
 	$privhtml .= '</nav>';
 
 	return($privhtml);
+}
+
+$pgtitle = array(gettext("System"), gettext("User Manager"), gettext("Groups"));
+
+if ($act == "new" || $act == "edit") {
+	$pgtitle[] = gettext('Edit');
 }
 
 include("head.inc");
@@ -264,30 +296,34 @@ include("head.inc");
 if ($input_errors) {
 	print_input_errors($input_errors);
 }
+
 if ($savemsg) {
-	print_info_box($savemsg);
+	print_info_box($savemsg, 'success');
 }
 
 $tab_array = array();
 $tab_array[] = array(gettext("Users"), false, "system_usermanager.php");
 $tab_array[] = array(gettext("Groups"), true, "system_groupmanager.php");
 $tab_array[] = array(gettext("Settings"), false, "system_usermanager_settings.php");
-$tab_array[] = array(gettext("Servers"), false, "system_authservers.php");
+$tab_array[] = array(gettext("Authentication Servers"), false, "system_authservers.php");
 display_top_tabs($tab_array);
 
 if (!($_GET['act'] == "new" || $_GET['act'] == "edit")) {
 ?>
-	<div class="table-responsive">
-		<table class="table table-striped table-hover table-condensed sortable-theme-bootstrap" data-sortable>
-			<thead>
-				<tr>
-					<th><?=gettext("Group name")?></th>
-					<th><?=gettext("Description")?></th>
-					<th><?=gettext("Member Count")?></th>
-					<th><?=gettext("Actions")?></th>
-				</tr>
-			</thead>
-			<tbody>
+<div class="panel panel-default">
+	<div class="panel-heading"><h2 class="panel-title"><?=gettext('Groups')?></h2></div>
+	<div class="panel-body">
+		<div class="table-responsive">
+			<table class="table table-striped table-hover table-condensed sortable-theme-bootstrap" data-sortable>
+				<thead>
+					<tr>
+						<th><?=gettext("Group name")?></th>
+						<th><?=gettext("Description")?></th>
+						<th><?=gettext("Member Count")?></th>
+						<th><?=gettext("Actions")?></th>
+					</tr>
+				</thead>
+				<tbody>
 <?php
 	foreach ($a_group as $i => $group):
 		if ($group["name"] == "all") {
@@ -296,36 +332,38 @@ if (!($_GET['act'] == "new" || $_GET['act'] == "edit")) {
 			$groupcount = count($group['member']);
 		}
 ?>
-				<tr>
-					<td>
-						<?=htmlspecialchars($group['name'])?>
-					</td>
-					<td>
-						<?=htmlspecialchars($group['description'])?>
-					</td>
-					<td>
-						<?=$groupcount?>
-					</td>
-					<td>
-						<a class="fa fa-pencil" title="<?=gettext("Edit group"); ?>" href="?act=edit&amp;groupid=<?=$i?>"></a>
-						<?php if ($group['scope'] != "system"): ?>
-							<a class="fa fa-trash"	title="<?=gettext("Delete group")?>" href="?act=delgroup&amp;groupid=<?=$i?>&amp;groupname=<?=$group['name']?>"></a>
-						<?php endif;?>
-					</td>
-				</tr>
+					<tr>
+						<td>
+							<?=htmlspecialchars($group['name'])?>
+						</td>
+						<td>
+							<?=htmlspecialchars($group['description'])?>
+						</td>
+						<td>
+							<?=$groupcount?>
+						</td>
+						<td>
+							<a class="fa fa-pencil" title="<?=gettext("Edit group"); ?>" href="?act=edit&amp;groupid=<?=$i?>"></a>
+							<?php if ($group['scope'] != "system"): ?>
+								<a class="fa fa-trash"	title="<?=gettext("Delete group")?>" href="?act=delgroup&amp;groupid=<?=$i?>&amp;groupname=<?=$group['name']?>"></a>
+							<?php endif;?>
+						</td>
+					</tr>
 <?php
 	endforeach;
 ?>
-			</tbody>
-		</table>
+				</tbody>
+			</table>
+		</div>
 	</div>
+</div>
 
-	<nav class="action-buttons">
-		<a href="?act=new" class="btn btn-success btn-sm">
-			<i class="fa fa-plus icon-embed-btn"></i>
-			<?=gettext("Add")?>
-		</a>
-	</nav>
+<nav class="action-buttons">
+	<a href="?act=new" class="btn btn-success btn-sm">
+		<i class="fa fa-plus icon-embed-btn"></i>
+		<?=gettext("Add")?>
+	</a>
+</nav>
 <?php
 	include('foot.inc');
 	exit;
@@ -356,14 +394,7 @@ if (isset($id) && $a_group[$id]){
 	));
 }
 
-$section = new Form_Section('Group properties');
-
-if ($_GET['act'] != "new") {
-	$section->addInput(new Form_StaticText(
-		'Defined by',
-		strtoupper($pconfig['gtype'])
-	));
-}
+$section = new Form_Section('Group Properties');
 
 $section->addInput($input = new Form_Input(
 	'groupname',
@@ -374,6 +405,20 @@ $section->addInput($input = new Form_Input(
 
 if ($pconfig['gtype'] == "system") {
 	$input->setReadonly();
+
+	$section->addInput(new Form_Input(
+		'gtype',
+		'Scope',
+		'text',
+		$pconfig['gtype']
+	))->setReadonly();
+} else {
+	$section->addInput(new Form_Select(
+		'gtype',
+		'Scope',
+		$pconfig['gtype'],
+		["local" => gettext("Local"), "remote" => gettext("Remote")]
+	));
 }
 
 $section->addInput(new Form_Input(
@@ -381,7 +426,8 @@ $section->addInput(new Form_Input(
 	'Description',
 	'text',
 	$pconfig['description']
-))->setHelp('Group description, for your own information only');
+))->setHelp('Group description, for administrative information only');
+
 
 $form->add($section);
 if ($pconfig['gid'] != 1998) { // all users group
@@ -424,15 +470,19 @@ if ($pconfig['gid'] != 1998) { // all users group
 
 	$group->add(new Form_Button(
 		'movetoenabled',
-		'Move to "Members" >'
-	))->removeClass('btn-primary')->addClass('btn-default btn-sm');
+		'Move to "Members"',
+		null,
+		'fa-angle-double-right'
+	))->setAttribute('type','button')->removeClass('btn-primary')->addClass('btn-info btn-sm');
 
 	$group->add(new Form_Button(
 		'movetodisabled',
-		'< Move to "Not members'
-	))->removeClass('btn-primary')->addClass('btn-default btn-sm');
+		'Move to "Not members',
+		null,
+		'fa-angle-double-left'
+	))->setAttribute('type','button')->removeClass('btn-primary')->addClass('btn-info btn-sm');
 
-	$group->setHelp('Hold down CTRL (pc)/COMMAND (mac) key to select multiple items');
+	$group->setHelp('Hold down CTRL (PC)/COMMAND (Mac) key to select multiple items.');
 	$section->add($group);
 
 }
@@ -454,35 +504,6 @@ print $form;
 <script type="text/javascript">
 //<![CDATA[
 events.push(function() {
-
-	// Select every option in the specified multiselect
-	function AllServers(id, selectAll) {
-	   for (i = 0; i < id.length; i++)	   {
-		   id.eq(i).prop('selected', selectAll);
-	   }
-	}
-
-	// Move all selected options from one multiselect to another
-	function moveOptions(From, To)	{
-		var len = From.length;
-		var option, value;
-
-		if (len > 1) {
-			for (i=0; i<len; i++) {
-				if (From.eq(i).is(':selected')) {
-					option = From.eq(i).val();
-					value = From.eq(i).text();
-					To.append(new Option(value, option));
-					From.eq(i).remove();
-				}
-			}
-		}
-	}
-
-	// Make buttons plain buttons, not submit
-	$("#movetodisabled").prop('type','button');
-	$("#movetoenabled").prop('type','button');
-
 
 	// On click . .
 	$("#movetodisabled").click(function() {

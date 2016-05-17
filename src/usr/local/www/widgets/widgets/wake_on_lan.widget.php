@@ -78,35 +78,41 @@ if (is_array($config['wol']['wolentry'])) {
 	</thead>
 	<tbody>
 <?php
-if (count($wolcomputers) > 0) {
-	foreach ($wolcomputers as $wolent) {
-		echo '<tr><td>' . $wolent['descr'] . '<br />' . $wolent['mac'] . '</td>' . "\n";
-		echo '<td>' . convert_friendly_interface_to_friendly_descr($wolent['interface']) . '</td>' . "\n";
-
+if (count($wolcomputers) > 0):
+	foreach ($wolcomputers as $wolent):
 		$is_active = exec("/usr/sbin/arp -an |/usr/bin/grep {$wolent['mac']}| /usr/bin/wc -l|/usr/bin/awk '{print $1;}'");
 		$status = exec("/usr/sbin/arp -an | /usr/bin/awk '$4 == \"{$wolent['mac']}\" { print $7 }'");
-
-		echo "<td>\n";
-		if ($status == 'expires') {
-			echo '<i class="fa fa-arrow-right" data-toggle="tooltip" title="' . gettext("Online") . '"></i>';
-		} else if ($status == 'permanent') {
-			echo '<td style="text-align:center">' . "\n";
-			echo '<i class="fa fa-arrow-right" data-toggle="tooltip" title="' . gettext("Static ARP") . '"></i>';
-		} else {
-			echo '<td" style="text-align:center">' . "\n";
-			echo '<i class="fa fa-ban" data-toggle="tooltip" title="' . gettext("Offline") . '"></i>';
-		}
-
-		echo "</td>\n<td>";
-		echo "<a href='services_wol.php?mac={$wolent['mac']}&amp;if={$wolent['interface']}'> ";
-		echo '<i class="fa fa-bed" data-toggle="tooltip" title="' . gettext("Wake up!") . '"></i></a>' . "\n";
-		echo "</td></tr>\n";
-	}
-} else {
-	echo "<tr><td colspan=\"4\" style=\"text-align:center\">" . gettext("No saved WoL addresses") . ".</td></tr>\n";
-}
+		?>
+		<tr>
+			<td>
+				<?= $wolent['descr'] ?><br />
+				<?= $wolent['mac'] ?>
+			</td>
+			<td>
+				<?= convert_friendly_interface_to_friendly_descr($wolent['interface']) ?>
+			</td>
+			<td>
+		<?php if ($status == 'expires'): ?>
+				<i class="fa fa-arrow-up text-success" data-toggle="tooltip" title="<?= gettext("Online") ?>"></i>
+		<?php elseif ($status == 'permanent'): ?>
+				<i class="fa fa-arrow-up text-success" data-toggle="tooltip" title="<?= gettext("Static ARP") ?>"></i>
+		<?php else: ?>
+				<i class="fa fa-arrow-down text-danger" data-toggle="tooltip" title="<?= gettext("Offline") ?>"></i>
+		<?php endif; ?>
+			</td>
+			<td>
+				<a href="services_wol.php?mac=<?= $wolent['mac'] ?>&amp;if=<?= $wolent['interface']?>">
+				<i class="fa fa-power-off" data-toggle="tooltip" title="<?= gettext("Wake up!") ?>"></i>
+				</a>
+			</td>
+		</tr>
+<?php	endforeach;
+else: ?>
+	<tr><td colspan="4" class="text-center"><?= gettext("No saved WoL addresses") ?></td></tr>
+<?php
+endif;
 ?>
 	</tbody>
 </table>
-<p style="text-align:center"><a href="status_dhcp_leases.php" class="navlink">DHCP Leases Status</a></p>
+<p class="text-center"><a href="status_dhcp_leases.php" class="navlink"><?=gettext('DHCP Leases Status')?></a></p>
 </div>

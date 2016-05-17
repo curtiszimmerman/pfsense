@@ -83,18 +83,12 @@ $iflist = get_configured_interface_with_descr();
 $portlist = get_interface_list();
 $portlist = array_merge($portlist, $iflist);
 
-if (is_array($config['vlans']['vlan']) && count($config['vlans']['vlan'])) {
-	foreach ($config['vlans']['vlan'] as $vlan) {
-		$portlist[$vlan['vlanif']] = $vlan;
-	}
+if (isset($_REQUEST['type'])) {
+	$pconfig['type'] = $_REQUEST['type'];
 }
 
-if ($_GET && $_GET['type']) {
-	$pconfig['type'] = $_GET['type'];
-}
-
-if (is_numericint($_GET['id'])) {
-	$id = $_GET['id'];
+if (isset($_REQUEST['id']) && is_numericint($_REQUEST['id'])) {
+	$id = $_REQUEST['id'];
 }
 
 if (isset($_POST['id']) && is_numericint($_POST['id'])) {
@@ -104,8 +98,7 @@ if (isset($_POST['id']) && is_numericint($_POST['id'])) {
 if (isset($id) && $a_ppps[$id]) {
 	$pconfig['ptpid'] = $a_ppps[$id]['ptpid'];
 	$pconfig['type'] = $a_ppps[$id]['type'];
-	//$pconfig['if'] = $a_ppps[$id]['if'];
-	$pconfig['interfaces'] = $a_ppps[$id]['ports'];
+	$pconfig['interfaces'] = explode(",", $a_ppps[$id]['ports']);
 	$pconfig['username'] = $a_ppps[$id]['username'];
 	$pconfig['password'] = base64_decode($a_ppps[$id]['password']);
 	if (isset($a_ppps[$id]['ondemand'])) {
@@ -114,10 +107,18 @@ if (isset($id) && $a_ppps[$id]) {
 	$pconfig['idletimeout'] = $a_ppps[$id]['idletimeout'];
 	$pconfig['uptime'] = $a_ppps[$id]['uptime'];
 	$pconfig['descr'] = $a_ppps[$id]['descr'];
-	$pconfig['bandwidth'] = explode(",", $a_ppps[$id]['bandwidth']);
-	$pconfig['mtu'] = explode(",", $a_ppps[$id]['mtu']);
-	$pconfig['mru'] = explode(",", $a_ppps[$id]['mru']);
-	$pconfig['mrru'] = explode(",", $a_ppps[$id]['mrru']);
+	$bandwidth = explode(",", $a_ppps[$id]['bandwidth']);
+	for ($i = 0; $i < count($bandwidth); $i++)
+		$pconfig['bandwidth'][$pconfig['interfaces'][$i]] = $bandwidth[$i];
+	$mtu = explode(",", $a_ppps[$id]['mtu']);
+	for ($i = 0; $i < count($mtu); $i++)
+		$pconfig['mtu'][$pconfig['interfaces'][$i]] = $mtu[$i];
+	$mru = explode(",", $a_ppps[$id]['mru']);
+	for ($i = 0; $i < count($mru); $i++)
+		$pconfig['mru'][$pconfig['interfaces'][$i]] = $mru[$i];
+	$mrru = explode(",", $a_ppps[$id]['mrru']);
+	for ($i = 0; $i < count($mrru); $i++)
+		$pconfig['mrru'][$pconfig['interfaces'][$i]] = $mrru[$i];
 
 	if (isset($a_ppps[$id]['shortseq'])) {
 		$pconfig['shortseq'] = true;
@@ -203,12 +204,11 @@ if (isset($id) && $a_ppps[$id]) {
 			}
 			break;
 	}
-
 } else {
 	$pconfig['ptpid'] = interfaces_ptpid_next();
 }
 
-if ($_POST) {
+if (isset($_POST) && is_array($_POST) && count($_POST) > 0) {
 	unset($input_errors);
 	$pconfig = $_POST;
 
@@ -257,6 +257,15 @@ if ($_POST) {
 			$input_errors[] = gettext("Please choose a Link Type.");
 			break;
 	}
+	if ($_POST['passwordfld'] == $_POST['passwordfld_confirm']) {
+		if ($_POST['passwordfld'] != DMYPWD) {
+			$pconfig['password'] = $_POST['passwordfld'];
+		} else {
+			$pconfig['password'] = base64_decode($a_ppps[$id]['password']);
+		}
+	} else {
+		$input_errors[] = gettext("Password and confirmed password must match.");
+	}
 	if ($_POST['type'] == "ppp" && count($_POST['interfaces']) > 1) {
 		$input_errors[] = gettext("Multilink connections (MLPPP) using the PPP link type is not currently supported. Please select only one Link Interface.");
 	}
@@ -293,6 +302,7 @@ if ($_POST) {
 		}
 	}
 
+	$port_data = array();
 	if (is_array($_POST['interfaces'])) {
 		foreach ($_POST['interfaces'] as $iface) {
 			if ($_POST['localip'][$iface] && !is_ipaddr($_POST['localip'][$iface])) {
@@ -311,16 +321,44 @@ if ($_POST) {
 				$input_errors[] = sprintf(gettext("The MRU for %s must be greater than 576 bytes."), $iface);
 			}
 		}
+
+		// Loop through fields associated with an individual link/port and make an array of the data
+		$port_fields = array("localip", "gateway", "subnet", "bandwidth", "mtu", "mru", "mrru");
+		foreach ($_POST['interfaces'] as $iface) {
+			foreach ($port_fields as $field_label) {
+				if (isset($_POST[$field_label . $iface]) &&
+				    strlen($_POST[$field_label . $iface]) > 0) {
+					$port_data[$field_label][] = $_POST[$field_label . $iface];
+					$pconfig[$field_label][$iface] = $_POST[$field_label . $iface];
+					$parent_array = get_parent_interface($iface);
+					$parent = $parent_array[0];
+					$friendly = convert_real_interface_to_friendly_interface_name($parent);
+					if ($field_label == "mtu" && isset($config['interfaces'][$friendly]['mtu']) &&
+					    $_POST[$field_label . $iface] > ($config['interfaces'][$friendly]['mtu'] - 8)) {
+						$input_errors[] = sprintf(gettext("The MTU (%d) is too big for %s (maximum allowed with current settings: %d)."),
+						    $_POST[$field_label . $iface], $iface, $config['interfaces'][$friendly]['mtu'] - 8);
+					}
+				}
+			}
+		}
 	}
 
 	if (!$input_errors) {
 		$ppp = array();
-		$ppp['ptpid'] = $_POST['ptpid'];
+		if (!isset($id))
+			$ppp['ptpid'] = interfaces_ptpid_next();
+		else
+			$ppp['ptpid'] = $a_ppps[$id]['ptpid'];
+
 		$ppp['type'] = $_POST['type'];
 		$ppp['if'] = $ppp['type'].$ppp['ptpid'];
 		$ppp['ports'] = implode(',', $_POST['interfaces']);
 		$ppp['username'] = $_POST['username'];
-		$ppp['password'] = base64_encode($_POST['passwordfld']);
+		if ($_POST['passwordfld'] != DMYPWD) {
+			$ppp['password'] = base64_encode($_POST['passwordfld']);
+		} else {
+			$ppp['password'] = $a_ppps[$id]['password'];
+		}
 		$ppp['ondemand'] = $_POST['ondemand'] ? true : false;
 		if (!empty($_POST['idletimeout'])) {
 			$ppp['idletimeout'] = $_POST['idletimeout'];
@@ -332,16 +370,6 @@ if ($_POST) {
 			$ppp['descr'] = $_POST['descr'];
 		} else {
 			unset($ppp['descr']);
-		}
-
-		// Loop through fields associated with an individual link/port and make an array of the data
-		$port_fields = array("localip", "gateway", "subnet", "bandwidth", "mtu", "mru", "mrru");
-		foreach ($_POST['interfaces'] as $iface) {
-			foreach ($port_fields as $field_label) {
-				if (isset($_POST[$field_label][$iface])) {
-					$port_data[$field_label][] = $_POST[$field_label][$iface];
-				}
-			}
 		}
 
 		switch ($_POST['type']) {
@@ -368,8 +396,6 @@ if ($_POST) {
 				}
 
 				$ppp['phone'] = $_POST['phone'];
-				$ppp['localip'] = implode(',', $port_data['localip']);
-				$ppp['gateway'] = implode(',', $port_data['gateway']);
 				if (!empty($_POST['connect-timeout'])) {
 					$ppp['connect-timeout'] = $_POST['connect-timeout'];
 				} else {
@@ -406,7 +432,9 @@ if ($_POST) {
 		$ppp['protocomp'] = $_POST['protocomp'] ? true : false;
 		$ppp['vjcomp'] = $_POST['vjcomp'] ? true : false;
 		$ppp['tcpmssfix'] = $_POST['tcpmssfix'] ? true : false;
-		$ppp['bandwidth'] = implode(',', $port_data['bandwidth']);
+		if (is_array($port_data['bandwidth'])) {
+			$ppp['bandwidth'] = implode(',', $port_data['bandwidth']);
+		}
 		if (is_array($port_data['mtu'])) {
 			$ppp['mtu'] = implode(',', $port_data['mtu']);
 		}
@@ -441,12 +469,11 @@ if ($_POST) {
 	}
 } // end if ($_POST)
 
-$closehead = false;
 $pgtitle = array(gettext("Interfaces"), gettext("PPPs"), gettext("Edit"));
 $shortcut_section = "interfaces";
 include("head.inc");
 
-$types = array("select" => gettext("Select"), "ppp" => "PPP", "pppoe" => "PPPoE", "pptp" => "PPTP", "l2tp" => "L2TP"/*, "tcp" => "TCP", "udp" => "UDP"*/);
+$types = array("select" => gettext("Select"), "ppp" => gettext("PPP"), "pppoe" => gettext("PPPoE"), "pptp" => gettext("PPTP"), "l2tp" => gettext("L2TP")/*, "tcp" => "TCP", "udp" => "UDP"*/);
 
 $serviceproviders_xml = "/usr/local/share/mobile-broadband-provider-info/serviceproviders.xml";
 $serviceproviders_contents = file_get_contents($serviceproviders_xml);
@@ -471,18 +498,16 @@ function build_country_list() {
 	return($list);
 }
 
-$port_count = 0;
-$serport_count = 0;
-
 function build_link_list() {
-	global $pconfig, $portlist, $port_count, $serport_count;
+	global $config, $pconfig;
 
-	$linklist = array('list'	 => array(),
-					  'selected' => array());
+	$linklist = array('list' => array(), 'selected' => array());
 
 	$selected_ports = array();
 
-	if ($pconfig['interfaces']) {
+	if (is_array($pconfig['interfaces'])) {
+		$selected_ports = $pconfig['interfaces'];
+	} elseif (!empty($pconfig['interfaces'])) {
 		$selected_ports = explode(',', $pconfig['interfaces']);
 	}
 
@@ -505,6 +530,12 @@ function build_link_list() {
 		}
 	} else {
 		$port_count = 0;
+		$portlist = get_interface_list();
+		if (is_array($config['vlans']['vlan']) && count($config['vlans']['vlan'])) {
+			foreach ($config['vlans']['vlan'] as $vlan) {
+				$portlist[$vlan['vlanif']] = $vlan;
+			}
+		}
 		foreach ($portlist as $ifn => $ifinfo) {
 			$port_count++;
 			$string = "";
@@ -513,6 +544,12 @@ function build_link_list() {
 				$string .= $ifn;
 				if ($ifinfo['mac']) {
 					$string .= " ({$ifinfo['mac']})";
+				}
+				if ($ifinfo['friendly']) {
+					$string .= " - {$ifinfo['friendly']}";
+				}
+				if ($ifinfo['descr']) {
+					$string .= " - {$ifinfo['descr']}";
 				}
 			} else {
 				$string .= $ifinfo;
@@ -544,7 +581,7 @@ $linkparamstr = gettext('Bandwidth is set only for MLPPP connections and when li
 
 $form = new Form();
 
-$section = new Form_Section('PPPs Configuration');
+$section = new Form_Section('PPP Configuration');
 
 $section->addInput(new Form_Select(
 	'type',
@@ -568,7 +605,7 @@ $section->addInput(new Form_Input(
 	'Description',
 	'text',
 	$pconfig['descr']
-))->setHelp('You may enter a description here for your reference. Description will appear in the "Interfaces Assign" select lists.');
+))->setHelp('A description may be entered here for administrative reference. Description will appear in the "Interfaces Assign" select lists.');
 
 $section->addInput(new Form_Select(
 	'country',
@@ -589,7 +626,7 @@ $section->addInput(new Form_Select(
 	'Plan',
 	$pconfig['providerplan'],
 	[]
-))->setHelp('Select to fill in data for your service provider.');
+))->setHelp('Select to fill in service provider data.');
 
 $section->addInput(new Form_Input(
 	'username',
@@ -598,7 +635,7 @@ $section->addInput(new Form_Input(
 	$pconfig['username']
 ));
 
-$section->addInput(new Form_Input(
+$section->addPassword(new Form_Input(
 	'passwordfld',
 	'Password',
 	'password',
@@ -718,9 +755,9 @@ $section->addInput(new Form_Select(
 	'Periodic Reset',
 	$pconfig['pppoe-reset-type'],
 	array(
-		'' => 'Disabled',
-		'custom' => 'Custom',
-		'preset' => 'Pre-set'
+		'' => gettext('Disabled'),
+		'custom' => gettext('Custom'),
+		'preset' => gettext('Pre-set')
 	)
 ))->addClass('pppoe')->setHelp('Select a reset timing type');
 
@@ -749,7 +786,7 @@ $group->add(new Form_Input(
 	['placeholder' => 'mm/dd/yyyy']
 ))->setHelp('Specific date');
 
-$group->setHelp('Leaving the date field empty will cause the reset to be executed each day at the time you specified in the minutes and hour fields. ');
+$group->setHelp('Leaving the date field empty will cause the reset to be executed each day at the time specified in the minutes and hour fields. ');
 
 $section->add($group);
 
@@ -790,29 +827,31 @@ $group->add(new Form_Checkbox(
 
 $section->add($group);
 
-$btnadvanced = new Form_Button(
-		'btnadvanced',
-		'Show'
+$btnadv = new Form_Button(
+		'btnadvopts',
+		'Display Advanced',
+		null,
+		'fa-cog'
 );
 
-$btnadvanced->removeClass('btn-primary')->addClass('btn-default btn-sm');
+$btnadv->setAttribute('type','button')->addClass('btn-info btn-sm');
 
 $section->addInput(new Form_StaticText(
 	'Advanced options',
-	$btnadvanced
+	$btnadv
 ));
 
 $form->add($section);
 
 $section = new Form_Section('Advanced Configuration');
-$section->addClass('sec-advanced'); // This will allow the section to be hidden/shown by calling e.g.: hideClass('advanced', true);
+$section->addClass('adnlopts');
 
 $section->addInput(new Form_Checkbox(
 	'ondemand',
 	'Dial On Demand',
 	'Enable Dial-on-Demand mode. ',
 	$pconfig['ondemand']
-))->setHelp('Causes the interface to operate in dial-on-demand mode. Do NOT enable if you want your link to be always up. ' .
+))->setHelp('Causes the interface to operate in dial-on-demand mode. Do NOT enable if the link is to remain continuously connected. ' .
 			'The interface is configured, but the actual connection of the link is delayed until qualifying outgoing traffic is detected.');
 
 $section->addInput(new Form_Input(
@@ -820,7 +859,7 @@ $section->addInput(new Form_Input(
 	'Idle Timeout',
 	'text',
 	$pconfig['idletimeout']
-))->setHelp('If no incoming or outgoing packets are transmitted for the entered number of seconds the connection is brought down.' .
+))->setHelp('If no incoming or outgoing packets are transmitted for the entered number of seconds the connection is brought down.' . " " .
 			'When the idle timeout occurs, if the dial-on-demand option is enabled, mpd goes back into dial-on-demand mode. ' .
 			'Otherwise, the interface is brought down and all associated routes removed.');
 
@@ -830,7 +869,7 @@ $section->addInput(new Form_Checkbox(
 	'Disable vjcomp (compression, auto-negotiated by default).',
 	$pconfig['vjcomp']
 ))->setHelp('Disable vjcomp(compression) (auto-negotiated by default).' . '<br />' .
-				'This option enables Van Jacobson TCP header compression, which saves several bytes per TCP data packet.' .
+				'This option enables Van Jacobson TCP header compression, which saves several bytes per TCP data packet.' . " " .
 				'This option is almost always required. Compression is not effective for TCP connections with enabled modern extensions like time ' .
 				'stamping or SACK, which modify TCP options between sequential packets.');
 
@@ -869,43 +908,41 @@ $section->addInput(new Form_Checkbox(
 
 // Display the Link parameters. We will hide this by default, then un-hide the selected ones on clicking 'Advanced'
 $j = 0;
-
-foreach ($linklist['list'] as $ifnm =>$nm) {
+foreach ($linklist['list'] as $ifnm => $nm) {
 
 	$group = new Form_Group('Link Parameters (' . $ifnm . ')');
 
 	$group->add(new Form_Input(
-		'bandwidth' . $j,
+		'bandwidth' . $ifnm,
 		null,
 		'text',
-		$pconfig['bandwidth'][$j]
+		$pconfig['bandwidth'][$ifnm]
 	))->setHelp('Bandwidth');
 
 	$group->add(new Form_Input(
-		'mtu' . $j,
+		'mtu' . $ifnm,
 		null,
 		'text',
-		$pconfig['mtu'][$j]
+		$pconfig['mtu'][$ifnm]
 	))->setHelp('MTU');
 
 	$group->add(new Form_Input(
-		'mru' . $j,
+		'mru' . $ifnm,
 		null,
 		'text',
-		$pconfig['mru'][$j]
+		$pconfig['mru'][$ifnm]
 	))->setHelp('MRU');
 
 	$group->add(new Form_Input(
-		'mrru' . $j,
+		'mrru' . $ifnm,
 		null,
 		'text',
-		$pconfig['mrru'][$j]
+		$pconfig['mrru'][$ifnm]
 	))->setHelp('MRRU');
 
 	$j++;
 
 	$section->add($group);
-
 	$group->addClass('localip sec-advanced')->addClass('linkparam' . $ifnm);
 }
 
@@ -916,23 +953,23 @@ $linkparamhelp = new Form_StaticText(
 
 $section->addInput($linkparamhelp);
 
+$form->add($section);
+
+$form->addGlobal(new Form_Input(
+	'ptpid',
+	null,
+	'hidden',
+	$pconfig['ptpid']
+));
+
 if (isset($id) && $a_ppps[$id]) {
-	$section->addInput(new Form_Input(
+	$form->addGlobal(new Form_Input(
 		'id',
 		null,
 		'hidden',
 		$id
 	));
 }
-
-$section->addInput(new Form_Input(
-	'ptpid',
-	null,
-	'hidden',
-	$ptpid
-));
-
-$form->add($section);
 
 print($form);
 
@@ -941,40 +978,80 @@ print($form);
 <script type="text/javascript">
 //<![CDATA[
 events.push(function() {
-	var showadvanced = false;
+	// Show advanced additional opts options ======================================================
+	var showadvopts = false;
 
-	function setAdvVisible() {
-		// Update the button text and toggle showadvanced
-		if (showadvanced) {
-			$("#btnadvanced").prop('value', 'Hide');
-			showadvanced = false;
+	function show_advopts(ispageload) {
+		var text;
+		// On page load decide the initial state based on the data.
+		if (ispageload) {
+<?php
+			if (($pconfig['apn'] == "") &&
+			    ($pconfig['apnum'] == "") &&
+			    ($pconfig['simpin'] == "") &&
+			    ($pconfig['pin-wait'] == "") &&
+			    ($pconfig['initstr'] == "") &&
+			    ($pconfig['connect-timeout'] == "") &&
+			    (!$pconfig['uptime']) &&
+			    ($pconfig['pppoe_resethour'] == "") &&
+			    ($pconfig['pppoe_resetminute'] == "") &&
+			    ($pconfig['pppoe_resetdate'] == "") &&
+			    ($pconfig['pppoe_pr_preset_val'] == "") &&
+			    (!$pconfig['ondemand']) &&
+			    ($pconfig['idletimeout'] == "") &&
+			    (!$pconfig['pppoe_monthly']) &&
+			    (!$pconfig['pppoe_weekly']) &&
+			    (!$pconfig['pppoe_daily']) &&
+			    (!$pconfig['pppoe_hourly']) &&
+			    (!$pconfig['vjcomp']) &&
+			    (!$pconfig['tcpmssfix']) &&
+			    (!$pconfig['shortseq']) &&
+			    (!$pconfig['acfcomp']) &&
+			    (!$pconfig['protocomp'])) {
+				$showadv = false;
+			} else {
+				$showadv = true;
+			}
+?>
+			showadvopts = <?php if ($showadv) {echo 'true';} else {echo 'false';} ?>;
 		} else {
-			$("#btnadvanced").prop('value', 'Show');
-			showadvanced = true;
+			// It was a click, swap the state.
+			showadvopts = !showadvopts;
 		}
 
-		hideClass('sec-advanced', showadvanced);
+		hideClass('adnlopts', !showadvopts);
 
 		// The options that follow are only shown if type == 'ppp'
 		var ppptype = ($('#type').val() == 'ppp');
 
-		hideInput('apnum', showadvanced && ppptype);
-		hideInput('simpin', showadvanced && ppptype);
-		hideInput('pin-wait', showadvanced && ppptype);
-		hideInput('initstr', showadvanced && ppptype);
-		hideInput('connect-timeout', showadvanced && ppptype);
-		hideCheckbox('uptime', showadvanced && ppptype);
+		hideInput('apn', !(showadvopts && ppptype));
+		hideInput('apnum', !(showadvopts && ppptype));
+		hideInput('simpin', !(showadvopts && ppptype));
+		hideInput('pin-wait', !(showadvopts && ppptype));
+		hideInput('initstr', !(showadvopts && ppptype));
+		hideInput('connect-timeout', !(showadvopts && ppptype));
+		hideCheckbox('uptime', !(showadvopts && ppptype));
 
 		// The options that follow are only shown if type == 'pppoe'
-		var pppoetype = ($('#type').val() != 'pppoe');
+		var pppoetype = ($('#type').val() == 'pppoe');
 
-		hideClass('pppoe', showadvanced || pppoetype);
-		hideInput('pppoe-reset-type', showadvanced || pppoetype);
-
-		hideResetDisplay(true);
+		hideClass('pppoe', !pppoetype);
+		hideResetDisplay(!(showadvopts && pppoetype));
+		hideInput('pppoe-reset-type', !(showadvopts && pppoetype));
 
 		hideInterfaces();
-	}
+
+		if (showadvopts) {
+			text = "<?=gettext('Hide Advanced');?>";
+		} else {
+			text = "<?=gettext('Display Advanced');?>";
+		}
+		$('#btnadvopts').html('<i class="fa fa-cog"></i> ' + text);
+	} // e-o-show_advopts
+
+	$('#btnadvopts').click(function(event) {
+		show_advopts();
+	});
 
 	function hideResetDisplay(hide) {
 
@@ -998,13 +1075,12 @@ events.push(function() {
 		hideClass('linkparam', true);
 		hideInput('linkparamhelp', true);
 
-		var selected = $('#interfaces').val();
-		var length = $("#interfaces :selected").length;
-
+		var selected = $(".interfaces").val();
+		var length = $(".interfaces :selected").length;
 		for (var i=0; i<length; i++) {
 			hideClass('localip' + selected[i], false);
 
-			if (!showadvanced) {
+			if (showadvopts) {
 				hideClass('linkparam' + selected[i], false);
 				hideInput('linkparamhelp', false);
 			}
@@ -1082,13 +1158,6 @@ events.push(function() {
 		});
 	}
 
-	// Make the ‘btnadvanced’ button a plain button, not a submit button
-	$("#btnadvanced").prop('type','button');
-
-	$("#btnadvanced").click(function() {
-		setAdvVisible();
-	});
-
 	$('#pppoe-reset-type').on('change', function() {
 		hideResetDisplay(false);
 	});
@@ -1119,7 +1188,7 @@ events.push(function() {
 	});
 
 	// Set element visibility on initial page load
-	setAdvVisible();
+	show_advopts(true);
 
 	hideClass('linkparam', true);
 

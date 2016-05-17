@@ -81,7 +81,7 @@ if ($_POST) {
 		if (authenticate_user($_POST['username'], $_POST['password'], $authcfg, $attributes)) {
 			$savemsg = gettext("User") . ": " . $_POST['username'] . " " . gettext("authenticated successfully.");
 			$groups = getUserGroups($_POST['username'], $authcfg, $attributes);
-			$savemsg .= "&nbsp;" . gettext("This user is a member of groups") . ": <br />";
+			$savemsg .= "&nbsp;" . gettext("This user is a member of groups") . ": <br /><br />";
 			$savemsg .= "<ul>";
 			foreach ($groups as $group) {
 				$savemsg .= "<li>" . "{$group} " . "</li>";
@@ -104,17 +104,15 @@ $pgtitle = array(gettext("Diagnostics"), gettext("Authentication"));
 $shortcut_section = "authentication";
 include("head.inc");
 
-?>
-<?php
 if ($input_errors) {
 	print_input_errors($input_errors);
 }
 
 if ($savemsg) {
-	print('<div class="alert alert-success" role="alert">'. $savemsg.'</div>');
+	print_info_box($savemsg, 'success', false);
 }
 
-$form = new Form('Test');
+$form = new Form(false);
 
 $section = new Form_Section('Authentication Test');
 
@@ -127,7 +125,7 @@ $section->addInput(new Form_Select(
 	'Authentication Server',
 	$pconfig['authmode'],
 	$serverlist
-))->setHelp('Select the authentication server to test against');
+))->setHelp('Select the authentication server to test against.');
 
 $section->addInput(new Form_Input(
 	'username',
@@ -146,6 +144,14 @@ $section->addInput(new Form_Input(
 ));
 
 $form->add($section);
+
+$form->addGlobal(new Form_Button(
+	'Submit',
+	'Test',
+	null,
+	'fa-wrench'
+))->addClass('btn-primary');
+
 print $form;
 
 include("foot.inc");

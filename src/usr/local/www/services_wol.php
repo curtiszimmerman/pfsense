@@ -58,8 +58,8 @@
 
 ##|+PRIV
 ##|*IDENT=page-services-wakeonlan
-##|*NAME=Services: Wake on LAN
-##|*DESCR=Allow access to the 'Services: Wake on LAN' page.
+##|*NAME=Services: Wake-on-LAN
+##|*DESCR=Allow access to the 'Services: Wake-on-LAN' page.
 ##|*MATCH=services_wol.php*
 ##|-PRIV
 
@@ -83,9 +83,11 @@ if ($_GET['wakeall'] != "") {
 		$bcip = gen_subnet_max($ipaddr, get_interface_subnet($if));
 		/* Execute wol command and check return code. */
 		if (!mwexec("/usr/local/bin/wol -i {$bcip} {$mac}")) {
-			$savemsg .= sprintf(gettext('Sent magic packet to %1$s (%2$s)%3$s'), $mac, $description, ".<br />");
+			$savemsg .= sprintf(gettext('Sent magic packet to %1$s (%2$s).'), $mac, $description) . "<br />";
+			$class = 'success';
 		} else {
-			$savemsg .= sprintf(gettext('Please check the %1$ssystem log%2$s, the wol command for %3$s (%4$s) did not complete successfully%5$s'), '<a href="/status_logs.php">', '</a>', $description, $mac, ".<br />");
+			$savemsg .= sprintf(gettext('Please check the %1$ssystem log%2$s, the wol command for %3$s (%4$s) did not complete successfully.'), '<a href="/status_logs.php">', '</a>', $description, $mac) . "<br />";
+			$class = 'warning';
 		}
 	}
 }
@@ -123,8 +125,10 @@ if ($_POST || $_GET['mac']) {
 			/* Execute wol command and check return code. */
 			if (!mwexec("/usr/local/bin/wol -i {$bcip} " . escapeshellarg($mac))) {
 				$savemsg .= sprintf(gettext("Sent magic packet to %s."), $mac);
+				$class = 'success';
 			} else {
-				$savemsg .= sprintf(gettext('Please check the %1$ssystem log%2$s, the wol command for %3$s did not complete successfully%4$s'), '<a href="/status_logs.php">', '</a>', $mac, ".<br />");
+				$savemsg .= sprintf(gettext('Please check the %1$ssystem log%2$s, the wol command for %3$s did not complete successfully.'), '<a href="/status_logs.php">', '</a>', $mac) . "<br />";
+				$class = 'warning';
 			}
 		}
 	}
@@ -139,14 +143,17 @@ if ($_GET['act'] == "del") {
 	}
 }
 
-$pgtitle = array(gettext("Services"), gettext("Wake on LAN"));
+$pgtitle = array(gettext("Services"), gettext("Wake-on-LAN"));
 include("head.inc");
-
-print_info_box(gettext('This service can be used to wake up (power on) computers by sending special') . ' "' . gettext('Magic Packets') . '"<br />' .
-			   gettext('The NIC in the computer that is to be woken up must support Wake on LAN and must be properly configured (WOL cable, BIOS settings).'));
+?>
+<div class="infoblock blockopen">
+<?php
+print_info_box(gettext('This service can be used to wake up (power on) computers by sending special "Magic Packets".') . '<br />' .
+			   gettext('The NIC in the computer that is to be woken up must support Wake-on-LAN and must be properly configured (WOL cable, BIOS settings).'),
+			   'info', false);
 
 ?>
-
+</div>
 <?php
 
 if ($input_errors) {
@@ -154,12 +161,12 @@ if ($input_errors) {
 }
 
 if ($savemsg) {
-	print_info_box($savemsg);
+	print_info_box($savemsg, $class);
 }
 
-$form = new Form('Send');
+$form = new Form(false);
 
-$section = new Form_Section('Wake on LAN');
+$section = new Form_Section('Wake-on-LAN');
 
 $section->addInput(new Form_Select(
 	'interface',
@@ -176,12 +183,20 @@ $section->addInput(new Form_Input(
 ))->setHelp(gettext('Enter a MAC address in the following format: xx:xx:xx:xx:xx:xx'));
 
 $form->add($section);
+
+$form->addGlobal(new Form_Button(
+	'Submit',
+	'Send',
+	null,
+	'fa-power-off'
+))->addClass('btn-primary');
+
 print $form;
 ?>
 
 <div class="panel panel-default">
 	<div class="panel-heading">
-		<h2 class="panel-title">Wake on LAN devices</h2>
+		<h2 class="panel-title"><?=gettext("Wake-on-LAN Devices");?></h2>
 	</div>
 
 	<div class="panel-body">
@@ -193,7 +208,7 @@ print $form;
 						<th><?=gettext("Interface")?></th>
 						<th><?=gettext("MAC address")?></th>
 						<th><?=gettext("Description")?></th>
-						<th></th>
+						<th><?=gettext("Actions")?></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -209,8 +224,9 @@ print $form;
 								<?=htmlspecialchars($wolent['descr']);?>
 							</td>
 							<td>
-								<a class="fa fa-pencil"	title="<?=gettext('Edit device')?>"	href="services_wol_edit.php?id=<?=$i?>"></a>
-								<a class="fa fa-trash"	title="<?=gettext('Delete device')?>" href="services_wol.php?act=del&amp;id=<?=$i?>"></a>
+								<a class="fa fa-pencil"	title="<?=gettext('Edit Device')?>"	href="services_wol_edit.php?id=<?=$i?>"></a>
+								<a class="fa fa-trash"	title="<?=gettext('Delete Device')?>" href="services_wol.php?act=del&amp;id=<?=$i?>"></a>
+								<a class="fa fa-power-off" title="<?=gettext('Wake Device')?>" href="?mac=<?=$wolent['mac'];?>&amp;if=<?=$wolent['interface'];?>"></a>
 							</td>
 						</tr>
 					<?php endforeach?>
@@ -220,11 +236,13 @@ print $form;
 	</div>
 	<div class="panel-footer">
 		<a class="btn btn-success" href="services_wol_edit.php">
-			Add
+			<i class="fa fa-plus icon-embed-btn"></i>
+			<?=gettext("Add");?>
 		</a>
 
 		<a href="services_wol.php?wakeall=true" role="button" class="btn btn-primary">
-			<?=gettext("Wake all devices")?>
+			<i class="fa fa-power-off icon-embed-btn"></i>
+			<?=gettext("Wake All Devices")?>
 		</a>
 	</div>
 </div>

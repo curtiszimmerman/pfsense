@@ -118,6 +118,7 @@ foreach ($data as &$entry) {
 		$entry['dnsresolve'] = "Z_ ";
 	}
 }
+unset($entry);
 
 // Sort the data alpha first
 $data = msort($data, "dnsresolve");
@@ -128,6 +129,10 @@ $mac_man = load_mac_manufacturer_table();
 $pgtitle = array(gettext("Diagnostics"), gettext("NDP Table"));
 include("head.inc");
 ?>
+
+<div class="panel panel-default">
+	<div class="panel-heading"><h2 class="panel-title"><?=gettext('NDP Table')?></h2></div>
+	<div class="panel-body">
 
 <div class="table-responsive">
 	<table class="table table-striped table-condensed table-hover sortable-theme-bootstrap" data-sortable>
@@ -150,9 +155,9 @@ include("head.inc");
 						?>
 						<?=$mac?>
 
-						<? if (isset($mac_man[$mac_hi])):?>
+						<?php if (isset($mac_man[$mac_hi])):?>
 							(<?=$mac_man[$mac_hi]?>)
-						<?endif?>
+						<?php endif; ?>
 
 					</td>
 					<td>
@@ -171,6 +176,9 @@ include("head.inc");
 			<?php endforeach; ?>
 	</tbody>
 	</table>
+</div>
+
+	</div>
 </div>
 
 <?php include("foot.inc");

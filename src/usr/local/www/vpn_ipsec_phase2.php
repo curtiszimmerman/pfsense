@@ -180,16 +180,16 @@ if ($_POST) {
 	if (($pconfig['mode'] == "tunnel") || ($pconfig['mode'] == "tunnel6")) {
 		switch ($pconfig['localid_type']) {
 			case "network":
-				if (($pconfig['localid_netbits'] != 0 && !$pconfig['localid_netbits']) || !is_numeric($pconfig['localid_netbits'])) {
+				if (($pconfig['localid_netbits'] != 0 && !$pconfig['localid_netbits']) || !is_numericint($pconfig['localid_netbits'])) {
 					$input_errors[] = gettext("A valid local network bit count must be specified.");
 				}
 			case "address":
 				if (!$pconfig['localid_address'] || !is_ipaddr($pconfig['localid_address'])) {
 					$input_errors[] = gettext("A valid local network IP address must be specified.");
 				} elseif (is_ipaddrv4($pconfig['localid_address']) && ($pconfig['mode'] != "tunnel")) {
-					$input_errors[] = gettext("A valid local network IPv4 address must be specified or you need to change Mode to IPv6");
+					$input_errors[] = gettext("A valid local network IPv4 address must be specified or Mode needs to be changed to IPv6");
 				} elseif (is_ipaddrv6($pconfig['localid_address']) && ($pconfig['mode'] != "tunnel6")) {
-					$input_errors[] = gettext("A valid local network IPv6 address must be specified or you need to change Mode to IPv4");
+					$input_errors[] = gettext("A valid local network IPv6 address must be specified or Mode needs to be changed to IPv4");
 				}
 				break;
 		}
@@ -200,26 +200,26 @@ if ($_POST) {
 			$netbits = get_interface_subnet($pconfig['localid_type']);
 
 			if (empty($address) || empty($netbits)) {
-				$input_errors[] = gettext("Invalid Local Network.") . " " . convert_friendly_interface_to_friendly_descr($pconfig['localid_type']) . " " . gettext("has no subnet.");
+				$input_errors[] = gettext("Invalid Local Network.") . " " . sprintf(gettext("%s has no subnet."), convert_friendly_interface_to_friendly_descr($pconfig['localid_type']));
 			}
 		}
 
 		if (!empty($pconfig['natlocalid_address'])) {
 			switch ($pconfig['natlocalid_type']) {
 				case "network":
-					if (($pconfig['natlocalid_netbits'] != 0 && !$pconfig['natlocalid_netbits']) || !is_numeric($pconfig['natlocalid_netbits'])) {
+					if (($pconfig['natlocalid_netbits'] != 0 && !$pconfig['natlocalid_netbits']) || !is_numericint($pconfig['natlocalid_netbits'])) {
 						$input_errors[] = gettext("A valid NAT local network bit count must be specified.");
 					}
 					if ($pconfig['localid_type'] == "address") {
-						$input_errors[] = gettext("You cannot configure a network type address for NAT while only an address type is selected for local source.");
+						$input_errors[] = gettext("A network type address cannot be configured for NAT while only an address type is selected for local source.");
 					}
 				case "address":
 					if (!empty($pconfig['natlocalid_address']) && !is_ipaddr($pconfig['natlocalid_address'])) {
 						$input_errors[] = gettext("A valid NAT local network IP address must be specified.");
 					} elseif (is_ipaddrv4($pconfig['natlocalid_address']) && ($pconfig['mode'] != "tunnel")) {
-						$input_errors[] = gettext("A valid NAT local network IPv4 address must be specified or you need to change Mode to IPv6");
+						$input_errors[] = gettext("A valid NAT local network IPv4 address must be specified or Mode needs to be changed to IPv6");
 					} elseif (is_ipaddrv6($pconfig['natlocalid_address']) && ($pconfig['mode'] != "tunnel6")) {
-						$input_errors[] = gettext("A valid NAT local network IPv6 address must be specified or you need to change Mode to IPv4");
+						$input_errors[] = gettext("A valid NAT local network IPv6 address must be specified or Mode needs to be changed to IPv4");
 					}
 					break;
 			}
@@ -230,23 +230,23 @@ if ($_POST) {
 				$netbits = get_interface_subnet($pconfig['natlocalid_type']);
 
 				if (empty($address) || empty($netbits)) {
-					$input_errors[] = gettext("Invalid Local Network.") . " " . convert_friendly_interface_to_friendly_descr($pconfig['natlocalid_type']) . " " . gettext("has no subnet.");
+					$input_errors[] = gettext("Invalid Local Network.") . " " . sprintf(gettext("%s has no subnet."), convert_friendly_interface_to_friendly_descr($pconfig['natlocalid_type']));
 				}
 			}
 		}
 
 		switch ($pconfig['remoteid_type']) {
 			case "network":
-				if (($pconfig['remoteid_netbits'] != 0 && !$pconfig['remoteid_netbits']) || !is_numeric($pconfig['remoteid_netbits'])) {
+				if (($pconfig['remoteid_netbits'] != 0 && !$pconfig['remoteid_netbits']) || !is_numericint($pconfig['remoteid_netbits'])) {
 					$input_errors[] = gettext("A valid remote network bit count must be specified.");
 				}
 			case "address":
 				if (!$pconfig['remoteid_address'] || !is_ipaddr($pconfig['remoteid_address'])) {
 					$input_errors[] = gettext("A valid remote network IP address must be specified.");
 				} elseif (is_ipaddrv4($pconfig['remoteid_address']) && ($pconfig['mode'] != "tunnel")) {
-					$input_errors[] = gettext("A valid remote network IPv4 address must be specified or you need to change Mode to IPv6");
+					$input_errors[] = gettext("A valid remote network IPv4 address must be specified or Mode needs to be changed to IPv6");
 				} elseif (is_ipaddrv6($pconfig['remoteid_address']) && ($pconfig['mode'] != "tunnel6")) {
-					$input_errors[] = gettext("A valid remote network IPv6 address must be specified or you need to change Mode to IPv4");
+					$input_errors[] = gettext("A valid remote network IPv6 address must be specified or Mode needs to be changed to IPv4");
 				}
 				break;
 		}
@@ -382,7 +382,7 @@ if ($_POST) {
 			}
 		}
 	}
-	if (($_POST['lifetime'] && !is_numeric($_POST['lifetime']))) {
+	if (($_POST['lifetime'] && !is_numericint($_POST['lifetime']))) {
 		$input_errors[] = gettext("The P2 lifetime must be an integer.");
 	}
 
@@ -438,10 +438,10 @@ if ($_POST) {
 }
 
 if ($pconfig['mobile']) {
-	$pgtitle = array(gettext("VPN"), gettext("IPsec"), gettext("Mobile Client"), gettext("Edit Phase 2"));
+	$pgtitle = array(gettext("VPN"), gettext("IPsec"), gettext("Mobile Clients"), gettext("Edit Phase 2"));
 	$editing_mobile = true;
 } else {
-	$pgtitle = array(gettext("VPN"), gettext("IPsec"), gettext("Tunnel"), gettext("Edit Phase 2"));
+	$pgtitle = array(gettext("VPN"), gettext("IPsec"), gettext("Tunnels"), gettext("Edit Phase 2"));
 	$editing_mobile = false;
 }
 $shortcut_section = "ipsec";
@@ -556,7 +556,7 @@ $group->add(new Form_Select(
 	'localid_type',
 	null,
 	$pconfig['localid_type'],
-	['address' => 'Address', 'network' => 'Network'] + $subnetarray
+	['address' => gettext('Address'), 'network' => gettext('Network')] + $subnetarray
 ))->setHelp('Type');
 
 $group->add(new Form_IpAddress(
@@ -576,7 +576,7 @@ foreach ($subnetarray as $ifname => $ifdescr) {
 }
 
 // Tack none, address & network on the beginning
-$subnetarray = array('none' => gettext('None'), 'address' => 'Address', 'network' => 'Network') + $subnetarray;
+$subnetarray = array('none' => gettext('None'), 'address' => gettext('Address'), 'network' => gettext('Network')) + $subnetarray;
 
 $group->add(new Form_Select(
 	'natlocalid_type',
@@ -602,7 +602,7 @@ if (!isset($pconfig['mobile'])) {
 		'remoteid_type',
 		null,
 		$pconfig['remoteid_type'],
-		array('address' => 'Address', 'network' => 'Network')
+		array('address' => gettext('Address'), 'network' => gettext('Network'))
 	))->setHelp('Type');
 
 	$group->add(new Form_IpAddress(
@@ -619,11 +619,11 @@ $section->addInput(new Form_Input(
 	'Description',
 	'text',
 	$pconfig['descr']
-))->setHelp('You may enter a description here for your reference (not parsed).');
+))->setHelp('A description may be entered here for administrative reference (not parsed).');
 
 $form->add($section);
 
-$section = new Form_Section('Phase 2 proposal (SA/Key Exchange)');
+$section = new Form_Section('Phase 2 Proposal (SA/Key Exchange)');
 
 $section->addInput(new Form_Select(
 	'proto',
@@ -639,13 +639,14 @@ foreach ($p2_ealgos as $algo => $algodata) {
 	$group = new Form_Group($i == 0 ? 'Encryption Algorithms':'');
 	$group->addClass('encalg');
 
+	// Note: ID attribute of each element created is to be unique.  Not being used, suppressing it.
 	$group->add(new Form_Checkbox(
 		'ealgos[]',
 		null,
 		$algodata['name'],
 		(is_array($pconfig['ealgos']) && in_array($algo, $pconfig['ealgos'])),
 		$algo
-	))->addClass('multi');
+	))->addClass('multi')->setAttribute('id');
 
 	if (is_array($algodata['keysel'])) {
 		$list = array();
@@ -659,14 +660,14 @@ foreach ($p2_ealgos as $algo => $algodata) {
 		$group->add(new Form_Select(
 			'keylen_' . $algo,
 			null,
-			$keylen == $pconfig["keylen_".$algo],
-			['auto' => 'Auto'] + $list
+			$pconfig["keylen_".$algo],
+			['auto' => gettext('Auto')] + $list
 		));
 	}
 
 
 	if ($i == $rows) {
-		$group->setHelp('Use 3DES for best compatibility or if you have a hardware crypto accelerator card. Blowfish is usually the fastest in software encryption.');
+		$group->setHelp('Use 3DES for best compatibility or for a hardware crypto accelerator card. Blowfish is usually the fastest in software encryption.');
 	}
 
 	$i++;
@@ -676,13 +677,14 @@ foreach ($p2_ealgos as $algo => $algodata) {
 $group = new Form_Group('Hash Algorithms');
 
 foreach ($p2_halgos as $algo => $algoname) {
+	// Note: ID attribute of each element created is to be unique.  Not being used, suppressing it.
 	$group->add(new Form_Checkbox(
 		'halgos[]',
 		null,
 		$algoname,
 		(empty($pconfig['halgos']) ? '' : in_array($algo, $pconfig['halgos'])),
 		$algo
-	))->addClass('multi');
+	))->addClass('multi')->setAttribute('id');
 }
 
 $section->add($group);
@@ -793,8 +795,8 @@ events.push(function() {
 		var address_is_blank = !/\S/.test($('#natlocalid_address').val());
 
 		switch ($("#natlocalid_type option:selected").index()) {
-			case 0: /* single */
-				disableInput('natlocalid_address', false);
+			case 0: /* none */
+				disableInput('natlocalid_address', true);
 
 				if (address_is_blank) {
 					$('#natlocalid_netbits').val(0);
@@ -802,18 +804,18 @@ events.push(function() {
 
 				disableInput('natlocalid_netbits', true);
 				break;
-			case 1: /* network */
+			case 1: /* address */
 				disableInput('natlocalid_address', false);
 
 				if (address_is_blank) {
 					$('#natlocalid_netbits').val(bits);
 				}
 
-				disableInput('natlocalid_netbits', false);
-				break;
-			case 3: /* none */
-				disableInput('natlocalid_address', true);
 				disableInput('natlocalid_netbits', true);
+				break;
+			case 2: /* network */
+				disableInput('natlocalid_address', false);
+				disableInput('natlocalid_netbits', false);
 				break;
 			default:
 				$('#natlocalid_address').val("");
@@ -942,27 +944,27 @@ events.push(function() {
 	// ---------- Monitor elements for change and call the appropriate display functions ----------
 
 	 // Protocol
-	$('#proto').click(function () {
+	$('#proto').change(function () {
 		change_protocol();
 	});
 
 	 // Localid
-	$('#localid_type').click(function () {
+	$('#localid_type').change(function () {
 		typesel_change_local(<?=htmlspecialchars($pconfig['localid_netbits'])?>);
 	});
 
 	 // Remoteid
-	$('#remoteid_type').click(function () {
+	$('#remoteid_type').change(function () {
 		typesel_change_remote(<?=htmlspecialchars($pconfig['remoteid_netbits'])?>);
 	});
 
 	 // NATLocalid
-	$('#natlocalid_type').click(function () {
+	$('#natlocalid_type').change(function () {
 		typesel_change_natlocal(<?=htmlspecialchars($pconfig['natlocalid_netbits'])?>);
 	});
 
 	 // Mode
-	$('#mode').click(function () {
+	$('#mode').change(function () {
 		change_mode();
 	});
 

@@ -90,20 +90,19 @@ $clients = openvpn_get_active_clients();
 
 include("head.inc"); ?>
 
-<body>
 <form action="status_openvpn.php" method="get" name="iform">
 <script type="text/javascript">
 //<![CDATA[
 	function killClient(mport, remipp) {
 		var busy = function(index,icon) {
-			jQuery(icon).bind("onclick","");
-			jQuery(icon).attr('src',jQuery(icon).attr('src').replace("\.gif", "_d.gif"));
-			jQuery(icon).css("cursor","wait");
+			$(icon).bind("onclick","");
+			$(icon).attr('src',$(icon).attr('src').replace("\.gif", "_d.gif"));
+			$(icon).css("cursor","wait");
 		}
 
-		jQuery('img[name="i:' + mport + ":" + remipp + '"]').each(busy);
+		$('img[name="i:' + mport + ":" + remipp + '"]').each(busy);
 
-		jQuery.ajax(
+		$.ajax(
 			"<?=$_SERVER['SCRIPT_NAME'];?>" +
 				"?action=kill&port=" + mport + "&remipp=" + remipp,
 			{ type: "get", complete: killComplete }
@@ -117,8 +116,8 @@ include("head.inc"); ?>
 			return;
 		}
 
-		jQuery('tr[name="r:' + values[1] + ":" + values[2] + '"]').each(
-			function(index,row) { jQuery(row).fadeOut(1000); }
+		$('tr[name="r:' + values[1] + ":" + values[2] + '"]').each(
+			function(index,row) { $(row).fadeOut(1000); }
 		);
 	}
 //]]>
@@ -130,7 +129,7 @@ include("head.inc"); ?>
 ?>
 
 <div class="panel panel-default">
-		<div class="panel-heading"><h2 class="panel-title"><?=htmlspecialchars($server['name']);?> <?=gettext('Client connections')?></h2></div>
+		<div class="panel-heading"><h2 class="panel-title"><?=htmlspecialchars($server['name']);?> <?=gettext('Client Connections')?></h2></div>
 		<div class="panel-body table-responsive">
 			<table class="table table-striped table-hover table-condensed sortable-theme-bootstrap" data-sortable>
 				<thead>
@@ -158,9 +157,9 @@ include("head.inc"); ?>
 						<td><?=format_bytes($conn['bytes_recv']);?></td>
 						<td>
 							<a
-							   onclick="killClient('<?php echo $server['mgmt']; ?>', '<?php echo $conn['remote_host']; ?>');" style="cursor:pointer;"
+							   onclick="killClient('<?=$server['mgmt'];?>', '<?=$conn['remote_host'];?>');" style="cursor:pointer;"
 							   id="<?php echo "i:{$server['mgmt']}:{$conn['remote_host']}"; ?>"
-							   title="<?php echo gettext("Kill client connection from") . " " . $conn['remote_host']; ?>">
+							   title="<?php echo sprintf(gettext("Kill client connection from %s"), $conn['remote_host']); ?>">
 							<i class="fa fa-times"></i>
 							</a>
 						</td>
@@ -177,7 +176,7 @@ include("head.inc"); ?>
 									<td>
 										<?php $ssvc = find_service_by_openvpn_vpnid($server['vpnid']); ?>
 										<?= get_service_status_icon($ssvc, true, true); ?>
-										<?= get_service_control_GET_links($ssvc, true); ?>
+										<?= get_service_control_links($ssvc); ?>
 									</td>
 								</tr>
 							</table>
@@ -193,8 +192,12 @@ include("head.inc"); ?>
 		if (is_array($server['routes']) && count($server['routes'])):
 ?>
 <div id="shroutebut-<?= $i ?>">
-	<input type="button" onClick="show_routes('tabroute-<?= $i ?>','shroutebut-<?= $i ?>')" value="<?php echo gettext("Show Routing Table"); ?>" /> - <?= gettext("Display OpenVPN's internal routing table for this server.") ?>
-		<br /><br />
+	<button type="button" class="btn btn-info" onClick="show_routes('tabroute-<?= $i ?>','shroutebut-<?= $i ?>')" value="<?php echo gettext("Show Routing Table"); ?>">
+		<i class="fa fa-plus-circle icon-embed-btn"></i>
+		<?php echo gettext("Show Routing Table"); ?>
+	</button>
+	- <?= gettext("Display OpenVPN's internal routing table for this server.") ?>
+	<br /><br />
 </div>
 <div class="panel panel-default" id="tabroute-<?=$i?>" style="display: none;">
 		<div class="panel-heading"><h2 class="panel-title"><?=htmlspecialchars($server['name']);?> <?=gettext("Routing Table"); ?></h2></div>
@@ -253,10 +256,10 @@ include("head.inc"); ?>
 						<th><?=gettext("Name"); ?></th>
 						<th><?=gettext("Status"); ?></th>
 						<th><?=gettext("Connected Since"); ?></th>
-						<th><?=gettext("Virtual Addr"); ?></th>
+						<th><?=gettext("Virtual Address"); ?></th>
 						<th><?=gettext("Remote Host"); ?></th>
 						<th><?=gettext("Bytes Sent"); ?></th>
-						<th><?=gettext("Bytes Rcvd"); ?></th>
+						<th><?=gettext("Bytes Received"); ?></th>
 						<th><?=gettext("Service"); ?></th>
 					</tr>
 				</thead>
@@ -279,7 +282,7 @@ include("head.inc"); ?>
 									<td>
 										<?php $ssvc = find_service_by_openvpn_vpnid($sk_server['vpnid']); ?>
 										<?= get_service_status_icon($ssvc, false, true); ?>
-										<?= get_service_control_GET_links($ssvc, true); ?>
+										<?= get_service_control_links($ssvc, true); ?>
 									</td>
 								</tr>
 							</table>
@@ -309,10 +312,10 @@ include("head.inc"); ?>
 						<th><?=gettext("Name"); ?></th>
 						<th><?=gettext("Status"); ?></th>
 						<th><?=gettext("Connected Since"); ?></th>
-						<th><?=gettext("Virtual Addr"); ?></th>
+						<th><?=gettext("Virtual Address"); ?></th>
 						<th><?=gettext("Remote Host"); ?></th>
 						<th><?=gettext("Bytes Sent"); ?></th>
-						<th><?=gettext("Bytes Rcvd"); ?></th>
+						<th><?=gettext("Bytes Received"); ?></th>
 						<th><?=gettext("Service"); ?></th>
 					</tr>
 				</thead>
@@ -335,7 +338,7 @@ include("head.inc"); ?>
 									<td>
 										<?php $ssvc = find_service_by_openvpn_vpnid($client['vpnid']); ?>
 										<?= get_service_status_icon($ssvc, false, true); ?>
-										<?= get_service_control_GET_links($ssvc, true); ?>
+										<?= get_service_control_links($ssvc, true); ?>
 									</td>
 								</tr>
 							</table>
@@ -353,16 +356,14 @@ include("head.inc"); ?>
 }
 
 if ($DisplayNote) {
- 	print_info_box(gettext("If you have custom options that override the management features of OpenVPN on a client or server, they will cause that OpenVPN instance to not work correctly with this status page."));
+ 	print_info_box(gettext("If there are custom options that override the management features of OpenVPN on a client or server, they will cause that OpenVPN instance to not work correctly with this status page."));
 }
 
 if ((empty($clients)) && (empty($servers)) && (empty($sk_servers))) {
-	print_info_box(gettext("No OpenVPN instances defined"));
+	print_info_box(gettext("No OpenVPN instances defined."));
 }
 ?>
 </form>
-
-<?php include("foot.inc"); ?>
 
 <script type="text/javascript">
 //<![CDATA[
@@ -375,3 +376,5 @@ function show_routes(id, buttonid) {
 
 //]]>
 </script>
+
+<?php include("foot.inc"); ?>

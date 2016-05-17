@@ -67,7 +67,7 @@
 require("guiconfig.inc");
 require_once("config.inc");
 
-$pgtitle = array(gettext("Status"), gettext("DHCPv6 leases"));
+$pgtitle = array(gettext("Status"), gettext("DHCPv6 Leases"));
 $shortcut_section = "dhcp6";
 
 $leasesfile = "{$g['dhcpd_chroot_path']}/var/db/dhcpd6.leases";
@@ -119,11 +119,11 @@ function leasecmp($a, $b) {
 function adjust_gmt($dt) {
 	global $config;
 
-	$dhcpv6leaseinlocaltime == "no";
+	$dhcpv6leaseinlocaltime = "no";
 	if (is_array($config['dhcpdv6'])) {
 		$dhcpdv6 = $config['dhcpdv6'];
-		foreach ($dhcpdv6 as $dhcpv6leaseinlocaltime) {
-			$dhcpv6leaseinlocaltime = $dhcpv6leaseinlocaltime['dhcpv6leaseinlocaltime'];
+		foreach ($dhcpdv6 as $dhcpdv6params) {
+			$dhcpv6leaseinlocaltime = $dhcpdv6params['dhcpv6leaseinlocaltime'];
 			if ($dhcpv6leaseinlocaltime == "yes") {
 				break;
 			}
@@ -162,9 +162,13 @@ function parse_duid($duid_string) {
 			$n = substr($duid_string, $i+1, 1);
 			if (($n == '\\') || ($n == '"')) {
 				$parsed_duid[] = sprintf("%02x", ord($n));
-			} elseif (is_numeric($n)) {
-				$parsed_duid[] = sprintf("%02x", octdec(substr($duid_string, $i+1, 3)));
-				$i += 3;
+				$i += 1;
+			} else {
+				$n = substr($duid_string, $i+1, 3);
+				if (preg_match('/[0-3][0-7]{2}/', $n)) {
+					$parsed_duid[] = sprintf("%02x", octdec($n));
+					$i += 3;
+				}
 			}
 		} else {
 			$parsed_duid[] = sprintf("%02x", ord($s));
@@ -205,6 +209,16 @@ $mappings = array();
 $i = 0;
 $l = 0;
 $p = 0;
+
+// Translate these once so we don't do it over and over in the loops below.
+$online_string = gettext("online");
+$offline_string = gettext("offline");
+$active_string = gettext("active");
+$expired_string = gettext("expired");
+$reserved_string = gettext("reserved");
+$released_string = gettext("released");
+$dynamic_string = gettext("dynamic");
+$static_string = gettext("static");
 
 // Put everything together again
 while ($i < $leases_count) {
@@ -257,23 +271,23 @@ while ($i < $leases_count) {
 				} else {
 					$entry['duid'] = $data[$f+1];
 				}
-				$entry['type'] = "dynamic";
+				$entry['type'] = $dynamic_string;
 				$f = $f+2;
 				break;
 			case "iaaddr":
 				$entry['ip'] = $data[$f+1];
-				$entry['type'] = "dynamic";
+				$entry['type'] = $dynamic_string;
 				if (in_array($entry['ip'], array_keys($ndpdata))) {
-					$entry['online'] = 'online';
+					$entry['online'] = $online_string;
 				} else {
-					$entry['online'] = 'offline';
+					$entry['online'] = $offline_string;
 				}
 				$f = $f+2;
 				break;
 			case "iaprefix":
 				$is_prefix = true;
 				$entry['prefix'] = $data[$f+1];
-				$entry['type'] = "dynamic";
+				$entry['type'] = $dynamic_string;
 				$f = $f+2;
 				break;
 			case "starts":
@@ -303,19 +317,19 @@ while ($i < $leases_count) {
 			case "binding":
 				switch ($data[$f+2]) {
 					case "active":
-						$entry['act'] = "active";
+						$entry['act'] = $active_string;
 						break;
 					case "free":
-						$entry['act'] = "expired";
-						$entry['online'] = "offline";
+						$entry['act'] = $expired_string;
+						$entry['online'] = $offline_string;
 						break;
 					case "backup":
-						$entry['act'] = "reserved";
-						$entry['online'] = "offline";
+						$entry['act'] = $reserved_string;
+						$entry['online'] = $offline_string;
 						break;
 					case "released":
-						$entry['act'] = "released";
-						$entry['online'] = "offline";
+						$entry['act'] = $released_string;
+						$entry['online'] = $offline_string;
 				}
 				$f = $f+1;
 				break;
@@ -347,7 +361,7 @@ while ($i < $leases_count) {
 		$prefixes[] = $entry;
 	} else {
 		$leases[] = $entry;
-		$mappings[$entry['iaid'] . $entry['duid']] = $entry['ip'];
+		$mappings[$entry['duid']] = $entry['ip'];
 	}
 	$l++;
 	$i++;
@@ -378,11 +392,11 @@ foreach ($config['interfaces'] as $ifname => $ifarr) {
 			$slease['start'] = "";
 			$slease['end'] = "";
 			$slease['hostname'] = htmlentities($static['hostname']);
-			$slease['act'] = "static";
+			$slease['act'] = $static_string;
 			if (in_array($slease['ip'], array_keys($ndpdata))) {
-				$slease['online'] = 'online';
+				$slease['online'] = $online_string;
 			} else {
-				$slease['online'] = 'offline';
+				$slease['online'] = $offline_string;
 			}
 
 			$leases[] = $slease;
@@ -398,8 +412,8 @@ if ($_GET['order']) {
 if (count($pools) > 0) {
 ?>
 <div class="panel panel-default">
-	<div class="panel-heading"><h2 class="panel-title"><?=gettext('Pool status')?></h2></div>
-	<div class="panel-body">
+	<div class="panel-heading"><h2 class="panel-title"><?=gettext('Pool Status')?></h2></div>
+	<div class="panel-body table-responsive">
 		<table class="table table-striped table-hover table-condensed sortable-theme-bootstrap" data-sortable>
 		<thead>
 			<tr>
@@ -411,7 +425,7 @@ if (count($pools) > 0) {
 			</tr>
 		</thead>
 		<tbody>
-<? foreach ($pools as $data):?>
+<?php foreach ($pools as $data):?>
 			<tr>
 				<td><?=$data['name']?></td>
 				<td><?=$data['mystate']?></td>
@@ -419,7 +433,7 @@ if (count($pools) > 0) {
 				<td><?=$data['peerstate']?></td>
 				<td><?=adjust_gmt($data['peerdate'])?></td>
 			</tr>
-<? endforeach?>
+<?php endforeach; ?>
 		</tbody>
 		</table>
 	</div>
@@ -429,13 +443,13 @@ if (count($pools) > 0) {
 }
 
 if (empty($leases)) {
-	print '<div class="alert alert-warning" role="alert">'. gettext("No leases file found. Is the DHCP server active?") .'</div>';
+	print_info_box(gettext("No leases file found. Is the DHCPv6 server active?"), 'warning', false);
 }
 
 ?>
 <div class="panel panel-default">
 	<div class="panel-heading"><h2 class="panel-title"><?=gettext('Leases')?></h2></div>
-	<div class="panel-body">
+	<div class="panel-body table-responsive">
 		<table class="table table-striped table-hover table-condensed sortable-theme-bootstrap" data-sortable>
 		<thead>
 			<tr>
@@ -449,24 +463,28 @@ if (empty($leases)) {
 				<th><?=gettext("End")?></th>
 				<th><?=gettext("Online")?></th>
 				<th><?=gettext("Lease Type")?></th>
+				<th><?=gettext("Actions")?></th>
 			</tr>
 		</thead>
 		<tbody>
 <?php
 foreach ($leases as $data):
-	if ($data['act'] != "active" && $data['act'] != "static" && $_GET['all'] != 1) {
+	if ($data['act'] != $active_string && $data['act'] != $static_string && $_GET['all'] != 1) {
 		continue;
 	}
 
-	if ($data['act'] == 'active') {
+	if ($data['act'] == $active_string) {
+		/* Active DHCP Lease */
 		$icon = 'fa-check-circle-o';
-	} elseif ($data['act'] == 'expired') {
+	} elseif ($data['act'] == $expired_string) {
+		/* Expired DHCP Lease */
 		$icon = 'fa-ban';
 	} else {
-		$icon = 'fa-times-circle-o';
+		/* Static Mapping */
+		$icon = 'fa-user';
 	}
 
-	if ($data['act'] == "static") {
+	if ($data['act'] == $static_string) {
 		foreach ($config['dhcpdv6'] as $dhcpif => $dhcpifconf) {
 			if (is_array($dhcpifconf['staticmap'])) {
 				foreach ($dhcpifconf['staticmap'] as $staticent) {
@@ -496,31 +514,31 @@ foreach ($leases as $data):
 				<td>
 					<?=$mac?>
 
-					<? if (isset($mac_man[$mac_hi])):?>
+					<?php if (isset($mac_man[$mac_hi])):?>
 						(<?=$mac_man[$mac_hi]?>)
-					<?endif?>
+					<?php endif; ?>
 				</td>
 				<td><?=htmlentities($data['hostname'])?></td>
-<? if ($data['type'] != "static"):?>
+<?php if ($data['type'] != $static_string):?>
 				<td><?=adjust_gmt($data['start'])?></td>
 				<td><?=adjust_gmt($data['end'])?></td>
-<? else: ?>
+<?php else: ?>
 				<td>n/a</td>
 				<td>n/a</td>
-<? endif; ?>
+<?php endif; ?>
 				<td><?=$data['online']?></td>
 				<td><?=$data['act']?></td>
 				<td>
-<? if ($data['type'] == "dynamic"): ?>
-					<a <a class="fa fa-plus-square-o" title="<?=gettext("Add static mapping")?>" href="services_dhcpv6_edit.php?if=<?=$data['if']?>&amp;duid=<?=$data['duid']?>&amp;hostname=<?=htmlspecialchars($data['hostname'])?>"></a>
-<? endif; ?>
+<?php if ($data['type'] == $dynamic_string): ?>
+					<a class="fa fa-plus-square-o" title="<?=gettext("Add static mapping")?>" href="services_dhcpv6_edit.php?if=<?=$data['if']?>&amp;duid=<?=$data['duid']?>&amp;hostname=<?=htmlspecialchars($data['hostname'])?>"></a>
+<?php endif; ?>
 					<a class="fa fa-plus-square" title="<?=gettext("Add WOL mapping")?>" href="services_wol_edit.php?if=<?=$data['if']?>&amp;mac=<?=$data['mac']?>&amp;descr=<?=htmlentities($data['hostname'])?>"></a>
-<? if ($data['type'] == "dynamic" && $data['online'] != "online"):?>
+<?php if ($data['type'] == $dynamic_string && $data['online'] != $online_string):?>
 					<a class="fa fa-trash" title="<?=gettext('Delete lease')?>"	href="status_dhcpv6_leases.php?deleteip=<?=$data['ip']?>&amp;all=<?=intval($_GET['all'])?>"></a>
-<? endif?>
+<?php endif; ?>
 				</td>
-<? endforeach; ?>
 			</tr>
+<?php endforeach; ?>
 		</tbody>
 		</table>
 	</div>
@@ -528,10 +546,11 @@ foreach ($leases as $data):
 
 <div class="panel panel-default">
 	<div class="panel-heading"><h2 class="panel-title"><?=gettext('Delegated Prefixes')?></h2></div>
-	<div class="panel-body">
+	<div class="panel-body table-responsive">
 		<table class="table table-striped table-hover table-condensed sortable-theme-bootstrap" data-sortable>
 		<thead>
 			<tr>
+				<th><!-- icon --></th>
 				<th><?=gettext("IPv6 Prefix")?></th>
 				<th><?=gettext("IAID")?></th>
 				<th><?=gettext("DUID")?></th>
@@ -543,19 +562,19 @@ foreach ($leases as $data):
 		<tbody>
 <?php
 foreach ($prefixes as $data):
-	if ($data['act'] != "active" && $data['act'] != "static" && $_GET['all'] != 1) {
+	if ($data['act'] != $active_string && $data['act'] != $static_string && $_GET['all'] != 1) {
 		continue;
 	}
 
-	if ($data['act'] == 'active') {
+	if ($data['act'] == $active_string) {
 		$icon = 'fa-check-circle-o';
-	} elseif ($data['act'] == 'expired') {
+	} elseif ($data['act'] == $expired_string) {
 		$icon = 'fa-ban';
 	} else {
 		$icon = 'fa-times-circle-o';
 	}
 
-	if ($data['act'] == "static") {
+	if ($data['act'] == $static_string) {
 		foreach ($config['dhcpdv6'] as $dhcpif => $dhcpifconf) {
 			if (is_array($dhcpifconf['staticmap'])) {
 				foreach ($dhcpifconf['staticmap'] as $staticent) {
@@ -582,32 +601,32 @@ foreach ($prefixes as $data):
 				<td><i class="fa <?=$icon?>"></i></td>
 				<td>
 					<?=$data['prefix']?>
-<? if ($mappings[$data['iaid'] . $data['duid']]): ?>
+<?php if ($mappings[$data['duid']]): ?>
 					<br />
-					<?=gettext('Routed To')?>: <?=$mappings[$data['iaid'] . $data['duid']]?>
-<? endif; ?>
+					<?=gettext('Routed To')?>: <?=$mappings[$data['duid']]?>
+<?php endif; ?>
 				</td>
 				<td><?=$data['iaid']?></td>
 				<td><?=$data['duid']?></td>
-<? if ($data['type'] != "static"):?>
+<?php if ($data['type'] != $static_string):?>
 				<td><?=adjust_gmt($data['start'])?></td>
 				<td><?=adjust_gmt($data['end'])?></td>
-<? else: ?>
+<?php else: ?>
 				<td>n/a</td>
 				<td>n/a</td>
-<? endif; ?>
+<?php endif; ?>
 				<td><?=$data['act']?></td>
-<? endforeach; ?>
 			</tr>
+<?php endforeach; ?>
 		</tbody>
 		</table>
 	</div>
 </div>
 
 <?php if ($_GET['all']): ?>
-	<a class="btn btn-default" href="status_dhcpv6_leases.php?all=0"><?=gettext("Show active and static leases only")?></a>
+	<a class="btn btn-info" href="status_dhcpv6_leases.php?all=0"><i class="fa fa-minus-circle icon-embed-btn"></i><?=gettext("Show active and static leases only")?></a>
 <?php else: ?>
-	<a class="btn btn-default" href="status_dhcpv6_leases.php?all=1"><?=gettext("Show all configured leases")?></a>
+	<a class="btn btn-info" href="status_dhcpv6_leases.php?all=1"><i class="fa fa-plus-circle icon-embed-btn"></i><?=gettext("Show all configured leases")?></a>
 <?php endif;
 
 include("foot.inc");

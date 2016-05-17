@@ -112,7 +112,7 @@ display_top_tabs($tab_array);
 ?>
 
 <div class="panel panel-default">
-	<div class="panel-heading"><h2 class="panel-title"><?=gettext("Nearby access points or ad-hoc peers")?></h2></div>
+	<div class="panel-heading"><h2 class="panel-title"><?=gettext("Nearby Access Points or Ad-Hoc Peers")?></h2></div>
 	<div class="panel-body">
 		<div class="table-responsive">
 			<table class="table table-striped table-hover table-condensed sortable-theme-bootstrap" data-sortable>
@@ -181,7 +181,7 @@ display_top_tabs($tab_array);
 </div>
 
 <div class="panel panel-default">
-	<div class="panel-heading"><h2 class="panel-title"><?=gettext("Associated or ad-hoc peers")?></h2></div>
+	<div class="panel-heading"><h2 class="panel-title"><?=gettext("Associated or Ad-Hoc Peers")?></h2></div>
 	<div class="panel-body">
 		<div class="table-responsive">
 			<table class="table table-striped table-hover table-condensed sortable-theme-bootstrap" data-sortable>
@@ -237,15 +237,17 @@ display_top_tabs($tab_array);
 	<nav class="action-buttons">
 		<input type="hidden" name="if" id="if" value="<?=htmlspecialchars($if)?>" />
 		<button type="submit" class="btn btn-success" name="rescanwifi" id="rescanwifi" value="Rescan">
-			<i class="fa fa-undo icon-embed-btn"></i>
+			<i class="fa fa-refresh icon-embed-btn"></i>
 			<?=gettext("Rescan")?>
 		</button>
 	</nav>
 </form>
-
+<div class="infoblock">
 <?php
-print_info_box('<b>Flags:</b> A = authorized, E = Extended Rate (802.11g), P = Power saving mode<br />' .
+print_info_box(gettext('<b>Flags:</b> A = authorized, E = Extended Rate (802.11g), P = Power saving mode.<br />' .
 			   '<b>Capabilities:</b> E = ESS (infrastructure mode), I = IBSS (ad-hoc mode), P = privacy (WEP/TKIP/AES), ' .
-			   'S = Short preamble, s = Short slot time', info);
-
+			   'S = Short preamble, s = Short slot time.'), 'info', false);
+?>
+</div>
+<?php
 include("foot.inc");

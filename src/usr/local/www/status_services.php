@@ -64,36 +64,26 @@ require_once("guiconfig.inc");
 require_once("service-utils.inc");
 require_once("shortcuts.inc");
 
-// Leave GET enabled in case any other pages use it.
-// ToDo: Check other pages and remove GET completely
-if (!$_GET && $_POST) {
-	$_GET = $_POST;
-}
-
-$service_name = '';
-if (isset($_GET['service'])) {
-	$service_name = htmlspecialchars($_GET['service']);
-}
-
-if (!empty($service_name)) {
-	switch ($_GET['mode']) {
-		case "restartservice":
-			$savemsg = service_control_restart($service_name, $_GET);
-			break;
-		case "startservice":
-			$savemsg = service_control_start($service_name, $_GET);
-			break;
-		case "stopservice":
-			$savemsg = service_control_stop($service_name, $_GET);
-			break;
+if ($_REQUEST['ajax']) {
+	if (isset($_REQUEST['service'])) {
+		$service_name = htmlspecialchars($_REQUEST['service']);
 	}
 
-	sleep(5);
-}
+	if (!empty($service_name)) {
+		switch ($_REQUEST['mode']) {
+			case "restartservice":
+				$savemsg = service_control_restart($service_name, $_REQUEST);
+				break;
+			case "startservice":
+				$savemsg = service_control_start($service_name, $_REQUEST);
+				break;
+			case "stopservice":
+				$savemsg = service_control_stop($service_name, $_REQUEST);
+				break;
+		}
+		sleep(5);
+	}
 
-
-/* batch mode, allow other scripts to call this script */
-if ($_GET['batch']) {
 	exit;
 }
 
@@ -117,6 +107,10 @@ if (count($services) > 0) {
 	<input id="service" type="hidden" name="service" value=""/>
 	<input id="id" type="hidden" name="id" value=""/>
 	<input id="zone" type="hidden" name="zone" value=""/>
+
+<div class="panel panel-default">
+	<div class="panel-heading"><h2 class="panel-title"><?=gettext('Services')?></h2></div>
+	<div class="panel-body">
 
 	<div class="panel-body panel-default">
 		<div class="table-responsive">
@@ -161,7 +155,7 @@ if (count($services) > 0) {
 		}
 ?>
 						<td>
-							<?=$running ? '<span class="text-success">Running</span>':'<span class="text-danger">Stopped</span>'?>
+							<?=$running ? '<span class="text-success">' . gettext("Running") . '</span>':'<span class="text-danger">' . gettext("Stopped") . '</span>'?>
 						</td>
 						<td>
 							<?=get_service_control_links($service)?>
@@ -184,94 +178,14 @@ if (count($services) > 0) {
 			</table>
 		</div>
 	</div>
+
+	</div>
+</div>
+
 </form>
 <?php
 } else {
-	print_info_box(gettext("No services found"), 'danger');
+	print_info_box(gettext("No services found."), 'danger');
 }
-?>
-<script type="text/javascript">
-//<![CDATA[
-events.push(function() {
-	// If a restart button is clicked, populate the hidden inputs and submit the form (via POST)
-	$('[id^=restartservice-]').click(function(event) {
-		$('#mode').val('restartservice');
-		$('#service').val(this.id.replace("restartservice-", ""));
-		$(this).parents('form').submit();
-	});
 
-	// If a stop button is clicked, populate the hidden inputs and submit the form (via POST)
-	$('[id^=stopservice-]').click(function(event) {
-		$('#mode').val('stopservice');
-		$('#service').val(this.id.replace("stopservice-", ""));
-		$(this).parents('form').submit();
-	});
-
-	// If a start button is clicked, populate the hidden inputs and submit the form (via POST)
-	$('[id^=startservice-]').click(function(event) {
-		$('#mode').val('startservice');
-		$('#service').val(this.id.replace("startservice-", ""));
-		$(this).parents('form').submit();
-	});
-
-	// If an openvpn start button is clicked, populate the hidden inputs and submit the form (via POST)
-	$('[id^=openvpn-startservice-]').click(function(event) {
-		var args = this.id.split('-');
-		$('#mode').val('startservice');
-		$('#service').val('openvpn');
-		$('#id').val(args[3]);
-		$('#vpnmode').val(args[2]);
-		$(this).parents('form').submit();
-	});
-
-	// If an openvpn restart button is clicked, populate the hidden inputs and submit the form (via POST)
-	$('[id^=openvpn-restartservice-]').click(function(event) {
-		var args = this.id.split('-');
-		$('#mode').val('restartservice');
-		$('#service').val('openvpn');
-		$('#id').val(args[3]);
-		$('#vpnmode').val(args[2]);
-		$(this).parents('form').submit();
-	});
-
-	// If an openvpn stop button is clicked, populate the hidden inputs and submit the form (via POST)
-	$('[id^=openvpn-stopservice-]').click(function(event) {
-		var args = this.id.split('-');
-		$('#mode').val('stopservice');
-		$('#service').val('openvpn');
-		$('#id').val(args[3]);
-		$('#vpnmode').val(args[2]);
-		$(this).parents('form').submit();
-	});
-
-	// If a captiveportal start button is clicked, populate the hidden inputs and submit the form (via POST)
-	$('[id^=captiveportal-startservice-]').click(function(event) {
-		var args = this.id.split('-');
-		$('#mode').val('startservice');
-		$('#service').val('captiveportal');
-		$('#zone').val(args[2]);
-		$(this).parents('form').submit();
-	});
-
-	// If a captiveportal restart button is clicked, populate the hidden inputs and submit the form (via POST)
-	$('[id^=captiveportal-restartservice-]').click(function(event) {
-		var args = this.id.split('-');
-		$('#mode').val('restartservice');
-		$('#service').val('captiveportal');
-		$('#zone').val(args[2]);
-		$(this).parents('form').submit();
-	});
-
-	// If a captiveportal stop button is clicked, populate the hidden inputs and submit the form (via POST)
-	$('[id^=captiveportal-stopservice-]').click(function(event) {
-		var args = this.id.split('-');
-		$('#mode').val('stopservice');
-		$('#service').val('captiveportal');
-		$('#zone').val(args[2]);
-		$(this).parents('form').submit();
-	});
-});
-//]]>
-</script>
-<?php
 include("foot.inc");

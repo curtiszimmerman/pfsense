@@ -87,7 +87,7 @@ function upload_crash_report($files) {
 	return $response;
 }
 
-$pgtitle = array(gettext("Diagnostics"), gettext("Crash reporter"));
+$pgtitle = array(gettext("Diagnostics"), gettext("Crash Reporter"));
 include('head.inc');
 
 $crash_report_header = "Crash report begins.  Anonymous machine information:\n\n";
@@ -96,10 +96,9 @@ $crash_report_header .= php_uname("r") . "\n";
 $crash_report_header .= php_uname("v") . "\n";
 $crash_report_header .= "\nCrash report details:\n";
 
-exec("/usr/bin/grep -vi warning /tmp/PHP_errors.log", $php_errors);
-?>
-<?php
-	if (gettext($_POST['Submit']) == "Yes") {
+exec("/bin/cat /tmp/PHP_errors.log", $php_errors);
+
+	if ($_POST['Submit'] == "Yes") {
 		echo gettext("Processing...");
 		if (!is_dir("/var/crash")) {
 			mkdir("/var/crash", 0750, true);
@@ -124,9 +123,9 @@ exec("/usr/bin/grep -vi warning /tmp/PHP_errors.log", $php_errors);
 			print_r($resp);
 			echo "<p><a href=\"/\">" . gettext("Continue") . "</a>" . gettext(" and delete crash report files from local disk.") . "</p>";
 		} else {
-			echo "Could not find any crash files.";
+			echo gettext("Could not find any crash files.");
 		}
-	} else if (gettext($_POST['Submit']) == "No") {
+	} else if ($_POST['Submit'] == "No") {
 		array_map('unlink', glob("/var/crash/*"));
 		// Erase the contents of the PHP error log
 		fclose(fopen("/tmp/PHP_errors.log", 'w'));
@@ -147,23 +146,30 @@ exec("/usr/bin/grep -vi warning /tmp/PHP_errors.log", $php_errors);
 				}
 			}
 		} else {
-			echo "Could not locate any crash data.";
+			echo gettext("Could not locate any crash data.");
 		}
 ?>
 	<div class="panel panel-default">
-		<div class="panel-heading"><?=gettext("Unfortunately we have detected a programming bug.")?></div>
+		<div class="panel-heading"><h2 class="panel-title"><?=gettext("Unfortunately a Programming Bug has been detected")?></h2></div>
 		<div class="panel-body">
 			<div class="content">
 				<p>
-					<?=gettext("Would you like to submit the programming debug logs to the pfSense developers for inspection?")?>
-					<i><?=gettext("Please double check the contents to ensure you are comfortable sending this information before clicking Yes.")?></i>
+					<?=gettext("The programming debug logs can be submitted to the pfSense developers for inspection.")?>
+					<i><?=gettext("Please double check the contents to ensure this information is acceptable to disclose before submitting.")?></i>
 				</p>
 				<textarea readonly style="width: 100%; height: 350px;">
 					<?=$crash_reports?>
 				</textarea>
+				<br/><br/>
 				<form action="crash_reporter.php" method="post">
-					<button class="btn btn-primary" name="Submit" type="submit" value="Yes"><?=gettext("Yes")?> - <?=gettext("Submit this to the developers for inspection")?></button>
-					<button class="btn btn-default" name="Submit" type="submit" value="No"><?=gettext("No")?> - <?=gettext("Just delete the crash report and take me back to the Dashboard")?></button>
+					<button class="btn btn-primary" name="Submit" type="submit" value="Yes">
+						<i class="fa fa-upload"></i>
+						<?=gettext("Yes")?> - <?=gettext("Submit this to the developers for inspection")?>
+					</button>
+					<button class="btn btn-warning" name="Submit" type="submit" value="No">
+						<i class="fa fa-undo"></i>
+						<?=gettext("No")?> - <?=gettext("Just delete the crash report and return to the Dashboard")?>
+					</button>
 				</form>
 			</div>
 		</div>

@@ -99,7 +99,7 @@ if ($_GET['act'] == "del") {
 		}
 
 		if ($is_schedule_referenced == true) {
-			$savemsg = sprintf(gettext("Cannot delete Schedule. Currently in use by %s"), $referenced_by);
+			$savemsg = sprintf(gettext("Cannot delete schedule. Currently in use by %s."), $referenced_by);
 		} else {
 			unset($a_schedules[$_GET['id']]);
 			write_config();
@@ -126,7 +126,7 @@ if ($savemsg) {
 					<th><?=gettext("Name")?></th>
 					<th><?=gettext("Range: Date / Times / Name")?></th>
 					<th><?=gettext("Description")?></th>
-					<th><!--Buttons--></th>
+					<th><?=gettext("Actions")?></th>
 				</tr>
 			</thead>
 			<tbody>
@@ -279,8 +279,8 @@ endforeach;
 	</a>
 </nav>
 
-<div id="infoblock">
-	<?=print_info_box(gettext('Schedules act as placeholders for time ranges to be used in Firewall Rules.'), info)?>
+<div class="infoblock">
+	<?php print_info_box(gettext('Schedules act as placeholders for time ranges to be used in firewall rules.'), 'info', false); ?>
 </div>
 
 <?php

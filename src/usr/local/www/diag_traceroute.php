@@ -73,28 +73,15 @@ include("head.inc");
 define('MAX_TTL', 64);
 define('DEFAULT_TTL', 18);
 
+// Set defaults in case they are not supplied.
 $do_traceroute = false;
 $host = '';
 $ttl = DEFAULT_TTL;
-$pconfig['ttl'] = DEFAULT_TTL;
-$pconfig['ipproto'] = 'IPv4';
-$pconfig['sourceip'] = 'Any';
-
-function create_sourceaddresslist() {
-	$list = array('any' => 'Any');
-
-	$sourceips = get_possible_traffic_source_addresses(true);
-
-	foreach ($sourceips as $sipvalue => $sipname) {
-		$list[$sipvalue] = $sipname;
-	}
-
-	return($list);
-}
+$ipproto = 'ipv4';
+$sourceip = 'any';
 
 if ($_POST || $_REQUEST['host']) {
 	unset($input_errors);
-	unset($do_traceroute);
 
 	/* input validation */
 	$reqdfields = explode(" ", "host ttl");
@@ -113,16 +100,12 @@ if ($_POST || $_REQUEST['host']) {
 		$input_errors[] = gettext("When using IPv6, the target host must be an IPv6 address or hostname.");
 	}
 
-	if (!$input_errors) {
-		$host = $_REQUEST['host'];
-	}
-
 	$sourceip = $_REQUEST['sourceip'];
 	$ttl = $_REQUEST['ttl'];
 	$resolve = $_REQUEST['resolve'];
 	$useicmp = $_REQUEST['useicmp'];
 
-	if ($_POST) {
+	if ($_POST && !$input_errors) {
 		$do_traceroute = true;
 	}
 
@@ -135,7 +118,32 @@ if ($input_errors) {
 	print_input_errors($input_errors);
 }
 
-$form = new Form('Traceroute');
+/* Do the traceroute and show any error */
+if ($do_traceroute) {
+	$useicmpparam = isset($useicmp) ? "-I" : "";
+	$n = isset($resolve) ? "" : "-n";
+
+	$command = "/usr/sbin/traceroute";
+	if ($ipproto == "ipv6") {
+		$command .= "6";
+		$ifaddr = is_ipaddr($sourceip) ? $sourceip : get_interface_ipv6($sourceip);
+	} else {
+		$ifaddr = is_ipaddr($sourceip) ? $sourceip : get_interface_ip($sourceip);
+	}
+
+	if ($ifaddr && (is_ipaddr($host) || is_hostname($host))) {
+		$srcip = "-s " . escapeshellarg($ifaddr);
+	}
+
+	$cmd = "{$command} {$n} {$srcip} -w 2 {$useicmpparam} -m " . escapeshellarg($ttl) . " " . escapeshellarg($host);
+	$result = shell_exec($cmd);
+
+	if (!$result) {
+		print_info_box(sprintf(gettext('Error: %s could not be traced/resolved'), $host));
+	}
+}
+
+$form = new Form(false);
 
 $section = new Form_Section('Traceroute');
 
@@ -150,23 +158,23 @@ $section->addInput(new Form_Input(
 $section->addInput(new Form_Select(
 	'ipproto',
 	'IP Protocol',
-	$pconfig['ipproto'],
+	$ipproto,
 	array('ipv4' => 'IPv4', 'ipv6' => 'IPv6')
-))->setHelp('Select the protocol to use');
+))->setHelp('Select the protocol to use.');
 
 $section->addInput(new Form_Select(
 	'sourceip',
 	'Source Address',
-	$pconfig['sourceip'],
-	create_sourceaddresslist()
-))->setHelp('Select source address for the trace');
+	$sourceip,
+	array('any' => gettext('Any')) + get_possible_traffic_source_addresses(true)
+))->setHelp('Select source address for the trace.');
 
 $section->addInput(new Form_Select(
 	'ttl',
-	'Maximum nuber of hops',
+	'Maximum number of hops',
 	$ttl,
 	array_combine(range(1, MAX_TTL), range(1, MAX_TTL))
-))->setHelp('Select the maximum number of network hops to trace');
+))->setHelp('Select the maximum number of network hops to trace.');
 
 $section->addInput(new Form_Checkbox(
 	'resolve',
@@ -183,37 +191,24 @@ $section->addInput(new Form_Checkbox(
 ))->setHelp('By default, traceroute uses UDP but that may be blocked by some routers. Check this box to use ICMP instead, which may succeed. ');
 
 $form->add($section);
+
+$form->addGlobal(new Form_Button(
+	'Submit',
+	'Traceroute',
+	null,
+	'fa-rss'
+))->addClass('btn-primary');
+
 print $form;
 
 /* Show the traceroute results */
-if (!$input_errors && $do_traceroute) {
-
-	$useicmp = isset($_REQUEST['useicmp']) ? "-I" : "";
-	$n = isset($resolve) ? "" : "-n";
-
-	$command = "/usr/sbin/traceroute";
-	if ($ipproto == "ipv6") {
-		$command .= "6";
-		$ifaddr = is_ipaddr($sourceip) ? $sourceip : get_interface_ipv6($sourceip);
-	} else {
-		$ifaddr = is_ipaddr($sourceip) ? $sourceip : get_interface_ip($sourceip);
-	}
-
-	if ($ifaddr && (is_ipaddr($host) || is_hostname($host))) {
-		$srcip = "-s " . escapeshellarg($ifaddr);
-	}
-
-	$cmd = "{$command} {$n} {$srcip} -w 2 {$useicmp} -m " . escapeshellarg($ttl) . " " . escapeshellarg($host);
+if ($do_traceroute && $result) {
 ?>
 	<div class="panel panel-default">
-		<div class="panel-heading"><h2 class="panel-title">Results</h2></div>
+		<div class="panel-heading"><h2 class="panel-title"><?=gettext('Results')?></h2></div>
 		<div class="panel-body">
 <?php
-		if ($result = shell_exec($cmd)) {
-			print(nl2br($result));
-		} else {
-			print('Error: ' . $host . ' ' . gettext("could not be traced/resolved"));
-		}
+	print('<pre>' . $result . '</pre>');
 ?>
 		</div>
 	</div>

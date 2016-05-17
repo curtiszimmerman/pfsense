@@ -58,15 +58,15 @@
 
 ##|+PRIV
 ##|*IDENT=page-status-ipsec-sad
-##|*NAME=Status: IPsec: SAD
-##|*DESCR=Allow access to the 'Status: IPsec: SAD' page.
+##|*NAME=Status: IPsec: SADs
+##|*DESCR=Allow access to the 'Status: IPsec: SADs' page.
 ##|*MATCH=status_ipsec_sad.php*
 ##|-PRIV
 
 require("guiconfig.inc");
 require("ipsec.inc");
 
-$pgtitle = array(gettext("Status"), gettext("IPsec"), gettext("SAD"));
+$pgtitle = array(gettext("Status"), gettext("IPsec"), gettext("SADs"));
 $shortcut_section = "ipsec";
 include("head.inc");
 
@@ -85,8 +85,8 @@ if ($_GET['act'] == "del") {
 $tab_array = array();
 $tab_array[] = array(gettext("Overview"), false, "status_ipsec.php");
 $tab_array[] = array(gettext("Leases"), false, "status_ipsec_leases.php");
-$tab_array[] = array(gettext("SAD"), true, "status_ipsec_sad.php");
-$tab_array[] = array(gettext("SPD"), false, "status_ipsec_spd.php");
+$tab_array[] = array(gettext("SADs"), true, "status_ipsec_sad.php");
+$tab_array[] = array(gettext("SPDs"), false, "status_ipsec_spd.php");
 display_top_tabs($tab_array);
 
 if (count($sad)) {
@@ -135,7 +135,7 @@ if (count($sad)) {
 						$args .= "&amp;proto=" . rawurlencode($sa['proto']);
 						$args .= "&amp;spi=" . rawurlencode("0x" . $sa['spi']);
 					?>
-					<a class="btn btn-xs btn-danger" href="status_ipsec_sad.php?act=del&amp;<?=$args?>">Delete</a>
+					<a href="status_ipsec_sad.php?act=del&amp;<?=$args?>"><i class="fa fa-trash" title="<?=gettext("Remove this SPD Entry")?>"></i></a>
 				</td>
 			</tr>
 
@@ -149,6 +149,17 @@ if (count($sad)) {
 	print_info_box(gettext('No IPsec security associations.'));
 }
 
-print_info_box(gettext('You can configure your IPsec subsystem by clicking ') . '<a href="vpn_ipsec.php">' . gettext("here.") . '</a>');
-
+if (ipsec_enabled()) {
+?>
+<div class="infoblock">
+<?php
+} else {
+?>
+<div class="infoblock blockopen">
+<?php
+}
+print_info_box(sprintf(gettext('IPsec can be configured %1$shere%2$s.'), '<a href="vpn_ipsec.php">', '</a>'), 'info', false);
+?>
+</div>
+<?php
 include("foot.inc");

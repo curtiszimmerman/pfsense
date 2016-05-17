@@ -106,6 +106,16 @@ if ($debug) {
 	unlink_if_exists("{$g['tmp_path']}/alias_rename_log.txt");
 }
 
+$singular_types = array(
+	'host'	=> gettext("host"),
+	'network' => gettext("network"),
+	'port' => gettext("port"),
+	'url' => gettext("URL (IP)"),
+	'url_ports' => gettext("URL (Port)"),
+	'urltable' => gettext("URL Table (IP)"),
+	'urltable_ports' => gettext("URL Table (Port)"),
+);
+
 function alias_same_type($name, $type) {
 	global $config;
 
@@ -165,16 +175,10 @@ if ($_POST) {
 
 	do_input_validation($_POST, $reqdfields, $reqdfieldsn, $input_errors);
 
-	$x = is_validaliasname($_POST['name']);
-	if (!isset($x)) {
-		$input_errors[] = gettext("Reserved word used for alias name.");
-	} else if ($_POST['type'] == "port" && (getservbyname($_POST['name'], "tcp") || getservbyname($_POST['name'], "udp"))) {
-		$input_errors[] = gettext("Reserved word used for alias name.");
-	} else {
-		if (is_validaliasname($_POST['name']) == false) {
-			$input_errors[] = gettext("The alias name must be less than 32 characters long, may not consist of only numbers, and may only contain the following characters") . " a-z, A-Z, 0-9, _.";
-		}
+	if (!is_validaliasname($_POST['name'])) {
+		$input_errors[] = invalidaliasnamemsg($_POST['name']);
 	}
+
 	/* check for name conflicts */
 	foreach ($a_aliases as $key => $alias) {
 		if (($alias['name'] == $_POST['name']) && (empty($a_aliases[$id]) || ($key != $id))) {
@@ -186,7 +190,7 @@ if ($_POST) {
 	/* Check for reserved keyword names */
 	foreach ($reserved_keywords as $rk) {
 		if ($rk == $_POST['name']) {
-			$input_errors[] = sprintf(gettext("Cannot use a reserved keyword as alias name %s"), $rk);
+			$input_errors[] = sprintf(gettext("Cannot use a reserved keyword as an alias name: %s"), $rk);
 		}
 	}
 
@@ -214,9 +218,9 @@ if ($_POST) {
 			$alias['url'] = $_POST['address0'];
 			$alias['updatefreq'] = $_POST['address_subnet0'] ? $_POST['address_subnet0'] : 7;
 			if (!is_URL($alias['url']) || empty($alias['url'])) {
-				$input_errors[] = gettext("You must provide a valid URL.");
-			} elseif (!process_alias_urltable($alias['name'], $alias['url'], 0, true)) {
-				$input_errors[] = gettext("Unable to fetch usable data.");
+				$input_errors[] = gettext("A valid URL must be provided.");
+			} elseif (!process_alias_urltable($alias['name'], $alias['url'], 0, true, true)) {
+				$input_errors[] = gettext("Unable to fetch usable data from URL") . " " . htmlspecialchars($alias['url']);
 			}
 			if ($_POST["detail0"] <> "") {
 				if ((strpos($_POST["detail0"], "||") === false) && (substr($_POST["detail0"], 0, 1) != "|") && (substr($_POST["detail0"], -1, 1) != "|")) {
@@ -243,13 +247,13 @@ if ($_POST) {
 				unlink_if_exists($temp_filename);
 				$verify_ssl = isset($config['system']['checkaliasesurlcert']);
 				mkdir($temp_filename);
-				download_file($_POST['address' . $x], $temp_filename . "/aliases", $verify_ssl);
+				if (!download_file($_POST['address' . $x], $temp_filename . "/aliases", $verify_ssl)) {
+					continue;
+				}
 
 				/* if the item is tar gzipped then extract */
 				if (stristr($_POST['address' . $x], ".tgz")) {
 					process_alias_tgz($temp_filename);
-				} else if (stristr($_POST['address' . $x], ".zip")) {
-					process_alias_unzip($temp_filename);
 				}
 
 				if (!isset($alias['aliasurl'])) {
@@ -274,10 +278,10 @@ if ($_POST) {
 				}
 
 				if (file_exists("{$temp_filename}/aliases")) {
-					$address = parse_aliases_file("{$temp_filename}/aliases", $_POST['type'], 3000);
+					$address = parse_aliases_file("{$temp_filename}/aliases", $_POST['type'], 5000);
 					if ($address == null) {
 						/* nothing was found */
-						$input_errors[] = sprintf(gettext("You must provide a valid URL. Could not fetch usable data from '%s'."), $_POST['address' . $x]);
+						$input_errors[] = sprintf(gettext("A valid URL must be provided. Could not fetch usable data from '%s'."), $_POST['address' . $x]);
 					}
 					mwexec("/bin/rm -rf " . escapeshellarg($temp_filename));
 				} else {
@@ -365,7 +369,9 @@ if ($_POST) {
 						if (($_POST['type'] == "host") && $subnet_type) {
 							if ($subnet_type == 4) {
 								// For host type aliases, if the user enters an IPv4 subnet, expand it into a list of individual IPv4 addresses.
-								if (subnet_size($address_item) <= ($max_alias_addresses - $alias_address_count)) {
+								$subnet_size = subnet_size($address_item);
+								if ($subnet_size > 0 &&
+								    $subnet_size <= ($max_alias_addresses - $alias_address_count)) {
 									$rangeaddresses = subnetv4_expand($address_item);
 									foreach ($rangeaddresses as $rangeaddress) {
 										$input_addresses[] = $rangeaddress;
@@ -428,18 +434,18 @@ if ($_POST) {
 				}
 			} else if ($_POST['type'] == "port") {
 				if (!is_port($input_address) && !is_portrange($input_address)) {
-					$input_errors[] = $input_address . " " . gettext("is not a valid port or alias.");
+					$input_errors[] = sprintf(gettext("%s is not a valid port or alias."), $input_address);
 				}
 			} else if ($_POST['type'] == "host" || $_POST['type'] == "network") {
 				if (is_subnet($input_address) ||
 				    (!is_ipaddr($input_address) && !is_hostname($input_address))) {
-					$input_errors[] = sprintf(gettext('%1$s is not a valid %2$s address, FQDN or alias.'), $input_address, $_POST['type']);
+					$input_errors[] = sprintf(gettext('%1$s is not a valid %2$s address, FQDN or alias.'), $input_address, $singular_types[$_POST['type']]);
 				}
 			}
 			$tmpaddress = $input_address;
 			if ($_POST['type'] != "host" && is_ipaddr($input_address) && $input_address_subnet[$idx] <> "") {
 				if (!is_subnet($input_address . "/" . $input_address_subnet[$idx])) {
-					$input_errors[] = sprintf(gettext('%s/%s is not a valid subnet.'), $input_address, $input_address_subnet[$idx]);
+					$input_errors[] = sprintf(gettext('%1$s/%2$s is not a valid subnet.'), $input_address, $input_address_subnet[$idx]);
 				} else {
 					$tmpaddress .= "/" . $input_address_subnet[$idx];
 				}
@@ -557,7 +563,7 @@ $section_str = array(
 	'url_ports' => gettext("URL (Ports)"),
 	'urltable' => gettext("URL Table (IPs)"),
 	'urltable_ports' => gettext("URL Table (Ports)")
-	);
+);
 
 $btn_str = array(
 	'network' => gettext("Add Network"),
@@ -567,7 +573,7 @@ $btn_str = array(
 	'url_ports' => gettext("Add URL"),
 	'urltable' => gettext("Add URL Table"),
 	'urltable_ports' => gettext("Add URL Table")
-	);
+);
 
 $label_str = array(
 	'network' => gettext("Network or FQDN"),
@@ -577,28 +583,46 @@ $label_str = array(
 	'url_ports' => gettext("URL (Ports)"),
 	'urltable' => gettext("URL Table (IPs)"),
 	'urltable_ports' => gettext("URL Table (Ports)")
-	);
+);
+
+$special_cidr_usage_text = gettext("The value after the \"/\" is the update frequency in days.");
 
 $help = array(
-	'network' => "Networks are specified in CIDR format.  Select the CIDR mask that pertains to each entry. /32 specifies a single IPv4 host, /128 specifies a single IPv6 host, /24 specifies 255.255.255.0, /64 specifies a normal IPv6 network, etc. Hostnames (FQDNs) may also be specified, using a /32 mask for IPv4 or /128 for IPv6. You may also enter an IP range such as 192.168.1.1-192.168.1.254 and a list of CIDR networks will be derived to fill the range.",
-	'host' => "Enter as many hosts as you would like.  Hosts must be specified by their IP address or fully qualified domain name (FQDN). FQDN hostnames are periodically re-resolved and updated. If multiple IPs are returned by a DNS query, all are used. You may also enter an IP range such as 192.168.1.1-192.168.1.10 or a small subnet such as 192.168.1.16/28 and a list of individual IP addresses will be generated.",
-	'port' => "Enter as many ports as you wish.	 Port ranges can be expressed by separating with a colon.",
-	'url' => "Enter as many URLs as you wish. After saving we will download the URL and import the items into the alias. Use only with small sets of IP addresses (less than 3000).",
-	'url_ports' => "Enter as many URLs as you wish. After saving we will download the URL and import the items into the alias. Use only with small sets of Ports (less than 3000).",
-	'urltable' => "Enter a single URL containing a large number of IPs and/or Subnets. After saving we will download the URL and create a table file containing these addresses. This will work with large numbers of addresses (30,000+) or small numbers." . "<br /><b>The value after the \"/\" is the " .
-				  "update frequency in days.</b>",
-	'urltable_ports' => "Enter a single URL containing a list of Port numbers and/or Port ranges. After saving we will download the URL." . "<br /><b>The value after the \"/\" is the " .
-						 "update frequency in days.</b>"
+	'network' => gettext("Networks are specified in CIDR format. Select the CIDR mask that pertains to each entry. /32 specifies a single IPv4 host, /128 specifies a single IPv6 host, /24 specifies 255.255.255.0, /64 specifies a normal IPv6 network, etc. Hostnames (FQDNs) may also be specified, using a /32 mask for IPv4 or /128 for IPv6. An IP range such as 192.168.1.1-192.168.1.254 may also be entered and a list of CIDR networks will be derived to fill the range."),
+	'host' => gettext("Enter as many hosts as desired. Hosts must be specified by their IP address or fully qualified domain name (FQDN). FQDN hostnames are periodically re-resolved and updated. If multiple IPs are returned by a DNS query, all are used. An IP range such as 192.168.1.1-192.168.1.10 or a small subnet such as 192.168.1.16/28 may also be entered and a list of individual IP addresses will be generated."),
+	'port' => gettext("Enter as many ports as desired. Port ranges can be expressed by separating with a colon."),
+	'url' => gettext("Enter as many URLs as desired. After saving, the URLs will be downloaded and the items imported into the alias. Use only with small sets of IP addresses (less than 3000)."),
+	'url_ports' => gettext("Enter as many URLs as desired. After saving, the URLs will be downloaded and the items imported into the alias. Use only with small sets of Ports (less than 3000)."),
+	'urltable' => gettext("Enter a single URL containing a large number of IPs and/or Subnets. After saving, the URLs will be downloaded and a table file containing these addresses will be created. This will work with large numbers of addresses (30,000+) or small numbers.") .
+		"<br /><b>" . $special_cidr_usage_text . "</b>",
+	'urltable_ports' => gettext("Enter a single URL containing a list of Port numbers and/or Port ranges. After saving, the URL will be downloaded.") .
+		"<br /><b>" . $special_cidr_usage_text . "</b>",
+);
+
+// Tab type specific patterns.
+// Intentionally loose (valid character check only, no pattern recognition).
+// Can be tightened up with pattern recognition as desired for each tab type.
+// Network and host types allow an optional CIDR following the address or an address range using dash separator,
+// and there may be multiple items separated by spaces - "192.168.1.0/24 192.168.2.4-192.168.2.19"
+// On submit, strings like that are parsed and expanded into the appropriate individual entries and then validated.
+$pattern_str = array(
+	'network'			=> '[a-zA-Z0-9_:.-]+(/[0-9]+)?( [a-zA-Z0-9_:.-]+(/[0-9]+)?)*',	// Alias Name, Host Name, IP Address, FQDN, Network or IP Address Range
+	'host'				=> '[a-zA-Z0-9_:.-]+(/[0-9]+)?( [a-zA-Z0-9_:.-]+(/[0-9]+)?)*',	// Alias Name, Host Name, IP Address, FQDN
+	'port'				=> '[a-zA-Z0-9_:]+',	// Alias Name, Port Number, or Port Number Range
+	'url'				=> '.*',				// Alias Name or URL
+	'url_ports'			=> '.*',				// Alias Name or URL
+	'urltable'			=> '.*',				// Alias Name or URL
+	'urltable_ports'	=> '.*'					// Alias Name or URL
 );
 
 $types = array(
-	'host' => 'Host(s)',
-	'network' => 'Network(s)',
-	'port' => 'Port(s)',
-	'url' => 'URL (IPs)',
-	'url_ports' => 'URL (Ports)',
-	'urltable' => 'URL Table (IPs)',
-	'urltable_ports' => 'URL Table (Ports)',
+	'host'	=> gettext("Host(s)"),
+	'network' => gettext("Network(s)"),
+	'port' => gettext("Port(s)"),
+	'url' => gettext("URL (IPs)"),
+	'url_ports' => gettext("URL (Ports)"),
+	'urltable' => gettext("URL Table (IPs)"),
+	'urltable_ports' => gettext("URL Table (Ports)"),
 );
 
 if (empty($tab)) {
@@ -655,7 +679,7 @@ $section->addInput(new Form_Input(
 	'Description',
 	'text',
 	$pconfig['descr']
-))->setHelp('You may enter a description here for your reference (not parsed).');
+))->setHelp('A description may be entered here for administrative reference (not parsed).');
 
 $section->addInput(new Form_Select(
 	'type',
@@ -689,7 +713,13 @@ while ($counter < count($addresses)) {
 		list($address, $address_subnet) = explode("/", $addresses[$counter]);
 	} else {
 		$address = $addresses[$counter];
-		$address_subnet = "";
+		if (isset($pconfig['updatefreq'])) {
+			// Note: There is only 1 updatefreq possible.
+			// The alias types that use updatefreq only allow a single entry.
+			$address_subnet = $pconfig['updatefreq'];
+		} else {
+			$address_subnet = "";
+		}
 	}
 
 	$group = new Form_Group($counter == 0 ? $label_str[$tab]:'');
@@ -697,9 +727,9 @@ while ($counter < count($addresses)) {
 
 	$group->add(new Form_IpAddress(
 		'address' . $counter,
-		'Address',
+		$tab == 'port' ? 'Port':'Address',
 		$address
-	))->addMask('address_subnet' . $counter, $address_subnet)->setWidth(4)->setPattern('[0-9, a-z, A-Z and .');
+	))->addMask('address_subnet' . $counter, $address_subnet)->setWidth(4)->setPattern($pattern_str[$tab]);
 
 	$group->add(new Form_Input(
 		'detail' . $counter,
@@ -710,8 +740,10 @@ while ($counter < count($addresses)) {
 
 	$group->add(new Form_Button(
 		'deleterow' . $counter,
-		'Delete'
-	))->removeClass('btn-primary')->addClass('btn-warning');
+		'Delete',
+		null,
+		'fa-trash'
+	))->addClass('btn-warning');
 
 	$section->add($group);
 	$counter++;
@@ -719,8 +751,10 @@ while ($counter < count($addresses)) {
 
 $form->addGlobal(new Form_Button(
 	'addrow',
-	$btn_str[$tab]
-))->removeClass('btn-primary')->addClass('btn-success addbtn');
+	$btn_str[$tab],
+	null,
+	'fa-plus'
+))->addClass('btn-success addbtn');
 
 $form->add($section);
 
@@ -740,27 +774,38 @@ events.push(function() {
 
 		disable_subnets = (tab == 'host') || (tab == 'port') || (tab == 'url') || (tab == 'url_ports');
 
+		// Enable/disable address_subnet so its value gets POSTed or not, as appropriate.
 		$("[id^='address_subnet']").prop("disabled", disable_subnets);
 
+		// Show or hide the slash plus address_subnet field so the user does not even see it if it is not relevant.
+		hideMask('address_subnet', disable_subnets);
+
 		// Set the help text to match the tab
-		var helparray = <?php echo json_encode($help); ?>;
+		var helparray = <?=json_encode($help);?>;
 		$('.helptext').html(helparray[tab]);
 
 		// Set the section heading by tab type
-		var sectionstr = <?php echo json_encode($section_str); ?>;
+		var sectionstr = <?=json_encode($section_str);?>;
 		$('.panel-title:last').text(sectionstr[tab]);
 
-		var buttonstr = <?php echo json_encode($btn_str); ?>;
+		var buttonstr = <?=json_encode($btn_str);?>;
 		$('.btn-success').prop('value', buttonstr[tab]);
+		$('.btn-success').html('<i class="fa fa-plus icon-embed-btn"></i>' + buttonstr[tab]);
 
 		// Set the input field label by tab
-		var labelstr = <?php echo json_encode($label_str); ?>;
+		var labelstr = <?=json_encode($label_str);?>;
 		$('.repeatable:first').find('label').text(labelstr[tab]);
+
+		// Set the input field pattern by tab type
+		var patternstr = <?=json_encode($pattern_str);?>;
+		for (i = 0; i < <?=$counter;?>; i++) {
+			$('#address' + i).prop('pattern', patternstr[tab]);
+		}
 
 		// Hide and disable rows other than the first
 		hideRowsAfter(1, (tab == 'urltable') || (tab == 'urltable_ports'));
 
-		// The add button and delete buttons must not show on  URL Table IP or URL table ports
+		// The add button and delete buttons must not show on URL Table IP or URL table ports
 		if ((tab == 'urltable') || (tab == 'urltable_ports')) {
 			hideClass('addbtn', true);
 			$('[id^=deleterow]').hide();

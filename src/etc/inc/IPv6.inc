@@ -843,6 +843,11 @@ class Net_IPv6
         if (strstr($ip, '.')) {
 
             $pos      = strrpos($ip, ':');
+
+            if(false === $pos) {
+                return array("", $ip);
+            }
+
             $ip{$pos} = '_';
             $ipPart   = explode('_', $ip);
 
@@ -896,7 +901,7 @@ class Net_IPv6
 
             for ($i = 0; $i < count($ipv6); $i++) {
 
-                if(4 < strlen($ipv6[$i])) {
+                if ((4 < strlen($ipv6[$i])) || (0 == strlen($ipv6[$i]))) {
 
                     return false;
 
@@ -1034,7 +1039,7 @@ class Net_IPv6
      *
      * @return String the binary representation
      * @access private
-     @ @since 1.1.0
+     * @since 1.1.0
      */
     static function _ip2Bin($ip)
     {
@@ -1065,7 +1070,7 @@ class Net_IPv6
      *
      * @return String the uncompressed Hex representation
      * @access private
-     @ @since 1.1.0
+     * @since 1.1.0
      */
     static function _bin2Ip($bin)
     {

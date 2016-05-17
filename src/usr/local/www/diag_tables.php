@@ -68,10 +68,32 @@ require_once("guiconfig.inc");
 
 // Set default table
 $tablename = "sshlockout";
-$bogons = false;
 
 if ($_REQUEST['type']) {
 	$tablename = $_REQUEST['type'];
+}
+
+// Gather selected alias metadata.
+if (isset($config['aliases']['alias'])) {
+	foreach ($config['aliases']['alias'] as $alias) {
+		if ( $alias['name'] == $tablename ) {
+			$tmp = array();
+			$tmp['type'] = $alias['type'];
+			$tmp['name'] = $alias['name'];
+			$tmp['url']  = $alias['url'];
+			$tmp['freq'] = $alias['updatefreq'];
+			break;
+		}
+	}
+}
+
+# Determine if selected alias is either a bogons or URL table.
+if (($tablename == "bogons") || ($tablename == "bogonsv6")) {
+	$bogons = true;
+} else if (preg_match('/urltable/i', $tmp['type'])) {
+	$urltable = true;
+} else {
+	$bogons = $urltable = false;
 }
 
 if ($_REQUEST['delete']) {
@@ -82,7 +104,7 @@ if ($_REQUEST['delete']) {
 	exit;
 }
 
-if ($_POST['deleteall']) {
+if ($_POST['clearall']) {
 	exec("/sbin/pfctl -t " . escapeshellarg($tablename) . " -T show", $entries);
 	if (is_array($entries)) {
 		foreach ($entries as $entryA) {
@@ -90,29 +112,37 @@ if ($_POST['deleteall']) {
 			exec("/sbin/pfctl -t " . escapeshellarg($tablename) . " -T delete " . escapeshellarg($entry), $delete);
 		}
 	}
+	unset($entries);
 }
 
-if (($tablename == "bogons") || ($tablename == "bogonsv6")) {
-	$bogons = true;
+if ($_POST['Download'] && ($bogons || $urltable)) {
 
-	if ($_POST['Download']) {
-		mwexec_bg("/etc/rc.update_bogons.sh now");
-		$maxtimetowait = 0;
-		$loading = true;
-		while ($loading == true) {
-			$isrunning = `/bin/ps awwwux | /usr/bin/grep -v grep | /usr/bin/grep bogons`;
-			if ($isrunning == "") {
-				$loading = false;
-			}
-			$maxtimetowait++;
-			if ($maxtimetowait > 89) {
-				$loading = false;
-			}
-			sleep(1);
+	if ($bogons) {				// If selected table is either bogons or bogonsv6.
+		$mwexec_bg_cmd = '/etc/rc.update_bogons.sh now';
+		$table_type = 'bogons';
+		$db_name = 'bogons';
+	} else if ($urltable) {		//  If selected table is a URL table alias.
+		$mwexec_bg_cmd = '/etc/rc.update_urltables now forceupdate ' . $tablename;
+		$table_type = 'urltables';
+		$db_name = $tablename;
+	}
+
+	mwexec_bg($mwexec_bg_cmd);
+	$maxtimetowait = 0;
+	$loading = true;
+	while ($loading == true) {
+		$isrunning = `/bin/ps awwwux | /usr/bin/grep -v grep | /usr/bin/grep $table_type`;
+		if ($isrunning == "") {
+			$loading = false;
 		}
-		if ($maxtimetowait < 90) {
-			$savemsg = gettext("The bogons database has been updated.");
+		$maxtimetowait++;
+		if ($maxtimetowait > 89) {
+			$loading = false;
 		}
+		sleep(1);
+	}
+	if ($maxtimetowait < 90) {
+		$savemsg = sprintf(gettext("The %s database has been updated."), $db_name);
 	}
 }
 
@@ -122,27 +152,108 @@ exec("/sbin/pfctl -sT", $tables);
 include("head.inc");
 
 if ($savemsg) {
-	print_info_box($savemsg);
+	print_info_box($savemsg, 'success');
 }
 
-$form = new Form('Show');
+if ($tablename == "webConfiguratorlockout") {
+	$displayname = gettext("webConfigurator Lockout Table");
+} else {
+	$displayname = sprintf(gettext("%s Table"), ucfirst($tablename));
+}
 
-$section = new Form_Section('Table to display');
+$form = new Form(false);
 
-$section->addInput(new Form_Select(
+$section = new Form_Section('Table to Display');
+$group = new Form_Group("Table");
+
+$group->add(new Form_Select(
 	'type',
-	'Table',
+	null,
 	$tablename,
 	array_combine($tables, $tables)
 ));
 
+if ($bogons || $urltable || !empty($entries)) {
+	if ($bogons || $urltable) {
+		$group->add(new Form_Button(
+			'Download',
+			'Update',
+			null,
+			'fa-refresh'
+		))->addClass('btn-success btn-sm');
+	} elseif (!empty($entries)) {
+		$group->add(new Form_Button(
+			'clearall',
+			'Empty Table',
+			null,
+			'fa-trash'
+		))->addClass('btn-danger btn-sm');
+	}
+}
+
+$section->add($group);
 $form->add($section);
 print $form;
+
+if ($bogons || $urltable || !empty($entries)) {
+?>
+<div>
+	<div class="infoblock blockopen">
+<?php
+	if ($bogons) {
+		$table_file = '/etc/' . escapeshellarg($tablename);
+	} else if ($urltable) {
+		$table_file = '/var/db/aliastables/' . escapeshellarg($tablename) . '.txt';
+	} else {
+		$table_file = '';
+	}
+
+	$datestrregex = '(Mon|Tue|Wed|Thr|Fri|Sat|Sun).* GMT';
+	$datelineregex = 'last.*' . $datestrregex;
+
+	$last_updated = exec('/usr/bin/grep -i -m 1 -E "^# ' . $datelineregex . '" ' . $table_file . '|/usr/bin/grep -i -m 1 -E -o "' . $datestrregex . '"');
+
+	if ($last_updated != "") {
+		$last_update_msg = sprintf(gettext("Table last updated on %s."), $last_updated);
+	} else {
+		$last_update_msg = gettext("Date of last update of table is unknown.");
+	}
+
+	$records_count_msg = sprintf(gettext("%s records."), number_format(count($entries), 0, gettext("."), gettext(",")));
+
+	# Display up to 10 comment lines (lines that begin with '#').
+	unset($comment_lines);
+	$res = exec('/usr/bin/grep -i -m 10 -E "^#" ' . $table_file, $comment_lines);
+
+	foreach ($comment_lines as $comment_line) {
+		$table_comments .= "$comment_line" . "<br />";
+	}
+
+	if ($table_comments) {
+		print_info_box($last_update_msg . " &nbsp; &nbsp; " . $records_count_msg . "<br />" .
+		'<span style="display:none" class="infoblock">' . ' ' . gettext("Hide table comments.") . '<br />' . $table_comments . '</span>' .
+		'<span style="display:none"   id="showtblcom">' . ' ' . gettext("Show table comments.") . '</span>' .
+		'' , 'info', false);
+	} else {
+		print_info_box($last_update_msg . "&nbsp; &nbsp; " . $records_count_msg, 'info', false);
+	}
+?>
+	</div>
+</div>
+<?php
+}
 ?>
 
 <script type="text/javascript">
 //<![CDATA[
 events.push(function() {
+
+	$('#showtblcom').show();
+
+	$('[id^="showinfo1"]').click(function() {
+			$('#showtblcom').toggle();
+	});
+
 	$('a[data-entry]').on('click', function() {
 		var el = $(this);
 
@@ -159,69 +270,68 @@ events.push(function() {
 				},
 		});
 	});
+
+	// Auto-submit the form on table selector change
+	$('#type').on('change', function() {
+        $('form').submit();
+    });
 });
 //]]>
 </script>
 
-<div class="table-responsive">
-	<table class="table table-striped table-hover table-condensed">
-		<thead>
-			<tr>
-				<th><?=gettext("IP Address")?></th>
-				<th></th>
-			</tr>
-		</thead>
-		<tbody>
+<?php
+if (empty($entries)) {
+	print_info_box(gettext("No entries exist in this table."), 'warning', false);
+} else {
+?>
+<div class="panel panel-default">
+	<div class="panel-heading"><h2 class="panel-title"><?=$displayname?></h2></div>
+	<div class="panel-body">
+		<div class="table-responsive">
+			<table class="table table-striped table-hover table-condensed">
+				<thead>
+					<tr>
+						<th><?=gettext("IP Address")?></th>
+						<th></th>
+					</tr>
+				</thead>
+				<tbody>
+<?php
+		// This is a band-aid for a yet to be root caused performance issue with large tables.  Suspected is css and/or sorting.
+ 		if (count($entries) > 3000) {
+			print "<tr><td colspan='2'><pre>";
+			foreach ($entries as $entry) {
+				$entry = trim($entry);
+					print $entry . "\n";
+			}
+			print "</pre></td></tr>";
+		} else {
+?>
 <?php
 		foreach ($entries as $entry):
 			$entry = trim($entry);
 ?>
-			<tr>
-				<td>
-					<?=$entry?>
-				</td>
-				<td>
-					<?php if (!$bogons): ?>
-						<a class="btn btn-xs btn-default" data-entry="<?=htmlspecialchars($entry)?>">Remove</a>
-					<?php endif ?>
-				</td>
-			</tr>
+					<tr>
+						<td>
+							<?=$entry?>
+						</td>
+						<td>
+							<?php if (!$bogons && !$urltable): ?>
+								<a style="cursor: pointer;" data-entry="<?=htmlspecialchars($entry)?>">
+									<i class="fa fa-trash" title="<?= gettext("Remove this entry") ?>"></i>
+								</a>
+							<?php endif ?>
+						</td>
+					</tr>
 <?php endforeach ?>
-		</tbody>
-	</table>
+<?php } ?>
+				</tbody>
+			</table>
+		</div>
+	</div>
 </div>
-<?php if (empty($entries)): ?>
-	<div class="alert alert-warning" role="alert">No entries exist in this table</div>
-<?php endif ?>
 
 <?php
-
-if ($bogons || !empty($entries)) {
-	$form = new Form;
-
-	$section = new Form_Section('Table Data');
-
-	if ($bogons) {
-		$last_updated = exec('/usr/bin/grep -i -m 1 -E "^# last updated" /etc/' . escapeshellarg($tablename) . '|cut -d"(" -f2|tr -d ")" ');
-
-		$section->addInput(new Form_StaticText(
-			'Last update',
-			$last_updated
-		));
-
-		$section->addInput(new Form_Button(
-			'Download',
-			'Download'
-		))->setHelp('Download the latest bogon data')->addClass('btn-warning');
-	} elseif (!empty($entries)) {
-		$section->addInput(new Form_Button(
-			'deleteall',
-			'Clear Table'
-		))->setHelp('Clear all of the entries in this table')->addClass('btn-danger');
-	}
-
-	$form->add($section);
-	print $form;
 }
 
 include("foot.inc");

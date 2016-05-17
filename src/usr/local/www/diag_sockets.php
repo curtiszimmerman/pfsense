@@ -67,11 +67,14 @@ $pgtitle = array(gettext("Diagnostics"), gettext("Sockets"));
 include('head.inc');
 
 $showAll = isset($_GET['showAll']);
-$showAllText = $showAll ? "Show only listening sockets" : "Show all socket connections";
+$showAllText = $showAll ? gettext("Show only listening sockets") : gettext("Show all socket connections");
 $showAllOption = $showAll ? "" : "?showAll";
 
 ?>
-<input class="btn btn-info btn-sm" type="button" value="<?=$showAllText?>" onclick="window.location.href='diag_sockets.php<?=$showAllOption?>'"/>
+<button class="btn btn-info btn-sm" type="button" value="<?=$showAllText?>" onclick="window.location.href='diag_sockets.php<?=$showAllOption?>'">
+	<i class="fa fa-<?= ($showAll) ? 'minus-circle' : 'plus-circle' ; ?> icon-embed-btn"></i>
+	<?=$showAllText?>
+</button>
 <br />
 <br />
 
@@ -90,7 +93,7 @@ $showAllOption = $showAll ? "" : "?showAll";
 		$name = ($tabindex == 0 ? 'IPv4' : 'IPv6');
 ?>
 <div class="panel panel-default">
-	<div class="panel-heading"><h2 class="panel-title"><?=$name?> <?=gettext("system socket information")?></h2></div>
+	<div class="panel-heading"><h2 class="panel-title"><?=$name?> <?=gettext("System Socket Information")?></h2></div>
 	<div class="panel-body">
 		<div class="table table-responsive">
 			<table class="table table-striped table-hover table-condensed sortable-theme-bootstrap" data-sortable>
@@ -133,7 +136,7 @@ $showAllOption = $showAll ? "" : "?showAll";
 ?>
 
 <div>
-<div id="infoblock">
+<div class="infoblock">
 <?php
 print_info_box(gettext('Socket information - explanation.') . '<br /><br />' .
 gettext('This page shows the output for the commands: "sockstat -4lL" and "sockstat -6lL".' . '<br />' .
@@ -148,7 +151,7 @@ gettext('This page shows the output for the commands: "sockstat -4lL" and "socks
 				'<dt>ADDRESS</dt>		<dd>(UNIX sockets only) For bound sockets, this is the file-name of the socket. For other sockets, it is the name, PID and file descriptor number of the peer, or "(none)" if the socket is neither bound nor connected.</dd>' .
 				'<dt>LOCAL ADDRESS</dt> <dd>(Internet sockets only) The address the local end of the socket is bound to (see getsockname(2)).</dd>' .
 				'<dt>FOREIGN ADDRESS</dt><dd>(Internet sockets only) The address the foreign end of the socket is bound to (see getpeername(2)).</dd>' .
-			'</dl>'), info);
+			'</dl>'), 'info', false);
 ?>
 </div>
 </div>

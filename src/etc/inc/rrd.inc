@@ -1,8 +1,10 @@
 <?php
-/* $Id$ */
 /*
 	rrd.inc
+
+	part of pfSense (https://www.pfsense.org)
 	Copyright (C) 2010 Seth Mos <seth.mos@dds.nl>
+	Copyright (c) 2010-2016 Electric Sheep Fencing, LLC.
 	All rights reserved.
 
 	Redistribution and use in source and binary forms, with or without
@@ -12,23 +14,62 @@
 	   this list of conditions and the following disclaimer.
 
 	2. Redistributions in binary form must reproduce the above copyright
-	   notice, this list of conditions and the following disclaimer in the
-	   documentation and/or other materials provided with the distribution.
+	   notice, this list of conditions and the following disclaimer in
+	   the documentation and/or other materials provided with the
+	   distribution.
 
-	THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
-	INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
-	AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
-	AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
-	OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-	SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-	INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-	CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-	ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-	POSSIBILITY OF SUCH DAMAGE.
+	3. All advertising materials mentioning features or use of this software
+	   must display the following acknowledgment:
+	   "This product includes software developed by the pfSense Project
+	   for use in the pfSense® software distribution. (http://www.pfsense.org/).
 
-  */
+	4. The names "pfSense" and "pfSense Project" must not be used to
+	   endorse or promote products derived from this software without
+	   prior written permission. For written permission, please contact
+	   coreteam@pfsense.org.
+
+	5. Products derived from this software may not be called "pfSense"
+	   nor may "pfSense" appear in their names without prior written
+	   permission of the Electric Sheep Fencing, LLC.
+
+	6. Redistributions of any form whatsoever must retain the following
+	   acknowledgment:
+
+	"This product includes software developed by the pfSense Project
+	for use in the pfSense software distribution (http://www.pfsense.org/).
+
+	THIS SOFTWARE IS PROVIDED BY THE pfSense PROJECT ``AS IS'' AND ANY
+	EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+	IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+	PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE pfSense PROJECT OR
+	ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+	SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+	NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+	LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+	HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+	STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+	ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
+	OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
 
 /* include all configuration functions */
+
+global $rrd_graph_list;
+$rrd_graph_list = array("eighthour", "day", "week", "month", "quarter", "year", "fouryear");
+global $rrd_period_list;
+$rrd_period_list = array("absolute" => gettext("Absolute Timespans"), "current" => gettext("Current Period"), "previous" => gettext("Previous Period"));
+global $rrd_graph_length_list;
+$rrd_graph_length_list = array(
+	"eighthour" => 28800,
+	"day" => 86400,
+	"week" => 604800,
+	"month" => 2678400,
+	"quarter" => 7948800,
+	"year" => 31622400,
+	"fouryear" => 126230400);
+global $rrd_style_list;
+$rrd_style_list = array('inverse' => gettext('Inverse'),
+		'absolute' => gettext('Absolute'));
 
 function dump_rrd_to_xml($rrddatabase, $xmldumpfile) {
 	$rrdtool = "/usr/bin/nice -n20 /usr/local/bin/rrdtool";
@@ -57,7 +98,7 @@ function restore_rrd() {
 		unset($rrdrestore);
 		$_gb = exec("cd /;LANG=C /usr/bin/tar -tf {$g['cf_conf_path']}/rrd.tgz", $rrdrestore, $rrdreturn);
 		if ($rrdreturn != 0) {
-			log_error("RRD restore failed exited with $rrdreturn, the error is: $rrdrestore\n");
+			log_error(sprintf(gettext('RRD restore failed exited with %1$s, the error is: %2$s'), $rrdreturn, $rrdrestore));
 			return;
 		}
 		foreach ($rrdrestore as $xml_file) {
@@ -68,12 +109,12 @@ function restore_rrd() {
 			file_put_contents("{$g['tmp_path']}/rrd_restore", $xml_file);
 			$_gb = exec("cd /;LANG=C /usr/bin/tar -xf {$g['cf_conf_path']}/rrd.tgz -T {$g['tmp_path']}/rrd_restore");
 			if (!file_exists("/{$xml_file}")) {
-				log_error("Could not extract {$xml_file} RRD xml file from archive!");
+				log_error(sprintf(gettext("Could not extract %s RRD xml file from archive!"), $xml_file));
 				continue;
 			}
 			$_gb = exec("$rrdtool restore -f '/{$xml_file}' '{$rrd_file}'", $output, $status);
 			if ($status) {
-				log_error("rrdtool restore -f '{$xml_file}' '{$rrd_file}' failed returning {$status}.");
+				log_error(sprintf(gettext("rrdtool restore -f '%1\$s' '%2\$s' failed returning %3\$s."), $xml_file, $rrd_file, $status));
 				continue;
 			}
 			unset($output);
@@ -471,17 +512,17 @@ function enable_rrd_graphing() {
 				switch ($altq->GetBwscale()) {
 					case "Gb":
 						$factor = 1024 * 1024 * 1024;
-							break;
+						break;
 					case "Mb":
-							$factor = 1024 * 1024;
-							break;
+						$factor = 1024 * 1024;
+						break;
 					case "Kb":
-							$factor = 1024;
-							break;
+						$factor = 1024;
+						break;
 					case "b":
 					default:
-							$factor = 1;
-							break;
+						$factor = 1;
+						break;
 				}
 				$qbandwidth = $altq->GetBandwidth() * $factor;
 				if ($qbandwidth <= 0) {
@@ -867,7 +908,7 @@ function enable_rrd_graphing() {
 			/* set up the ntpd rrd file */
 			if (!file_exists("$rrddbpath$ntpd")) {
 				$rrdcreate = "$rrdtool create $rrddbpath$ntpd --step $rrdntpdinterval ";
-				$rrdcreate .= "DS:offset:GAUGE:$ntpdvalid:0:1000 ";
+				$rrdcreate .= "DS:offset:GAUGE:$ntpdvalid:-1000:1000 ";
 				$rrdcreate .= "DS:sjit:GAUGE:$ntpdvalid:0:1000 ";
 				$rrdcreate .= "DS:cjit:GAUGE:$ntpdvalid:0:1000 ";
 				$rrdcreate .= "DS:wander:GAUGE:$ntpdvalid:0:1000 ";
@@ -938,7 +979,7 @@ function enable_rrd_graphing() {
 
 					/* enter UNKNOWN values in the RRD so it knows we rebooted. */
 					if (platform_booting()) {
-						mwexec("$rrdtool update $rrddbpath$dhcpif$dhcpd N:U:U:U:U:U:U:U:U");
+						mwexec("$rrdtool update $rrddbpath$dhcpif$dhcpd N:U:U:U");
 					}
 
 					$rrdupdatesh .= "\n";
@@ -960,14 +1001,15 @@ for sock in {$g['varrun_path']}/dpinger_*.sock; do
 		continue
 	fi
 
-	gw=\$(/usr/bin/nc -U \$sock | awk '{ print \$1 }')
-
-	if [ -z "\$gw" ]; then
+	t=\$(/usr/bin/nc -U \$sock)
+	if [ -z "\$t" ]; then
 		continue
 	fi
 
-	delay=\$(/usr/bin/nc -U \$sock | awk '{ print \$2 }')
-	loss=\$(/usr/bin/nc -U \$sock | awk '{ print \$4 }')
+	gw=\$(echo "\$t" | awk '{ print \$1 }')
+	delay=\$(echo "\$t" | awk '{ print \$2 }')
+	stddev=\$(echo "\$t" | awk '{ print \$3 }')
+	loss=\$(echo "\$t" | awk '{ print \$4 }')
 
 	if echo "\$loss" | grep -Eqv '^[0-9]+\$'; then
 		loss="U"
@@ -975,23 +1017,30 @@ for sock in {$g['varrun_path']}/dpinger_*.sock; do
 	if echo "\$delay" | grep -Eqv '^[0-9]+\$'; then
 		delay="U"
 	else
-		# Convert delay to millisecond
+		# Convert delay from microseconds to seconds
 		delay=\$(echo "scale=7; \$delay / 1000 / 1000" | /usr/bin/bc)
+	fi
+	if echo "\$stddev" | grep -Eqv '^[0-9]+\$'; then
+		stddev="U"
+	else
+		# Convert stddev from microseconds to seconds
+		stddev=\$(echo "scale=7; \$stddev / 1000 / 1000" | /usr/bin/bc)
 	fi
 
 	if [ ! -f {$rrddbpath}\$gw-quality.rrd ]; then
 		{$rrdtool} create {$rrddbpath}\$gw-quality.rrd --step 60 \\
 		DS:loss:GAUGE:120:0:100 \\
 		DS:delay:GAUGE:120:0:100000 \\
+		DS:stddev:GAUGE:120:0:100000 \\
 		RRA:AVERAGE:0.5:1:1200 \\
 		RRA:AVERAGE:0.5:5:720 \\
 		RRA:AVERAGE:0.5:60:1860 \\
 		RRA:AVERAGE:0.5:1440:2284
 
-		{$rrdtool} update {$rrddbpath}\$gw-quality.rrd -t loss:delay N:U:U
+		{$rrdtool} update {$rrddbpath}\$gw-quality.rrd -t loss:delay:stddev N:U:U:U
 	fi
 
-	{$rrdtool} update {$rrddbpath}\$gw-quality.rrd -t loss:delay N:\$loss:\$delay
+	{$rrdtool} update {$rrddbpath}\$gw-quality.rrd -t loss:delay:stddev N:\$loss:\$delay:\$stddev
 done
 
 EOD;
@@ -1021,7 +1070,9 @@ EOD;
 
 	$databases = glob("{$rrddbpath}/*.rrd");
 	foreach ($databases as $database) {
-		chown($database, "nobody");
+		if (file_exists($database)) {
+			chown($database, "nobody");
+		}
 	}
 
 	if (platform_booting()) {

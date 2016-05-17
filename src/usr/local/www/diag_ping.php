@@ -74,18 +74,6 @@ $do_ping = false;
 $host = '';
 $count = DEFAULT_COUNT;
 
-function create_sourceaddresslist() {
-	$sourceips = get_possible_traffic_source_addresses(true);
-
-	$list = array("" => 'Default');
-
-	foreach ($sourceips as $sipvalue => $sipname) {
-		$list[$sipvalue] = $sipname;
-	}
-
-	return $list;
-}
-
 if ($_POST || $_REQUEST['host']) {
 	unset($input_errors);
 	unset($do_ping);
@@ -156,7 +144,7 @@ if ($do_ping) {
 	$result = shell_exec($cmd);
 
 	if (empty($result)) {
-		$input_errors[] = "Host \"" . $host . "\" did not respond or could not be resolved.";
+		$input_errors[] = sprintf(gettext('Host "%s" did not respond or could not be resolved.'), $host);
 	}
 
 }
@@ -167,7 +155,7 @@ if ($input_errors) {
 	print_input_errors($input_errors);
 }
 
-$form = new Form('Ping');
+$form = new Form(false);
 
 $section = new Form_Section('Ping');
 
@@ -190,24 +178,32 @@ $section->addInput(new Form_Select(
 	'sourceip',
 	'Source address',
 	$sourceip,
-	create_sourceaddresslist()
-))->setHelp('Select source address for the ping');
+	array('' => gettext('Automatically selected (default)')) + get_possible_traffic_source_addresses(true)
+))->setHelp('Select source address for the ping.');
 
 $section->addInput(new Form_Select(
 	'count',
 	'Maximum number of pings',
 	$count,
 	array_combine(range(1, MAX_COUNT), range(1, MAX_COUNT))
-))->setHelp('Select the maximum number of pings');
+))->setHelp('Select the maximum number of pings.');
 
 $form->add($section);
+
+$form->addGlobal(new Form_Button(
+	'Submit',
+	'Ping',
+	null,
+	'fa-rss'
+))->addClass('btn-primary');
+
 print $form;
 
 if ($do_ping && !empty($result) && !$input_errors) {
 ?>
 	<div class="panel panel-default">
 		<div class="panel-heading">
-			<h2 class="panel-title">Results</h2>
+			<h2 class="panel-title"><?=gettext('Results')?></h2>
 		</div>
 
 		<div class="panel-body">

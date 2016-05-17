@@ -83,13 +83,11 @@ require("captiveportal.inc");
 global $cpzone;
 global $cpzoneid;
 
-$pgtitle = array(gettext("Services"), gettext("Captive Portal"), gettext("Edit MAC address rules"));
-$shortcut_section = "captiveportal";
-
 $cpzone = $_GET['zone'];
 if (isset($_POST['zone'])) {
 	$cpzone = $_POST['zone'];
 }
+$cpzone = strtolower($cpzone);
 
 if (empty($cpzone) || empty($config['captiveportal'][$cpzone])) {
 	header("Location: services_captiveportal_zones.php");
@@ -100,6 +98,9 @@ if (!is_array($config['captiveportal'])) {
 	$config['captiveportal'] = array();
 }
 $a_cp =& $config['captiveportal'];
+
+$pgtitle = array(gettext("Services"), gettext("Captive Portal"), $a_cp[$cpzone]['zone'], gettext("MACs"), gettext("Edit"));
+$shortcut_section = "captiveportal";
 
 if (is_numericint($_GET['id'])) {
 	$id = $_GET['id'];
@@ -139,7 +140,7 @@ if ($_POST) {
 			$iflist = get_interface_list();
 			foreach ($iflist as $if) {
 				if ($_POST['mac'] == strtolower($if['mac'])) {
-					$input_errors[] = sprintf(gettext("The MAC address %s belongs to a local interface, you cannot use it here."), $_POST['mac']);
+					$input_errors[] = sprintf(gettext("The MAC address %s belongs to a local interface. It cannot be used here."), $_POST['mac']);
 					break;
 				}
 			}
@@ -227,13 +228,13 @@ if ($input_errors) {
 
 $form = new Form();
 
-$section = new Form_Section('Edit MAC address rules');
+$section = new Form_Section('Edit MAC Address Rules');
 
 $section->addInput(new Form_Select(
 	'action',
 	'Action',
 	strtolower($pconfig['action']),
-	array('pass' => 'Pass', 'block' => 'Block')
+	array('pass' => gettext('Pass'), 'block' => gettext('Block'))
 ))->setHelp('Choose what to do with packets coming from this MAC address.');
 
 $macaddress = new Form_Input(
@@ -246,16 +247,25 @@ $macaddress = new Form_Input(
 
 $btnmymac = new Form_Button(
 	'btnmymac',
-	'Copy My MAC'
+	'Copy My MAC',
+	null,
+	'fa-clone'
 	);
 
-$btnmymac->removeClass('btn-primary')->addClass('btn-success btn-sm');
+$btnmymac->setAttribute('type','button')->removeClass('btn-primary')->addClass('btn-success btn-sm');
 
-$group = new Form_Group('MAC controls');
+$group = new Form_Group('MAC Address');
 $group->add($macaddress);
 $group->add($btnmymac);
-$group->setHelp('MAC address (6 hex octets separated by colons)');
+$group->setHelp('6 hex octets separated by colons');
 $section->add($group);
+
+$section->addInput(new Form_Input(
+	'descr',
+	'Description',
+	'text',
+	$pconfig['descr']
+))->setHelp('A description may be entered here for administrative reference (not parsed)');
 
 $section->addInput(new Form_Input(
 	'bw_up',
@@ -303,9 +313,6 @@ print($form);
 <script type="text/javascript">
 //<![CDATA[
 events.push(function() {
-	// Make the ‘Copy My MAC’ button a plain button, not a submit button
-	$("#btnmymac").prop('type','button');
-
 	// On click, copy the hidden 'mymac' text to the 'mac' input
 	$("#btnmymac").click(function() {
 		$('#mac').val('<?=$mymac?>');

@@ -56,14 +56,24 @@
 
 ##|+PRIV
 ##|*IDENT=page-diagnostics-smart
-##|*NAME=Diagnostics: S.M.A.R.T. Monitor Tools
-##|*DESCR=Allow access to the 'Diagnostics: S.M.A.R.T. Monitor Tools' page.
+##|*NAME=Diagnostics: S.M.A.R.T. Status
+##|*DESCR=Allow access to the 'Diagnostics: S.M.A.R.T. Status' page.
 ##|*MATCH=diag_smart.php*
 ##|-PRIV
 
 require("guiconfig.inc");
 
-$pgtitle = array(gettext("Diagnostics"), gettext("S.M.A.R.T. Monitor Tools"));
+// What page, aka. action is being wanted
+// If they "get" a page but don't pass all arguments, smartctl will throw an error
+$action = (isset($_POST['action']) ? $_POST['action'] : $_GET['action']);
+
+$pgtitle = array(gettext("Diagnostics"), gettext("S.M.A.R.T. Status"));
+
+if ($action != 'config') {
+	$pgtitle[] = htmlspecialchars(gettext('Information & Tests'));
+} else {
+	$pgtitle[] = gettext('Config');
+}
 $smartctl = "/usr/local/sbin/smartctl";
 $smartd = "/usr/local/sbin/smartd";
 $start_script = "/usr/local/etc/rc.d/smartd.sh";
@@ -72,7 +82,6 @@ $valid_test_types = array("offline", "short", "long", "conveyance");
 $valid_info_types = array("i", "H", "c", "A", "a");
 $valid_log_types = array("error", "selftest");
 
-$closehead = false;
 include("head.inc");
 
 // Highlights the words "PASSED", "FAILED", and "WARNING".
@@ -81,9 +90,9 @@ function add_colors($string) {
 	$patterns[0] = '/PASSED/';
 	$patterns[1] = '/FAILED/';
 	$patterns[2] = '/Warning/';
-	$replacements[0] = '<b><font color="#00ff00">' . gettext("PASSED") .  '</font></b>';
-	$replacements[1] = '<b><font color="#ff0000">' . gettext("FAILED") .  '</font></b>';
-	$replacements[2] = '<font color="#ff0000">'	   . gettext("Warning") . '</font>';
+	$replacements[0] = '<span class="text-success">' . gettext("PASSED") . '</span>';
+	$replacements[1] = '<span class="text-alert">' . gettext("FAILED") . '</span>';
+	$replacements[2] = '<span class="text-warning">' . gettext("Warning") . '</span>';
 	ksort($patterns);
 	ksort($replacements);
 	return preg_replace($patterns, $replacements, $string);
@@ -105,21 +114,24 @@ function smartmonctl($action) {
 	global $start_script;
 	shell_exec($start_script . escapeshellarg($action));
 }
-
-// What page, aka. action is being wanted
-// If they "get" a page but don't pass all arguments, smartctl will throw an error
-$action = (isset($_POST['action']) ? $_POST['action'] : $_GET['action']);
 $targetdev = basename($_POST['device']);
 
 if (!file_exists('/dev/' . $targetdev)) {
-	echo "Device does not exist, bailing.";
+	echo gettext("Device does not exist, bailing.");
 	return;
 }
 
 $tab_array = array();
-$tab_array[0] = array(gettext("Information/Tests"), ($action != 'config'), $_SERVER['PHP_SELF'] . "?action=default");
+$tab_array[0] = array(htmlspecialchars(gettext("Information & Tests")), ($action != 'config'), $_SERVER['PHP_SELF'] . "?action=default");
 $tab_array[1] = array(gettext("Config"), ($action == 'config'), $_SERVER['PHP_SELF'] . "?action=config");
 display_top_tabs($tab_array);
+
+$specplatform = system_identify_specific_platform();
+if ($specplatform['name'] == "Hyper-V") {
+	echo gettext("S.M.A.R.T. is not supported in Hyper-V guests.");
+	include("foot.inc");
+	exit;
+}
 
 switch ($action) {
 	// Testing devices
@@ -127,14 +139,14 @@ switch ($action) {
 	{
 		$test = $_POST['testType'];
 		if (!in_array($test, $valid_test_types)) {
-			echo "Invalid test type, bailing.";
+			echo gettext("Invalid test type, bailing.");
 			return;
 		}
 
 		$output = add_colors(shell_exec($smartctl . " -t " . escapeshellarg($test) . " /dev/" . escapeshellarg($targetdev)));
 ?>
 		<div class="panel  panel-default">
-			<div class="panel-heading"><h2 class="panel-title"><?=gettext('Test results')?></h2></div>
+			<div class="panel-heading"><h2 class="panel-title"><?=gettext('Test Results')?></h2></div>
 			<div class="panel-body">
 				<pre><?=$output?></pre>
 			</div>
@@ -144,8 +156,14 @@ switch ($action) {
 			<input type="hidden" name="device" value="<?=$targetdev?>" />
 			<input type="hidden" name="action" value="abort" />
 			<nav class="action-buttons">
-				<input type="submit" name="submit"	class="btn btn-danger" value="<?=gettext("Abort")?>" />
-				<a href="<?=$_SERVER['PHP_SELF']?>" class="btn btn-default"><?=gettext("Back")?></a>
+				<button type="submit" name="submit" class="btn btn-danger" value="<?=gettext("Abort")?>">
+					<i class="fa fa-times icon-embed-btn"></i>
+					<?=gettext("Abort Test")?>
+				</button>
+				<a href="<?=$_SERVER['PHP_SELF']?>" class="btn btn-info">
+					<i class="fa fa-undo icon-embed-btn"></i>
+					<?=gettext("Back")?>
+				</a>
 			</nav>
 		</form>
 
@@ -173,7 +191,10 @@ switch ($action) {
 		</div>
 
 		<nav class="action-buttons">
-			<a href="<?=$_SERVER['PHP_SELF']?>" class="btn btn-default"><?=gettext("Back")?></a>
+			<a href="<?=$_SERVER['PHP_SELF']?>" class="btn btn-info">
+				<i class="fa fa-undo icon-embed-btn"></i>
+				<?=gettext("Back")?>
+			</a>
 		</nav>
 <?php
 		break;
@@ -198,7 +219,10 @@ switch ($action) {
 		</div>
 
 		<nav class="action-buttons">
-			<a href="<?=$_SERVER['PHP_SELF']?>" class="btn btn-default"><?=gettext("Back")?></a>
+			<a href="<?=$_SERVER['PHP_SELF']?>" class="btn btn-info">
+				<i class="fa fa-undo icon-embed-btn"></i>
+				<?=gettext("Back")?>
+			</a>
 		</nav>
 <?php
 		break;
@@ -277,8 +301,10 @@ switch ($action) {
 	if (!empty($pconfig['smartmonemail'])) {
 		$form->addGlobal(new Form_Button(
 			'test',
-			'Send test email'
-		))->removeClass('btn-primary')->addClass('btn-default');
+			'Send test email',
+			null,
+			'fa-send'
+		))->addClass('btn-info');
 	}
 
 	print($form);
@@ -295,8 +321,12 @@ switch ($action) {
 
 		$btnview = new Form_Button(
 			'submit',
-			'View'
+			'View',
+			null,
+			'fa-file-text-o'
 		);
+		$btnview->addClass('btn-primary');
+		$btnview->setAttribute('id');
 
 		$section = new Form_Section('Information');
 
@@ -305,7 +335,7 @@ switch ($action) {
 			null,
 			'hidden',
 			'info'
-		));
+		))->setAttribute('id');
 
 		$group = new Form_Group('Info type');
 
@@ -328,7 +358,7 @@ switch ($action) {
 		$group->add(new Form_Checkbox(
 			'type',
 			null,
-			'SMART Capabilities',
+			'S.M.A.R.T. Capabilities',
 			false,
 			'c'
 		))->displayAsRadio();
@@ -356,7 +386,7 @@ switch ($action) {
 			'Device: /dev/',
 			false,
 			array_combine($devs, $devs)
-		));
+		))->setAttribute('id');
 
 		$section->addInput(new Form_StaticText(
 			'',
@@ -371,8 +401,12 @@ switch ($action) {
 
 		$btntest = new Form_Button(
 			'submit',
-			'Test'
+			'Test',
+			null,
+			'fa-wrench'
 		);
+		$btntest->addClass('btn-primary');
+		$btntest->setAttribute('id');
 
 		$section = new Form_Section('Perform self-tests');
 
@@ -381,7 +415,7 @@ switch ($action) {
 			null,
 			'hidden',
 			'test'
-		));
+		))->setAttribute('id');
 
 		$group = new Form_Group('Test type');
 
@@ -417,7 +451,7 @@ switch ($action) {
 			'conveyance'
 		))->displayAsRadio();
 
-		$group->setHelp('Select "Conveyance" for ATA disks only');
+		$group->setHelp('Select "Conveyance" for ATA disks only.');
 		$section->add($group);
 
 		$section->addInput(new Form_Select(
@@ -425,7 +459,7 @@ switch ($action) {
 			'Device: /dev/',
 			false,
 			array_combine($devs, $devs)
-		));
+		))->setAttribute('id');
 
 		$section->addInput(new Form_StaticText(
 			'',
@@ -440,17 +474,21 @@ switch ($action) {
 
 		$btnview =  new Form_Button(
 			'submit',
-			'View'
+			'View',
+			null,
+			'fa-file-text-o'
 		);
+		$btnview->addClass('btn-primary');
+		$btnview->setAttribute('id');
 
-		$section = new Form_Section('View logs');
+		$section = new Form_Section('View Logs');
 
 		$section->addInput(new Form_Input(
 			'action',
 			null,
 			'hidden',
 			'logs'
-		));
+		))->setAttribute('id');
 
 		$group = new Form_Group('Log type');
 
@@ -463,7 +501,7 @@ switch ($action) {
 		))->displayAsRadio();
 
 		$group->add(new Form_Checkbox(
-			'test',
+			'type',
 			null,
 			'Self-test',
 			false,
@@ -477,7 +515,7 @@ switch ($action) {
 			'Device: /dev/',
 			false,
 			array_combine($devs, $devs)
-		));
+		))->setAttribute('id');
 
 		$section->addInput(new Form_StaticText(
 			'',
@@ -490,10 +528,12 @@ switch ($action) {
 // Abort
 		$btnabort = new Form_Button(
 			'submit',
-			'Abort'
+			'Abort',
+			null,
+			'fa-times'
 		);
 
-		$btnabort->removeClass('btn-primary')->addClass('btn-danger');
+		$btnabort->addClass('btn-danger')->setAttribute('id');
 
 		$form = new Form(false);
 
@@ -504,14 +544,14 @@ switch ($action) {
 			null,
 			'hidden',
 			'abort'
-		));
+		))->setAttribute('id');
 
 		$section->addInput(new Form_Select(
 			'device',
 			'Device: /dev/',
 			false,
 			array_combine($devs, $devs)
-		));
+		))->setAttribute('id');
 
 		$section->addInput(new Form_StaticText(
 			'',

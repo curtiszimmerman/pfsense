@@ -71,7 +71,7 @@ if ($_GET['reset'] != "") {
 	exit;
 }
 
-$qname = gettext("No queue configured/selected");
+$qname = gettext("No Queue Configured/Selected");
 
 $shaperIFlist = get_configured_interface_with_descr();
 read_altq_config();
@@ -204,8 +204,10 @@ if ($_POST['apply']) {
 	$savemsg = get_std_save_message($retval);
 	if (stristr($retval, "error") <> true) {
 		$savemsg = get_std_save_message($retval);
+		$class = 'alert-success';
 	} else {
 		$savemsg = $retval;
+		$class = 'alert-danger';
 	}
 
 	/* reset rrd queues */
@@ -216,14 +218,13 @@ if ($_POST['apply']) {
 	clear_subsystem_dirty('shaper');
 }
 
-$pgtitle = array(gettext("Firewall"), gettext("Traffic Shaper"), gettext("Queues"));
+$pgtitle = array(gettext("Firewall"), gettext("Traffic Shaper"), gettext("By Queue"));
 $shortcut_section = "trafficshaper";
-$closehead = false;
 
 include("head.inc");
 ?>
 
-<script type="text/javascript" src="./tree/tree.js"></script>
+<script type="text/javascript" src="./vendor/tree/tree.js"></script>
 
 <?php
 if ($input_errors) {
@@ -231,17 +232,17 @@ if ($input_errors) {
 }
 
 if ($savemsg) {
-	print_info_box($savemsg);
+	print_info_box($savemsg, $class);
 }
 
 if (is_subsystem_dirty('shaper')) {
-	print_info_box_np(gettext("The traffic shaper configuration has been changed. You must apply the changes in order for them to take effect."));
+	print_apply_box(gettext("The traffic shaper configuration has been changed.") . "<br />" . gettext("The changes must be applied for them to take effect."));
 }
 
 $tab_array = array();
 $tab_array[] = array(gettext("By Interface"), false, "firewall_shaper.php");
 $tab_array[] = array(gettext("By Queue"), true, "firewall_shaper_queues.php");
-$tab_array[] = array(gettext("Limiter"), false, "firewall_shaper_vinterface.php");
+$tab_array[] = array(gettext("Limiters"), false, "firewall_shaper_vinterface.php");
 $tab_array[] = array(gettext("Wizards"), false, "firewall_shaper_wizards.php");
 display_top_tabs($tab_array);
 
@@ -249,7 +250,7 @@ display_top_tabs($tab_array);
 
 <form action="firewall_shaper_queues.php" method="post" name="iform" id="iform">
 	<div class="panel panel-default">
-		<div class="panel-heading" align="center"><h2 class="panel-title"><?=$qname?></h2></div>
+		<div class="panel-heading text-center"><h2 class="panel-title"><?=$qname?></h2></div>
 		<div class="panel-body">
 			<div class="form-group">
 				<div class="col-sm-2 ">
@@ -264,5 +265,5 @@ display_top_tabs($tab_array);
 </form>
 
 <?php
-
 include("foot.inc");
+?>

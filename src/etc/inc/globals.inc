@@ -54,9 +54,12 @@
 // Global defines
 
 // Automatic panel collapse
-define(COLLAPSIBLE, 0x08);
-define(SEC_CLOSED, 0x04);
-define(SEC_OPEN, 0x00);
+define('COLLAPSIBLE', 0x08);
+define('SEC_CLOSED', 0x04);
+define('SEC_OPEN', 0x00);
+
+// AddPassword method defines
+define('DMYPWD', "********");
 
 global $g;
 $g = array(
@@ -96,7 +99,7 @@ $g = array(
 	"disablecrashreporter" => false,
 	"crashreporterurl" => "https://crashreporter.pfsense.org/crash_reporter.php",
 	"debug" => false,
-	"latest_config" => "13.2",
+	"latest_config" => "15.4",
 	"nopkg_platforms" => array("cdrom"),
 	"minimum_ram_warning" => "101",
 	"minimum_ram_warning_text" => "128 MB",
@@ -108,7 +111,8 @@ $g = array(
 	"wireless_regex" => "/^(ndis|wi|ath|an|ral|ural|iwi|wlan|rum|run|bwn|zyd|mwl|bwi|ipw|iwn|malo|uath|upgt|urtw|wpi)/",
 	"help_base_url" => "/help.php",
 	"pkg_prefix" => "pfSense-pkg-",
-	"default_timezone" => "Etc/UTC"
+	"default_timezone" => "Etc/UTC",
+	"language" => "en_US"
 );
 
 /* IP TOS flags */
@@ -116,6 +120,17 @@ $iptos = array("lowdelay", "throughput", "reliability");
 
 /* TCP flags */
 $tcpflags = array("syn", "ack", "fin", "rst", "psh", "urg", "ece", "cwr");
+
+if (file_exists("/etc/version.patch")) {
+	$g["product_version_patch"] = trim(file_get_contents("/etc/version.patch"), " \n");
+} else {
+	$g["product_version_patch"] = "0";
+}
+
+$g['product_version_string'] = $g['product_version'];
+if (is_numeric($g["product_version_patch"]) && $g["product_version_patch"] != "0") {
+	$g['product_version_string'] .= "-p{$g['product_version_patch']}";
+}
 
 if (file_exists("/etc/platform")) {
 	$arch = php_uname("m");
@@ -140,6 +155,13 @@ if (file_exists("/etc/platform")) {
 	} else {
 		$g['firmware_update_text']="pfSense-*.tgz";
 	}
+}
+
+if (file_exists("{$g['etc_path']}/default-config-flavor")) {
+	$flavor_array = file("{$g['etc_path']}/default-config-flavor");
+	$g['default-config-flavor'] = chop($flavor_array[0]);
+} else {
+	$g['default-config-flavor'] = '';
 }
 
 /* Default sysctls */
@@ -183,13 +205,20 @@ $sysctls = array("net.inet.ip.portrange.first" => "1024",
 	"net.enc.in.ipsec_filter_mask" => "0x0002",
 	"net.key.preferred_oldsa" => "0",
 	"net.inet.carp.senderr_demotion_factor" => 0, /* Do not demote CARP for interface send errors */
-	"net.pfsync.carp_demotion_factor" => 0 /* Do not demote CARP for pfsync errors */
+	"net.pfsync.carp_demotion_factor" => 0, /* Do not demote CARP for pfsync errors */
+	"net.raw.recvspace" => 65536,
+	"net.raw.sendspace" => 65536,
+	"net.inet.raw.recvspace" => 131072,
+	"net.inet.raw.maxdgram" => 131072
 );
 
 /* Include override values for the above if needed. If the file doesn't exist, don't try to load it. */
 if (file_exists("/etc/inc/globals_override.inc")) {
 	@include("globals_override.inc");
 }
+
+/* Read all XML files in following dir and load menu entries */
+$g["ext_menu_path"] = "/usr/local/share/{$g['product_name']}/menu";
 
 function platform_booting($on_console = false) {
 	global $g;

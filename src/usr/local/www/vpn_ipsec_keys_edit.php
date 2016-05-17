@@ -138,13 +138,13 @@ if ($_POST) {
 
 		if (isset($id) && $a_secret[$id]) {
 			$a_secret[$id] = $secretent;
-			$text = gettext("Edited");
+			$text = gettext("Edited IPsec Pre-Shared Keys");
 		} else {
 			$a_secret[] = $secretent;
-			$text = gettext("Added");
+			$text = gettext("Added IPsec Pre-Shared Keys");
 		}
 
-		write_config("{$text} IPsec Pre-Shared Keys");
+		write_config($text);
 		mark_subsystem_dirty('ipsec');
 
 		header("Location: vpn_ipsec_keys.php");
@@ -152,27 +152,24 @@ if ($_POST) {
 	}
 }
 
-$pgtitle = array(gettext("VPN"), gettext("IPsec"), gettext("Pre-Shared Key"), gettext("Edit"));
+$pgtitle = array(gettext("VPN"), gettext("IPsec"), gettext("Pre-Shared Keys"), gettext("Edit"));
 $shortcut_section = "ipsec";
 
 include("head.inc");
 
-?>
-
-<?php if ($input_errors) print_input_errors($input_errors); ?>
-
-<?php
+if ($input_errors)
+	print_input_errors($input_errors);
 
 $form = new Form;
 
-$section = new Form_Section('Edit pre-shared-secret');
+$section = new Form_Section('Edit Pre-Shared-Secret');
 
 $section->addInput(new Form_Input(
 	'ident',
 	'Identifier',
 	'text',
 	$pconfig['ident']
-))->setHelp('This can be either an IP address, fully qualified domain name or an e-mail address');
+))->setHelp('This can be either an IP address, fully qualified domain name or an e-mail address.');
 
 $section->addInput(new Form_Select(
 	'type',
@@ -200,12 +197,11 @@ if (isset($id) && $a_secret[$id]) {
 $form->add($section);
 
 print $form;
-
 ?>
-
-<div class="alert alert-info">
-	<strong><?=gettext("Note"); ?>:</strong><br />
-	<?=gettext("PSK for any user can be set by using an identifier of any")?>
+<div class="infoblock blockopen">
+<?php
+print_info_box(gettext("PSK for any user can be set by using an identifier of any."), 'info', false);
+?>
 </div>
-
-<?php include("foot.inc"); ?>
+<?php
+include("foot.inc");

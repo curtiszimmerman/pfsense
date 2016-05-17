@@ -171,9 +171,9 @@ if ($_REQUEST && $_REQUEST['ajax']) {
 				print(		"<td>" . htmlspecialchars($ipsec['descr']) . "</td>\n");
 
 				if ($ipsec['status'] == "true") {
-					print('<td><i class="fa fa-chevron-up"></i></td>' . "\n");
+					print('<td><i class="fa fa-arrow-up text-success"></i></td>' . "\n");
 				} else {
-					print('<td><i class="fa fa-chevron-down"></i></td>' . "\n");
+					print('<td><i class="fa fa-arrow-down text-danger"></i></td>' . "\n");
 				}
 
 				print(	"</tr>\n");
@@ -202,21 +202,23 @@ if ($_REQUEST && $_REQUEST['ajax']) {
 
 if (isset($config['ipsec']['phase1'])) {
 	$tab_array = array();
-	$tab_array[] = array("Overview", true, "ipsec-Overview");
-	$tab_array[] = array("Tunnels", false, "ipsec-tunnel");
-	$tab_array[] = array("Mobile", false, "ipsec-mobile");
+	$tab_array[] = array(gettext("Overview"), true, "ipsec-Overview");
+	$tab_array[] = array(gettext("Tunnels"), false, "ipsec-tunnel");
+	$tab_array[] = array(gettext("Mobile"), false, "ipsec-mobile");
 
 	display_widget_tabs($tab_array);
 }
+
+$mobile = ipsec_dump_mobile();
 
 if (isset($config['ipsec']['phase2'])): ?>
 <div id="ipsec-Overview" style="display:block;"  class="table-responsive">
 	<table class="table table-striped table-hover">
 		<thead>
 		<tr>
-			<th>Active Tunnels</th>
-			<th>Inactive Tunnels</th>
-			<th>Mobile Users</th>
+			<th><?=gettext("Active Tunnels")?></th>
+			<th><?=gettext("Inactive Tunnels")?></th>
+			<th><?=gettext("Mobile Users")?></th>
 		</tr>
 		</thead>
 		<tbody>
@@ -227,10 +229,12 @@ if (isset($config['ipsec']['phase2'])): ?>
 <div class="table-responsive" id="ipsec-tunnel" style="display:none;">
 	<table class="table table-striped table-hover">
 	<thead>
-		<th>Source</th>
-		<th>Destination</th>
-		<th>Description</th>
-		<th>Status</th>
+	<tr>
+		<th><?=gettext("Source")?></th>
+		<th><?=gettext("Destination")?></th>
+		<th><?=gettext("Description")?></th>
+		<th><?=gettext("Status")?></th>
+	</tr>
 	</thead>
 	<tbody>
 		<tr><td colspan="4"><?=gettext("Retrieving tunnel data ")?><i class="fa fa-cog fa-spin"></i></td></tr>
@@ -242,9 +246,11 @@ if (isset($config['ipsec']['phase2'])): ?>
 <div id="ipsec-mobile" style="display:none;" class="table-responsive">
 		<table class="table table-striped table-hover">
 		<thead>
-			<th>User</th>
-			<th>IP</th>
-			<th>Status</th>
+		<tr>
+			<th><?=gettext("User")?></th>
+			<th><?=gettext("IP")?></th>
+			<th><?=gettext("Status")?></th>
+		</tr>
 		</thead>
 		<tbody>
 			<tr><td colspan="3"><?=gettext("Retrieving mobile data ")?><i class="fa fa-cog fa-spin"></i></td></tr>
@@ -254,8 +260,8 @@ if (isset($config['ipsec']['phase2'])): ?>
 	<?php endif;?>
 <?php else: ?>
 	<div>
-		<h5 style="padding-left:10px;">There are no configured IPsec Tunnels</h5>
-		<p  style="padding-left:10px;">You can configure your IPsec <a href="vpn_ipsec.php">here</a>.</p>
+		<h5 style="padding-left:10px;"><?=gettext("There are no configured IPsec Tunnels")?></h5>
+		<p  style="padding-left:10px;"><?=gettext('IPsec can be configured <a href="vpn_ipsec.php">here</a>.')?></p>
 	</div>
 <?php endif;
 

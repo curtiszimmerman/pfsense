@@ -155,8 +155,19 @@ if ($_POST) {
 			}
 		}
 	}
-	if (($_POST['ipaddrv6'] && !is_ipaddrv6($_POST['ipaddrv6']))) {
-		$input_errors[] = gettext("A valid IPv6 address must be specified.");
+	if ($_POST['ipaddrv6']) {
+		if (!is_ipaddrv6($_POST['ipaddrv6'])) {
+			$input_errors[] = gettext("A valid IPv6 address must be specified.");
+		} elseif ($config['interfaces'][$if]['ipaddrv6'] == 'track6') {
+			$trackifname = $config['interfaces'][$if]['track6-interface'];
+			$trackcfg = $config['interfaces'][$trackifname];
+			$pdlen = 64 - $trackcfg['dhcp6-ia-pd-len'];
+			if (!Net_IPv6::isInNetmask($_POST['ipaddrv6'], '::', $pdlen)) {
+				$input_errors[] = sprintf(gettext(
+				    "The prefix (upper %s bits) must be zero.  Use the form %s"),
+				    $pdlen, dhcpv6_pd_str_help($ifcfgsn));
+			}
+		}
 	}
 
 	if (empty($_POST['duid'])) {
@@ -214,7 +225,13 @@ if ($_POST) {
 	}
 }
 
-$pgtitle = array(gettext("Services"), gettext("DHCPv6"), gettext("Edit static mapping"));
+$iflist = get_configured_interface_with_descr();
+$ifname = '';
+
+if (!empty($if) && isset($iflist[$if])) {
+	$ifname = $iflist[$if];
+}
+$pgtitle = array(gettext("Services"), htmlspecialchars(gettext("DHCPv6 Server & RA")), $ifname, gettext("DHCPv6 Server"), gettext("Edit Static Mapping"));
 $shortcut_section = "dhcp6";
 
 include("head.inc");
@@ -257,7 +274,7 @@ $section->addInput(new Form_Input(
 	'Description',
 	'text',
 	$pconfig['descr']
-))->setHelp('You may enter a description here for your reference (not parsed).');
+))->setHelp('A description may be entered here for administrative reference (not parsed).');
 
 if($netboot_enabled) {
 	$section->addInput(new Form_Input(

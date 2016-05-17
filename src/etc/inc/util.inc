@@ -56,6 +56,10 @@
  *
  */
 
+define('VIP_ALL', 1);
+define('VIP_CARP', 2);
+define('VIP_IPALIAS', 3);
+
 /* kill a process by pid file */
 function killbypid($pidfile) {
 	return sigkillbypid($pidfile, "TERM");
@@ -144,7 +148,7 @@ function config_unlock() {
 function lock($lock, $op = LOCK_SH) {
 	global $g, $cfglckkeyconsumers;
 	if (!$lock) {
-		die(gettext("WARNING: You must give a name as parameter to lock() function."));
+		die(gettext("WARNING: A name must be given as parameter to lock() function."));
 	}
 	if (!file_exists("{$g['tmp_path']}/{$lock}.lock")) {
 		@touch("{$g['tmp_path']}/{$lock}.lock");
@@ -163,7 +167,7 @@ function lock($lock, $op = LOCK_SH) {
 function try_lock($lock, $timeout = 5) {
 	global $g, $cfglckkeyconsumers;
 	if (!$lock) {
-		die(gettext("WARNING: You must give a name as parameter to try_lock() function."));
+		die(gettext("WARNING: A name must be given as parameter to try_lock() function."));
 	}
 	if (!file_exists("{$g['tmp_path']}/{$lock}.lock")) {
 		@touch("{$g['tmp_path']}/{$lock}.lock");
@@ -273,7 +277,7 @@ function refcount_reference($reference) {
 			refcount_init($reference);
 			$shmid = @shmop_open($reference, "w", 0, 0);
 			if (!$shmid) {
-				log_error(gettext("Could not open shared memory {$reference}"));
+				log_error(sprintf(gettext("Could not open shared memory %s"), $reference));
 				unlock($shm_lck);
 				return;
 			}
@@ -298,7 +302,7 @@ function refcount_unreference($reference) {
 		$shmid = @shmop_open($reference, "w", 0, 0);
 		if (!$shmid) {
 			refcount_init($reference);
-			log_error(gettext("Could not open shared memory {$reference}"));
+			log_error(sprintf(gettext("Could not open shared memory %s"), $reference));
 			unlock($shm_lck);
 			return;
 		}
@@ -325,7 +329,7 @@ function refcount_read($reference) {
 	/* There is no need for locking. */
 	$shmid = @shmop_open($reference, "a", 0, 0);
 	if (!$shmid) {
-		log_error(gettext("Could not open shared memory for read {$reference}"));
+		log_error(sprintf(gettext("Could not open shared memory for read %s"), $reference));
 		return -1;
 	}
 	$shm_data = @shmop_read($shmid, 0, 10);
@@ -419,6 +423,16 @@ function gen_subnet_mask_long($bits) {
 /* same as above but returns a string */
 function gen_subnet_mask($bits) {
 	return long2ip(gen_subnet_mask_long($bits));
+}
+
+/* Convert a prefix length to an IPv6 address-like mask notation. Very rare but at least ntp needs it. See #4463 */
+function gen_subnet_mask_v6($bits) {
+	/* Binary representation of the prefix length */
+	$bin = str_repeat('1', $bits);
+	/* Pad right with zeroes to reach the full address length */
+	$bin = str_pad($bin, 128, '0', STR_PAD_RIGHT);
+	/* Convert back to an IPv6 address style notation */
+	return Net_IPv6::_bin2Ip($bin);
 }
 
 /* Convert long int to IPv4 address
@@ -698,9 +712,20 @@ function is_ipaddrv4($ipaddr) {
 	return true;
 }
 
-/* returns true if $ipaddr is a valid IPv6 linklocal address */
+/* returns 4 or 6 respectively (== TRUE) if $ipaddr is a valid IPv4 or IPv6 linklocal address
+   returns '' if not a valid linklocal address */
 function is_linklocal($ipaddr) {
-	return (strtolower(substr($ipaddr, 0, 5)) == "fe80:");
+	if (is_ipaddrv4($ipaddr)) {
+		// input is IPv4
+		// test if it's 169.254.x.x per rfc3927 2.1
+		$ip4 = explode(".", $ipaddr);
+		if ($ip4[0] == '169' && $ip4[1] == '254') {
+			return 4;
+		}
+	} elseif (Net_IPv6::getAddressType($ipaddr) == NET_IPV6_LOCAL_LINK) {
+		return 6;
+	}
+	return '';
 }
 
 /* returns scope of a linklocal address */
@@ -714,16 +739,14 @@ function get_ll_scope($addr) {
 
 /* returns true if $ipaddr is a valid literal IPv6 address */
 function is_literalipaddrv6($ipaddr) {
-	if (preg_match("/\[([0-9a-f:]+)\]/i", $ipaddr, $match)) {
-		$ipaddr = $match[1];
-	} else {
-		return false;
+	if (substr($ipaddr,0,1) == '[' && substr($ipaddr,-1,1) == ']') {
+		// if it's data wrapped in "[ ... ]" then test if middle part is valid IPv6
+		return is_ipaddrv6(substr($ipaddr,1,-1));
 	}
-
-	return is_ipaddrv6($ipaddr);
+	return false;
 }
 
-/* returns true if $iport is a valid IPv4/IPv6 address + port
+/* returns true if $iport is a valid IPv4:port or [Literal IPv6]:port
 	false - not valid
 	true (numeric 4 or 6) - if valid, gives type of address */
 function is_ipaddrwithport($ipport) {
@@ -748,12 +771,11 @@ function is_ipaddrwithport($ipport) {
 
 function is_hostnamewithport($hostport) {
 	$parts = explode(":", $hostport);
-	$port = array_pop($parts);
-	if (count($parts) == 1) {
-		return is_hostname($parts[0]) && is_port($port);
-	} else {
-		return false;
+	// no need to validate with is_string(); if it's not a string then explode won't return 2 parts anyway
+	if (count($parts) == 2) {
+		return is_hostname($parts[0]) && is_port($parts[1]);
 	}
+	return false;
 }
 
 /* returns true if $ipaddr is a valid dotted IPv4 address or an alias thereof */
@@ -811,15 +833,47 @@ function is_subnetoralias($subnet) {
 	}
 }
 
-function subnet_size($subnet) {
-	if (is_subnetv4($subnet)) {
-		list ($ip, $bits) = explode("/", $subnet);
-		return round(exp(log(2) * (32 - $bits)));
-	} else if (is_subnetv6($subnet)) {
-		list ($ip, $bits) = explode("/", $subnet);
-		return round(exp(log(2) * (128 - $bits)));
+/* Get number of addresses in an IPv4/IPv6 subnet (represented as a string)
+   optional $exact=true forces error (0) to be returned if it can't be represented exactly
+   Exact result not possible above PHP_MAX_INT which is about 2^31 addresses on x32 or 2^63 on x64
+   Returns 0 for bad data or if cannot represent size as an INT when $exact is set. */
+function subnet_size($subnet, $exact=false) {
+	$parts = explode("/", $subnet);
+	if (count($parts) == 2) {
+		if (is_ipaddrv4($parts[0])) {
+			return subnet_size_by_netmask(4, $parts[1], $exact);
+		} elseif (is_ipaddrv6($parts[0])) {
+			return subnet_size_by_netmask(6, $parts[1], $exact);
+		}
+	}
+	return 0;
+}
+
+/* Get number of addresses in an IPv4/IPv6 subnet (represented numerically as IP type + bits)
+   optional $exact=true forces error (0) to be returned if it can't be represented exactly
+   Hard to think where we might need to count exactly a huge subnet but an overflow detection option is probably sensible
+   Returns 0 for bad data or if cannot represent size as an INT when $exact is set. */
+function subnet_size_by_netmask($iptype, $bits, $exact=false) {
+	if (!is_numericint($bits)) {
+		return 0;
+	} elseif ($iptype == 4 && $bits <= 32) {
+		$snsize = 32 - $bits;
+	} elseif ($iptype == 6 && $bits <= 128) {
+		$snsize = 128 - $bits;
 	} else {
 		return 0;
+	}
+
+	// 2**N returns an exact result as an INT if possible, and a float/double if not. 
+	// Detect this switch, rather than comparing $result<=PHP_MAX_INT or $bits >=8*PHP_INT_SIZE as it's (probably) easier to get completely reliable
+	$result = 2 ** $snsize;
+	
+	if ($exact && !is_int($result)) {
+		//exact required but can't represent result exactly as an INT
+		return 0;
+	} else {
+		// result ok, will be an INT where possible (guaranteed up to 2^31 addresses on x32/x64) and a float for 'huge' subnets
+		return $result;
 	}
 }
 
@@ -847,36 +901,94 @@ function subnetv4_expand($subnet) {
 	return $result;
 }
 
-/* find out whether two subnets overlap */
+/* find out whether two IPv4/IPv6 CIDR subnets overlap.
+   Note: CIDR overlap implies one is identical or included so largest sn will be the same */
 function check_subnets_overlap($subnet1, $bits1, $subnet2, $bits2) {
-
-	if (!is_numeric($bits1)) {
-		$bits1 = 32;
-	}
-	if (!is_numeric($bits2)) {
-		$bits2 = 32;
-	}
-
-	if ($bits1 < $bits2) {
-		$relbits = $bits1;
+	if (is_ipaddrv4($subnet1)) {
+		return check_subnetsv4_overlap($subnet1, $bits1, $subnet2, $bits2);
 	} else {
-		$relbits = $bits2;
+		return check_subnetsv6_overlap($subnet1, $bits1, $subnet2, $bits2);
 	}
-
-	$sn1 = gen_subnet_mask_long($relbits) & ip2long($subnet1);
-	$sn2 = gen_subnet_mask_long($relbits) & ip2long($subnet2);
-
-	return ($sn1 == $sn2);
 }
 
-/* find out whether two IPv6 subnets overlap */
-function check_subnetsv6_overlap($subnet1, $bits1, $subnet2, $bits2) {
-	$sub1_min = gen_subnetv6($subnet1, $bits1);
-	$sub1_max = gen_subnetv6_max($subnet1, $bits1);
-	$sub2_min = gen_subnetv6($subnet2, $bits2);
-	$sub2_max = gen_subnetv6_max($subnet2, $bits2);
+/* find out whether two IPv4 CIDR subnets overlap.
+   Note: CIDR overlap means sn1/sn2 are identical or one is included in other. So sn using largest $bits will be the same  */
+function check_subnetsv4_overlap($subnet1, $bits1, $subnet2, $bits2) {
+	$largest_sn = min($bits1, $bits2);
+	$subnetv4_start1 = gen_subnetv4($subnet1, $largest_sn);
+	$subnetv4_start2 = gen_subnetv4($subnet2, $largest_sn);
+	
+	if($subnetv4_start1 == '' || $subnetv4_start2 == '') {
+		// One or both args is not a valid IPv4 subnet
+		//FIXME: needs to return "bad data" not true/false if bad. For now return false, best we can do until fixed
+		return false;
+	}
+	return ($subnetv4_start1 == $subnetv4_start2);
+}
 
-	return (is_inrange_v6($sub1_min, $sub2_min, $sub2_max) || is_inrange_v6($sub1_max, $sub2_min, $sub2_max) || is_inrange_v6($sub2_min, $sub1_min, $sub1_max));
+/* find out whether two IPv6 CIDR subnets overlap.
+   Note: CIDR overlap means sn1/sn2 are identical or one is included in other. So sn using largest $bits will be the same  */
+function check_subnetsv6_overlap($subnet1, $bits1, $subnet2, $bits2) {
+	$largest_sn = min($bits1, $bits2);
+	$subnetv6_start1 = gen_subnetv6($subnet1, $largest_sn);
+	$subnetv6_start2 = gen_subnetv6($subnet2, $largest_sn);
+	
+	if($subnetv6_start1 == '' || $subnetv6_start2 == '') {
+		// One or both args is not a valid IPv6 subnet
+		//FIXME: needs to return "bad data" not true/false if bad. For now return false, best we can do until fixed
+		return false;
+	}
+	return ($subnetv6_start1 == $subnetv6_start2);
+}
+
+/* return all PTR zones for a IPv6 network */
+function get_v6_ptr_zones($subnet, $bits) {
+	$result = array();
+
+	if (!is_ipaddrv6($subnet)) {
+		return $result;
+	}
+
+	if (!is_numericint($bits) || $bits > 128) {
+		return $result;
+	}
+
+	/*
+	 * Find a small nibble boundary subnet mask
+	 * e.g. a /29 will create 8 /32 PTR zones
+	 */
+	$small_sn = $bits;
+	while ($small_sn % 4 != 0) {
+		$small_sn++;
+	}
+
+	/* Get network prefix */
+	$small_subnet = Net_IPv6::getNetmask($subnet, $bits);
+
+	/*
+	 * While small network is part of bigger one, increase 4-bit in last
+	 * digit to get next small network
+	 */
+	while (Net_IPv6::isInNetmask($small_subnet, $subnet, $bits)) {
+		/* Get a pure hex value */
+		$unpacked = unpack('H*hex', inet_pton($small_subnet));
+		/* Create PTR record using $small_sn / 4 chars */
+		$result[] = implode('.', array_reverse(str_split(substr(
+		    $unpacked['hex'], 0, $small_sn / 4)))).'.ip6.arpa';
+
+		/* Detect what part of IP should be increased */
+		$change_part = (int) ($small_sn / 16);
+		if ($small_sn % 16 == 0) {
+			$change_part--;
+		}
+
+		/* Increase 1 to desired part */
+		$parts = explode(":", Net_IPv6::uncompress($small_subnet));
+		$parts[$change_part]++;
+		$small_subnet = implode(":", $parts);
+	}
+
+	return $result;
 }
 
 /* return true if $addr is in $subnet, false if not */
@@ -946,25 +1058,61 @@ function is_macaddr($macaddr, $partial=false) {
 	return preg_match('/^[0-9A-F]{2}(?:[:][0-9A-F]{2}){'.$repeat.'}$/i', $macaddr) == 1 ? true : false;
 }
 
-/* returns true if $name is a valid name for an alias
-   returns NULL if a reserved word is used
-   returns FALSE for bad chars in the name - this allows calling code to determine what the problem was.
-   aliases cannot be:
-	bad chars: anything except a-z 0-9 and underscore
-	bad names: empty string, pure numeric, pure underscore
-	reserved words: pre-defined service/protocol/port names which should not be ambiguous, and the words "port" and  "pass" */
+/*
+	If $return_message is true then
+		returns a text message about the reason that the name is invalid.
+		the text includes the type of "thing" that is being checked, passed in $object. (e.g. "alias", "gateway group", "schedule")
+	else
+		returns true if $name is a valid name for an alias
+		returns false if $name is not a valid name for an alias
 
-function is_validaliasname($name) {
+	Aliases cannot be:
+		bad chars: anything except a-z 0-9 and underscore
+		bad names: empty string, pure numeric, pure underscore
+		reserved words: pre-defined service/protocol/port names which should not be ambiguous, and the words "port" and  "pass" */
+
+function is_validaliasname($name, $return_message = false, $object = "alias") {
 	/* Array of reserved words */
 	$reserved = array("port", "pass");
 
 	if (!is_string($name) || strlen($name) >= 32 || preg_match('/(^_*$|^\d*$|[^a-z0-9_])/i', $name)) {
-		return false;
+		if ($return_message) {
+			return sprintf(gettext('The %1$s name must be less than 32 characters long, may not consist of only numbers, may not consist of only underscores, and may only contain the following characters: %2$s'), $object, 'a-z, A-Z, 0-9, _');
+		} else {
+			return false;
+		}
 	}
-	if (in_array($name, $reserved, true) || getservbyname($name, "tcp") || getservbyname($name, "udp") || getprotobyname($name)) {
-		return; /* return NULL */
+	if (in_array($name, $reserved, true)) {
+		if ($return_message) {
+			return sprintf(gettext('The %1$s name must not be either of the reserved words %2$s or %3$s.'), $object, "'port'", "'pass'");
+		} else {
+			return false;
+		}
 	}
-	return true;
+	if (getprotobyname($name)) {
+		if ($return_message) {
+			return sprintf(gettext('The %1$s name must not be a well-known IP protocol name such as TCP, UDP, ICMP etc.'), $object);
+		} else {
+			return false;
+		}
+	}
+	if (getservbyname($name, "tcp") || getservbyname($name, "udp")) {
+		if ($return_message) {
+			return sprintf(gettext('The %1$s name must not be a well-known TCP or UDP port name such as ssh, smtp, pop3, tftp, http, openvpn etc.'), $object);
+		} else {
+			return false;
+		}
+	}
+	if ($return_message) {
+		return sprintf(gettext("The %1$s name is valid."), $object);
+	} else {
+		return true;
+	}
+}
+
+/* returns a text message indicating if the alias name is valid, or the reason it is not valid. */
+function invalidaliasnamemsg($name, $object = "alias") {
+	return is_validaliasname($name, true, $object);
 }
 
 /* returns true if $port is a valid TCP/UDP port */
@@ -1004,14 +1152,17 @@ function is_portoralias($port) {
 }
 
 /* create ranges of sequential port numbers (200:215) and remove duplicates */
-function group_ports($ports) {
+function group_ports($ports, $kflc = false) {
 	if (!is_array($ports) || empty($ports)) {
 		return;
 	}
 
 	$uniq = array();
+	$comments = array();
 	foreach ($ports as $port) {
-		if (is_portrange($port)) {
+		if (($kflc) && (strpos($port, '#') === 0)) {	// Keep Full Line Comments (lines beginning with #).
+			$comments[] = $port;
+		} else if (is_portrange($port)) {
 			list($begin, $end) = explode(":", $port);
 			if ($begin > $end) {
 				$aux = $begin;
@@ -1053,7 +1204,7 @@ function group_ports($ports) {
 		}
 	}
 
-	return $result;
+	return array_merge($comments, $result);
 }
 
 /* returns true if $val is a valid shaper bandwidth value */
@@ -1084,108 +1235,111 @@ function is_inrange($test, $start, $end) {
 	return is_ipaddrv6($test) ? is_inrange_v6($test, $start, $end) : is_inrange_v4($test, $start, $end);
 }
 
-/* XXX: return the configured carp interface list */
-function get_configured_carp_interface_list($carpinterface = '', $family = 'inet', $what = 'ip') {
+function get_configured_vip_list($family = 'all', $type = VIP_ALL) {
 	global $config;
 
-	$iflist = array();
-
+	$list = array();
 	if (!is_array($config['virtualip']['vip']) || empty($config['virtualip']['vip'])) {
-		return $iflist;
+		return ($list);
 	}
 
 	$viparr = &$config['virtualip']['vip'];
 	foreach ($viparr as $vip) {
-		if ($vip['mode'] != "carp") {
+
+		if ($type == VIP_CARP) {
+			if ($vip['mode'] != "carp")
+				continue;
+		} elseif ($type == VIP_IPALIAS) {
+			if ($vip['mode'] != "ipalias")
+				continue;
+		} else {
+			if ($vip['mode'] != "carp" && $vip['mode'] != "ipalias")
+				continue;
+		}
+
+		if ($family == 'all' ||
+		    ($family == 'inet' && is_ipaddrv4($vip['subnet'])) ||
+		    ($family == 'inet6' && is_ipaddrv6($vip['subnet']))) {
+			$list["_vip{$vip['uniqid']}"] = $vip['subnet'];
+		}
+	}
+	return ($list);
+}
+
+function get_configured_vip($vipinterface = '') {
+
+	return (get_configured_vip_detail($vipinterface, 'all', 'vip'));
+}
+
+function get_configured_vip_interface($vipinterface = '') {
+
+	return (get_configured_vip_detail($vipinterface, 'all', 'iface'));
+}
+
+function get_configured_vip_ipv4($vipinterface = '') {
+
+	return (get_configured_vip_detail($vipinterface, 'inet', 'ip'));
+}
+
+function get_configured_vip_ipv6($vipinterface = '') {
+
+	return (get_configured_vip_detail($vipinterface, 'inet6', 'ip'));
+}
+
+function get_configured_vip_subnetv4($vipinterface = '') {
+
+	return (get_configured_vip_detail($vipinterface, 'inet', 'subnet'));
+}
+
+function get_configured_vip_subnetv6($vipinterface = '') {
+
+	return (get_configured_vip_detail($vipinterface, 'inet6', 'subnet'));
+}
+
+function get_configured_vip_detail($vipinterface = '', $family = 'inet', $what = 'ip') {
+	global $config;
+
+	if (empty($vipinterface) || !is_array($config['virtualip']['vip']) ||
+	    empty($config['virtualip']['vip'])) {
+		return (NULL);
+	}
+
+	$viparr = &$config['virtualip']['vip'];
+	foreach ($viparr as $vip) {
+		if ($vip['mode'] != "carp" && $vip['mode'] != "ipalias") {
 			continue;
 		}
 
-		if (empty($carpinterface)) {
-			$iflist["_vip{$vip['uniqid']}"] = $vip['subnet'];
-			continue;
-		}
-
-		if ($carpinterface != "_vip{$vip['uniqid']}") {
+		if ($vipinterface != "_vip{$vip['uniqid']}") {
 			continue;
 		}
 
 		switch ($what) {
 			case 'subnet':
-				if ($family == 'inet' && is_ipaddrv4($vip['subnet'])) {
-					return $vip['subnet_bits'];
-				} else if ($family == 'inet6' && is_ipaddrv6($vip['subnet'])) {
-					return $vip['subnet_bits'];
-				}
+				if ($family == 'inet' && is_ipaddrv4($vip['subnet']))
+					return ($vip['subnet_bits']);
+				else if ($family == 'inet6' && is_ipaddrv6($vip['subnet']))
+					return ($vip['subnet_bits']);
 				break;
 			case 'iface':
-				if ($family == 'inet' && is_ipaddrv4($vip['subnet'])) {
-					return $vip['interface'];
-				} else if ($family == 'inet6' && is_ipaddrv6($vip['subnet'])) {
-					return $vip['interface'];
-				}
+				return ($vip['interface']);
 				break;
 			case 'vip':
-				if ($family == 'inet' && is_ipaddrv4($vip['subnet'])) {
-					return $vip;
-				} else if ($family == 'inet6' && is_ipaddrv6($vip['subnet'])) {
-					return $vip;
-				}
+				return ($vip);
 				break;
 			case 'ip':
 			default:
 				if ($family == 'inet' && is_ipaddrv4($vip['subnet'])) {
-					return $vip['subnet'];
+					return ($vip['subnet']);
 				} else if ($family == 'inet6' && is_ipaddrv6($vip['subnet'])) {
-					return $vip['subnet'];
+					return ($vip['subnet']);
 				}
 				break;
 		}
 		break;
 	}
 
-	return $iflist;
-}
-
-/* return the configured IP aliases list */
-function get_configured_ip_aliases_list($returnfullentry = false) {
-	global $config;
-
-	$alias_list = array();
-
-	if (is_array($config['virtualip']['vip'])) {
-		$viparr = &$config['virtualip']['vip'];
-		foreach ($viparr as $vip) {
-			if ($vip['mode'] == "ipalias") {
-				if ($returnfullentry) {
-					$alias_list[$vip['subnet']] = $vip;
-				} else {
-					$alias_list[$vip['subnet']] = $vip['interface'];
-				}
-			}
-		}
-	}
-
-	return $alias_list;
-}
-
-/* return all configured aliases list (IP, carp, proxyarp and other) */
-function get_configured_vips_list() {
-	global $config;
-
-	$alias_list = array();
-
-	if (is_array($config['virtualip']['vip'])) {
-		$viparr = &$config['virtualip']['vip'];
-		foreach ($viparr as $vip) {
-			if ($vip['mode'] == "carp") {
-				$alias_list[] = array("ipaddr" => $vip['subnet'], "if" => "_vip{$vip['uniqid']}");
-			} else {
-				$alias_list[] = array("ipaddr" => $vip['subnet'], "if" => $vip['interface']);
-			}
-		}
-	}
-
-	return $alias_list;
+	return (NULL);
 }
 
 /* comparison function for sorting by the order in which interfaces are normally created */
@@ -1271,7 +1425,7 @@ function get_configured_interface_with_descr($only_opt = false, $withdisabled = 
 
 /*
  *   get_configured_ip_addresses() - Return a list of all configured
- *   interfaces IP Addresses
+ *   IPv4 addresses.
  *
  */
 function get_configured_ip_addresses() {
@@ -1288,7 +1442,7 @@ function get_configured_ip_addresses() {
 			$ip_array[$int] = $ipaddr;
 		}
 	}
-	$interfaces = get_configured_carp_interface_list();
+	$interfaces = get_configured_vip_list('inet');
 	if (is_array($interfaces)) {
 		foreach ($interfaces as $int => $ipaddr) {
 			$ip_array[$int] = $ipaddr;
@@ -1312,7 +1466,7 @@ function get_configured_ip_addresses() {
 
 /*
  *   get_configured_ipv6_addresses() - Return a list of all configured
- *   interfaces IPv6 Addresses
+ *   IPv6 addresses.
  *
  */
 function get_configured_ipv6_addresses() {
@@ -1325,7 +1479,7 @@ function get_configured_ipv6_addresses() {
 			$ipv6_array[$int] = $ipaddrv6;
 		}
 	}
-	$interfaces = get_configured_carp_interface_list();
+	$interfaces = get_configured_vip_list('inet6');
 	if (is_array($interfaces)) {
 		foreach ($interfaces as $int => $ipaddrv6) {
 			$ipv6_array[$int] = $ipaddrv6;
@@ -1366,7 +1520,6 @@ function get_interface_list($mode = "active", $keyby = "physical", $vfaces = "")
 				'pfsync',
 				'enc',
 				'tun',
-				'carp',
 				'lagg',
 				'vip',
 				'ipfw'
@@ -1553,7 +1706,7 @@ function mwexec_bg($command, $clearsigmask = false) {
 function unlink_if_exists($fn) {
 	$to_do = glob($fn);
 	if (is_array($to_do) && count($to_do) > 0) {
-		array_map("unlink", $to_do);
+		@array_map("unlink", $to_do);
 	} else {
 		@unlink($fn);
 	}
@@ -1596,12 +1749,26 @@ function alias_get_type($name) {
 
 /* expand a host or network alias, if necessary */
 function alias_expand($name) {
-	global $aliastable;
+	global $config, $aliastable;
+	$urltable_prefix = "/var/db/aliastables/";
+	$urltable_filename = $urltable_prefix . $name . ".txt";
 
 	if (isset($aliastable[$name])) {
 		// alias names cannot be strictly numeric. redmine #4289
 		if (is_numericint($name)) {
 			return null;
+		}
+		// make sure if it's a ports alias, it actually exists. redmine #5845
+		foreach ($config['aliases']['alias'] as $alias) {
+			if ($alias['name'] == $name) {
+				if ($alias['type'] == "urltable_ports") {
+					if (is_URL($alias['url']) && file_exists($urltable_filename) && filesize($urltable_filename)) {
+						return "\${$name}";
+					} else {
+						return null;
+					}
+				}
+			}
 		}
 		return "\${$name}";
 	} else if (is_ipaddr($name) || is_subnet($name) || is_port($name) || is_portrange($name)) {
@@ -1705,15 +1872,30 @@ function resolve_retry($hostname, $retries = 5) {
 }
 
 function format_bytes($bytes) {
-	if ($bytes >= 1073741824) {
-		return sprintf("%.2f GB", $bytes/1073741824);
+	if ($bytes >= 1099511627776) {
+		return sprintf("%.2f TiB", $bytes/1099511627776);
+	} else if ($bytes >= 1073741824) {
+		return sprintf("%.2f GiB", $bytes/1073741824);
 	} else if ($bytes >= 1048576) {
-		return sprintf("%.2f MB", $bytes/1048576);
+		return sprintf("%.2f MiB", $bytes/1048576);
 	} else if ($bytes >= 1024) {
-		return sprintf("%.0f KB", $bytes/1024);
+		return sprintf("%.0f KiB", $bytes/1024);
 	} else {
-		return sprintf("%d bytes", $bytes);
+		return sprintf("%d B", $bytes);
 	}
+}
+
+function format_number($num, $precision = 3) {
+	$units = array('', 'K', 'M', 'G', 'T');
+
+	$i = 0;
+	while ($num > 1000 && $i < count($units)) {
+		$num /= 1000;
+		$i++;
+	}
+	round($num, $precision);
+
+	return ("$num {$units[$i]}");
 }
 
 function update_filter_reload_status($text) {
@@ -1932,6 +2114,9 @@ function is_interface_vlan_mismatch() {
 
 	if (is_array($config['vlans']['vlan'])) {
 		foreach ($config['vlans']['vlan'] as $vlan) {
+			if (substr($vlan['if'], 0, 4) == "lagg") {
+				return false;
+			}
 			if (does_interface_exist($vlan['if']) == false) {
 				return true;
 			}

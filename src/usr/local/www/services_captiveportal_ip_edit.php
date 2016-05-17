@@ -80,13 +80,11 @@ require_once("filter.inc");
 require("shaper.inc");
 require("captiveportal.inc");
 
-$pgtitle = array(gettext("Services"), gettext("Captive Portal"), gettext("Edit allowed IP address"));
-$shortcut_section = "captiveportal";
-
 $cpzone = $_GET['zone'];
 if (isset($_POST['zone'])) {
 	$cpzone = $_POST['zone'];
 }
+$cpzone = strtolower($cpzone);
 
 if (empty($cpzone) || empty($config['captiveportal'][$cpzone])) {
 	header("Location: services_captiveportal_zones.php");
@@ -97,6 +95,9 @@ if (!is_array($config['captiveportal'])) {
 	$config['captiveportal'] = array();
 }
 $a_cp =& $config['captiveportal'];
+
+$pgtitle = array(gettext("Services"), gettext("Captive Portal"), $a_cp[$cpzone]['zone'], gettext("Allowed IP Addresses"), gettext("Edit"));
+$shortcut_section = "captiveportal";
 
 if (is_numericint($_GET['id'])) {
 	$id = $_GET['id'];
@@ -113,6 +114,7 @@ $a_allowedips =& $config['captiveportal'][$cpzone]['allowedip'];
 if (isset($id) && $a_allowedips[$id]) {
 	$pconfig['ip'] = $a_allowedips[$id]['ip'];
 	$pconfig['sn'] = $a_allowedips[$id]['sn'];
+	$pconfig['dir'] = $a_allowedips[$id]['dir'];
 	$pconfig['bw_up'] = $a_allowedips[$id]['bw_up'];
 	$pconfig['bw_down'] = $a_allowedips[$id]['bw_down'];
 	$pconfig['descr'] = $a_allowedips[$id]['descr'];
@@ -244,7 +246,7 @@ if ($input_errors) {
 
 $form = new Form();
 
-$section = new Form_Section('Edit Captive Portal IP rule');
+$section = new Form_Section('Edit Captive Portal IP Rule');
 
 $section->addInput(new Form_IpAddress(
 	'ip',
@@ -252,6 +254,12 @@ $section->addInput(new Form_IpAddress(
 	$pconfig['ip']
 ))->addMask(sn, $pconfig['sn'], 32);
 
+$section->addInput(new Form_Input(
+	'descr',
+	'Description',
+	'text',
+	$pconfig['descr']
+))->setHelp("Enter a description here for reference only. (Not parsed)");
 
 $section->addInput(new Form_Select(
 	'dir',

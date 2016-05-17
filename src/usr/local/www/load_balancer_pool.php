@@ -118,7 +118,7 @@ for ($i = 0; isset($config['load_balancer']['lbpool'][$i]); $i++) {
 	$a_pool[$i]['monitor'] = "<a href=\"/load_balancer_monitor_edit.php?id={$mondex[$a_pool[$i]['monitor']]}\">" . htmlspecialchars($a_pool[$i]['monitor']) . "</a>";
 }
 
-$pgtitle = array(gettext("Services"), gettext("Load Balancer"), gettext("Pool"));
+$pgtitle = array(gettext("Services"), gettext("Load Balancer"), gettext("Pools"));
 $shortcut_section = "relayd";
 
 include("head.inc");
@@ -128,11 +128,11 @@ if ($input_errors) {
 }
 
 if ($savemsg) {
-	print_info_box($savemsg);
+	print_info_box($savemsg, 'success');
 }
 
 if (is_subsystem_dirty('loadbalancer')) {
-	print_info_box_np(sprintf(gettext("The load balancer configuration has been changed%sYou must apply the changes in order for them to take effect."), "<br />"));
+	print_apply_box(gettext("The load balancer configuration has been changed.") . "<br />" . gettext("The changes must be applied for them to take effect."));
 }
 
 /* active tabs */
@@ -157,7 +157,7 @@ display_top_tabs($tab_array);
 						<th><?=gettext('Port')?></th>
 						<th><?=gettext('Monitor')?></th>
 						<th><?=gettext('Description')?></th>
-						<th></th>
+						<th><?=gettext('Actions')?></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -195,8 +195,8 @@ foreach ($a_pool as $pool) {
 						</td>
 						<td>
 							<a class="fa fa-pencil"	title="<?=gettext('Edit pool')?>"	href="load_balancer_pool_edit.php?id=<?=$idx?>"></a>
-							<a class="fa fa-clone"	title="<?=gettext('Copy pool')?>"	href="load_balancer_pool_edit.php?act=dup&id=<?=$idx?>"></a>
-							<a class="fa fa-trash"	title="<?=gettext('Delete pool')?>"	href="load_balancer_pool.php?act=del&id=<?=$idx?>"></a>
+							<a class="fa fa-clone"	title="<?=gettext('Copy pool')?>"	href="load_balancer_pool_edit.php?act=dup&amp;id=<?=$idx?>"></a>
+							<a class="fa fa-trash"	title="<?=gettext('Delete pool')?>"	href="load_balancer_pool.php?act=del&amp;id=<?=$idx?>"></a>
 						</td>
 					</tr>
 <?php

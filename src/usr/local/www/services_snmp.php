@@ -207,7 +207,6 @@ function build_iplist() {
 	return($iplist);
 }
 
-$closehead = false;
 $pgtitle = array(gettext("Services"), gettext("SNMP"));
 $shortcut_section = "snmp";
 
@@ -218,7 +217,7 @@ if ($input_errors) {
 }
 
 if ($savemsg) {
-	print_info_box($savemsg);
+	print_info_box($savemsg, 'success');
 }
 
 $form = new Form();
@@ -234,14 +233,14 @@ $section->addInput(new Form_Checkbox(
 
 $form->add($section);
 
-$section = new Form_Section('SNMP Daemon settings');
+$section = new Form_Section('SNMP Daemon Settings');
 
 $section->addInput(new Form_Input(
 	'pollport',
 	'Polling Port',
 	'text',
 	($pconfig['pollport'] ? $pconfig['pollport']:'161')
-))->setHelp('Enter the port to accept polling events on (default 161)');
+))->setHelp('Enter the port to accept polling events on (default 161).');
 
 $section->addInput(new Form_Input(
 	'syslocation',
@@ -277,7 +276,7 @@ $section->addInput(new Form_Checkbox(
 
 $form->add($section);
 
-$section = new Form_Section('SNMP Trap settings');
+$section = new Form_Section('SNMP Trap Settings');
 
 if ($pconfig['trapenable']) {
 	$section->addClass('toggle-traps', 'in');

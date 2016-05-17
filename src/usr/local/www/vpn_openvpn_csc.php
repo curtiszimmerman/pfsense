@@ -67,9 +67,6 @@ require_once("pkg-utils.inc");
 
 global $openvpn_tls_server_modes;
 
-$pgtitle = array(gettext("VPN"), gettext("OpenVPN"), gettext("Client Specific Overrides"));
-$shortcut_section = "openvpn";
-
 if (!is_array($config['openvpn']['openvpn-csc'])) {
 	$config['openvpn']['openvpn-csc'] = array();
 }
@@ -97,7 +94,7 @@ if ($_GET['act'] == "del") {
 	openvpn_delete_csc($a_csc[$id]);
 	unset($a_csc[$id]);
 	write_config();
-	$savemsg = gettext("Client Specific Override successfully deleted")."<br />";
+	$savemsg = gettext("Client specific override successfully deleted.");
 }
 
 if ($_GET['act'] == "edit") {
@@ -243,7 +240,11 @@ if ($_POST) {
 	if (!$input_errors) {
 		$csc = array();
 
-		$csc['server_list'] = implode(",", $pconfig['server_list']);
+		if (is_array($pconfig['server_list'])) {
+			$csc['server_list'] = implode(",", $pconfig['server_list']);
+		} else {
+			$csc['server_list'] = "";
+		}
 		$csc['custom_options'] = $pconfig['custom_options'];
 		if ($_POST['disable'] == "yes") {
 			$csc['disable'] = true;
@@ -308,6 +309,13 @@ if ($_POST) {
 	}
 }
 
+$pgtitle = array(gettext("VPN"), gettext("OpenVPN"), gettext("Client Specific Overrides"));
+
+if ($act=="new" || $act=="edit") {
+	$pgtitle[] = gettext('Edit');
+}
+$shortcut_section = "openvpn";
+
 include("head.inc");
 
 if ($input_errors) {
@@ -319,8 +327,8 @@ if ($savemsg) {
 }
 
 $tab_array = array();
-$tab_array[] = array(gettext("Server"), false, "vpn_openvpn_server.php");
-$tab_array[] = array(gettext("Client"), false, "vpn_openvpn_client.php");
+$tab_array[] = array(gettext("Servers"), false, "vpn_openvpn_server.php");
+$tab_array[] = array(gettext("Clients"), false, "vpn_openvpn_client.php");
 $tab_array[] = array(gettext("Client Specific Overrides"), true, "vpn_openvpn_csc.php");
 $tab_array[] = array(gettext("Wizards"), false, "wizard.php?xml=openvpn_wizard.xml");
 add_package_tabs("OpenVPN", $tab_array);
@@ -335,7 +343,7 @@ if ($act == "new" || $act == "edit"):
 	if (is_array($config['openvpn']['openvpn-server'])) {
 		foreach ($config['openvpn']['openvpn-server'] as $serversettings) {
 			if (in_array($serversettings['mode'], $openvpn_tls_server_modes)) {
-				$serveroptionlist[$serversettings['vpnid']] = "OpenVPN Server {$serversettings['vpnid']}: {$serversettings['description']}";
+				$serveroptionlist[$serversettings['vpnid']] = sprintf(gettext("OpenVPN Server %d: %s"), $serversettings['vpnid'], $serversettings['description']);
 			}
 		}
 	}
@@ -368,7 +376,7 @@ if ($act == "new" || $act == "edit"):
 		'Description',
 		'text',
 		$pconfig['description']
-	))->setHelp('You may enter a description here for your reference (not parsed). ');
+	))->setHelp('A description may be entered here for administrative reference (not parsed). ');
 
 	$section->addInput(new Form_Checkbox(
 		'block',
@@ -379,14 +387,14 @@ if ($act == "new" || $act == "edit"):
 
 	$form->add($section);
 
-	$section = new Form_Section('Tunnel settings');
+	$section = new Form_Section('Tunnel Settings');
 
 	$section->addInput(new Form_Input(
 		'tunnel_network',
 		'Tunnel Network',
 		'text',
 		$pconfig['tunnel_network']
-	))->setHelp('This is the virtual network used for private communications between this client and the server expressed using CIDR (eg. 10.0.8.0/24). ' .
+	))->setHelp('This is the virtual network used for private communications between this client and the server expressed using CIDR (e.g. 10.0.8.0/24). ' .
 				'The first network address is assumed to be the server address and the second network address will be assigned to the client virtual interface. ');
 
 	$section->addInput(new Form_Input(
@@ -395,7 +403,7 @@ if ($act == "new" || $act == "edit"):
 		'text',
 		$pconfig['local_network']
 	))->setHelp('These are the IPv4 networks that will be accessible from this particular client. Expressed as a comma-separated list of one or more CIDR ranges. ' . '<br />' .
-				'NOTE: You do not need to specify networks here if they have already been defined on the main server configuration.');
+				'NOTE: Networks do not need to be specified here if they have already been defined on the main server configuration.');
 
 	$section->addInput(new Form_Input(
 		'local_networkv6',
@@ -403,7 +411,7 @@ if ($act == "new" || $act == "edit"):
 		'text',
 		$pconfig['local_networkv6']
 	))->setHelp('These are the IPv4 networks that will be accessible from this particular client. Expressed as a comma-separated list of one or more IP/PREFIX networks.' . '<br />' .
-				'NOTE: You do not need to specify networks here if they have already been defined on the main server configuration.');
+				'NOTE: Networks do not need to be specified here if they have already been defined on the main server configuration.');
 
 	$section->addInput(new Form_Input(
 		'remote_network',
@@ -411,7 +419,7 @@ if ($act == "new" || $act == "edit"):
 		'text',
 		$pconfig['remote_network']
 	))->setHelp('These are the IPv4 networks that will be routed to this client specifically using iroute, so that a site-to-site VPN can be established. ' .
-				'Expressed as a comma-separated list of one or more CIDR ranges. You may leave this blank if there are no client-side networks to be routed.' . '<br />' .
+				'Expressed as a comma-separated list of one or more CIDR ranges. May be left blank if there are no client-side networks to be routed.' . '<br />' .
 				'NOTE: Remember to add these subnets to the IPv4 Remote Networks list on the corresponding OpenVPN server settings.');
 
 	$section->addInput(new Form_Input(
@@ -420,7 +428,7 @@ if ($act == "new" || $act == "edit"):
 		'text',
 		$pconfig['remote_networkv6']
 	))->setHelp('These are the IPv4 networks that will be routed to this client specifically using iroute, so that a site-to-site VPN can be established. ' .
-				'Expressed as a comma-separated list of one or more IP/PREFIX networks. You may leave this blank if there are no client-side networks to be routed.' . '<br />' .
+				'Expressed as a comma-separated list of one or more IP/PREFIX networks. May be left blank if there are no client-side networks to be routed.' . '<br />' .
 				'NOTE: Remember to add these subnets to the IPv6 Remote Networks list on the corresponding OpenVPN server settings.');
 
 	$section->addInput(new Form_Checkbox(
@@ -432,7 +440,7 @@ if ($act == "new" || $act == "edit"):
 
 	$form->add($section);
 
-	$section = new Form_Section('Client settings');
+	$section = new Form_Section('Client Settings');
 
 	// Default domain name
 	$section->addInput(new Form_Checkbox(
@@ -585,7 +593,7 @@ if ($act == "new" || $act == "edit"):
 		'custom_options',
 		'Advanced',
 		$pconfig['custom_options']
-	))->setHelp('Enter any additional options you would like to add for this client specific override, separated by a semicolon. ' . '<br />' .
+	))->setHelp('Enter any additional options to add for this client specific override, separated by a semicolon. ' . '<br />' .
 				'EXAMPLE: push "route 10.0.0.0 255.255.255.0"; ');
 
 	// The hidden fields
@@ -665,7 +673,7 @@ else :  // Not an 'add' or an 'edit'. Just the table of Override CSCs
 					<th><?=gettext("Disabled")?></th>
 					<th><?=gettext("Common Name")?></th>
 					<th><?=gettext("Description")?></th>
-					<th> <!-- Buttons --></th>
+					<th><?=gettext("Actions")?></th>
 				</tr>
 			</thead>
 			<tbody>

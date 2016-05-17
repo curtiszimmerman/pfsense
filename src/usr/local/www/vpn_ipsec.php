@@ -82,7 +82,6 @@ $a_phase1 = &$config['ipsec']['phase1'];
 $a_phase2 = &$config['ipsec']['phase2'];
 
 if ($_POST) {
-
 	if ($_POST['apply']) {
 		$retval = vpn_ipsec_configure();
 		/* reload the filter in the background */
@@ -261,23 +260,19 @@ $tab_array[] = array(gettext("Mobile Clients"), false, "vpn_ipsec_mobile.php");
 $tab_array[] = array(gettext("Pre-Shared Keys"), false, "vpn_ipsec_keys.php");
 $tab_array[] = array(gettext("Advanced Settings"), false, "vpn_ipsec_settings.php");
 display_top_tabs($tab_array);
-?>
 
-<script type="text/javascript" src="/javascript/row_toggle.js"></script>
-
-<?php
 	if ($savemsg) {
 		print_info_box($savemsg, 'success');
 	}
 
 	if (is_subsystem_dirty('ipsec')) {
-		print_info_box_np(gettext("The IPsec tunnel configuration has been changed") . ".<br />" . gettext("You must apply the changes in order for them to take effect."));
+		print_apply_box(gettext("The IPsec tunnel configuration has been changed.") . "<br />" . gettext("The changes must be applied for them to take effect."));
 	}
 ?>
 
 <form name="mainform" method="post">
 	<div class="panel panel-default">
-		<div class="panel-heading"><h2 class="panel-title"><?=gettext('IPsec tunnels')?></h2></div>
+		<div class="panel-heading"><h2 class="panel-title"><?=gettext('IPsec Tunnels')?></h2></div>
 		<div class="panel-body table-responsive">
 			<table class="table table-striped table-hover">
 				<thead>
@@ -306,18 +301,20 @@ display_top_tabs($tab_array);
 ?>
 					<tr id="fr<?=$i?>" onclick="fr_toggle(<?=$i?>)" id="frd<?=$i?>" ondblclick="document.location='vpn_ipsec_phase1.php?p1index=<?=$i?>'" class="<?= $entryStatus ?>">
 						<td>
-							<input type="checkbox" id="frc<?=$i?>" name="p1entry[]" value="<?=$i?>" onclick="fr_bgcolor('<?=$i?>')" />
-							<a	class="fa fa-anchor" id="Xmove_<?=$i?>" title="<?=gettext("Move checked entries to here")?>"></a>
+							<input type="checkbox" id="frc<?=$i?>" onclick="fr_toggle(<?=$i?>)" name="p1entry[]" value="<?=$i?>"  />
+							<a	class="fa fa-anchor icon-pointer" id="Xmove_<?=$i?>" title="<?=gettext("Move checked entries to here")?>"></a>
 						</td>
 						<td>
-							<button value="toggle_<?=$i?>" name="toggle_<?=$i?>" title="<?=gettext("click to toggle enabled/disabled status")?>" class="btn btn-xs btn-default" type="submit"><?= ($entryStatus == 'disabled' ? 'enable' : 'disable') ?></button>
+							<button value="toggle_<?=$i?>" name="toggle_<?=$i?>" title="<?=gettext("click to toggle enabled/disabled status")?>" class="btn btn-xs btn-<?= ($entryStatus == 'disabled' ? 'success' : 'warning') ?>" type="submit"><?= ($entryStatus == 'disabled' ? 'Enable' : 'Disable') ?></button>
 						</td>
-						<td onclick="fr_toggle(<?=$i?>)" id="frd<?=$i?>">
+						<td id="frd<?=$i?>">
 <?php
 			if (empty($ph1ent['iketype']) || $ph1ent['iketype'] == "ikev1") {
 				echo "V1";
-			} else {
+			} elseif ($ph1ent['iketype'] == "ikev2") {
 				echo "V2";
+			} elseif ($ph1ent['iketype'] == "auto") {
+				echo "Auto";
 			}
 ?>
 						</td>
@@ -326,14 +323,12 @@ display_top_tabs($tab_array);
 			if ($ph1ent['interface']) {
 				$iflabels = get_configured_interface_with_descr();
 
-				$carplist = get_configured_carp_interface_list();
-				foreach ($carplist as $cif => $carpip) {
-					$iflabels[$cif] = $carpip." (".get_vip_descr($carpip).")";
-				}
-
-				$aliaslist = get_configured_ip_aliases_list();
-				foreach ($aliaslist as $aliasip => $aliasif) {
-					$iflabels[$aliasip] = $aliasip." (".get_vip_descr($aliasip).")";
+				$viplist = get_configured_vip_list();
+				foreach ($viplist as $vip => $address) {
+					$iflabels[$vip] = $address;
+					if (get_vip_descr($address)) {
+						$iflabels[$vip] .= " (". get_vip_descr($address) .")";
+					}
 				}
 
 				$grouplist = return_gateway_groups_array();
@@ -357,7 +352,7 @@ display_top_tabs($tab_array);
 			}
 ?>
 						</td>
-						<td onclick="fr_toggle(<?=$i?>)" id="frd<?=$i?>">
+						<td id="frd<?=$i?>">
 					<?=$spans?>
 					<?php
 					if (empty($ph1ent['iketype']) || $ph1ent['iketype'] == "ikev1") {
@@ -366,7 +361,7 @@ display_top_tabs($tab_array);
 					?>
 					<?=$spane?>
 				</td>
-				<td onclick="fr_toggle(<?=$i?>)" id="frd<?=$i?>">
+				<td id="frd<?=$i?>">
 					<?=$p1_ealgos[$ph1ent['encryption-algorithm']['name']]['name']?>
 <?php
 			if ($ph1ent['encryption-algorithm']['keylen']) {
@@ -420,7 +415,7 @@ display_top_tabs($tab_array);
 				$fr_prefix = "frp2{$i}";
 				$fr_header = $fr_prefix . "header";
 ?>
-								<input type="button" onclick="show_phase2('tdph2-<?=$i?>','shph2but-<?=$i?>')" value="+" /> - <?php printf(gettext("Show %s Phase-2 entries"), $phase2count); ?>
+								<button class="btn btn-info" type="button" onclick="show_phase2('tdph2-<?=$i?>','shph2but-<?=$i?>')" value="+"><i class="fa fa-plus-circle"></i> <?php printf(gettext("Show Phase 2 Entries (%s)"), $phase2count); ?></button>
 							</div>
 							<div id="tdph2-<?=$i?>" <?=($tdph2_visible != '1' ? 'style="display:none"' : '')?>>
 								<table class="table table-striped table-hover">
@@ -460,7 +455,7 @@ display_top_tabs($tab_array);
 												<button class="fa fa-anchor button-icon" type="submit" name="movep2_<?=$j?>" value="movep2_<?=$j?>" title="<?=gettext("Move checked P2s here")?>"></button>
 											</td>
 											<td>
-												<button value="togglep2_<?=$ph2index?>" name="togglep2_<?=$ph2index?>" title="<?=gettext("click to toggle enabled/disabled status")?>" class="btn btn-xs btn-default" type="submit"><?= ($entryStatus == 'disabled'? 'enable' : 'disable') ?></button>
+												<button value="togglep2_<?=$ph2index?>" name="togglep2_<?=$ph2index?>" title="<?=gettext("click to toggle enabled/disabled status")?>" class="btn btn-xs btn-<?= ($entryStatus == 'disabled'? 'success' : 'warning') ?>" type="submit"><?= ($entryStatus == 'disabled'? 'Enable' : 'Disable') ?></button>
 											</td>
 											<td id="<?=$fr_d?>" onclick="fr_toggle('<?=$j?>', '<?=$fr_prefix?>')">
 												<?=$ph2ent['mode']?>
@@ -511,7 +506,7 @@ display_top_tabs($tab_array);
 <!--												<button class="fa fa-anchor button-icon" type="submit" name="movep2_<?=$j?>" value="movep2_<?=$j?>" title="<?=gettext("Move checked P2s here")?>"></button> -->
 												<a class="fa fa-pencil" href="vpn_ipsec_phase2.php?p2index=<?=$ph2ent['uniqid']?>" title="<?=gettext("Edit phase2 entry"); ?>"></a>
 												<a class="fa fa-clone" href="vpn_ipsec_phase2.php?dup=<?=$ph2ent['uniqid']?>" title="<?=gettext("Add a new Phase 2 based on this one"); ?>"></a>
-												<a	class="fa fa-trash no-confirm" id="Xdelp2_<?=$i?>" title="<?=gettext('Delete phase2 entry'); ?>"></a>
+												<a	class="fa fa-trash no-confirm" id="Xdelp2_<?=$ph2index?>" title="<?=gettext('Delete phase2 entry'); ?>"></a>
 												<button style="display: none;" class="btn btn-xs btn-warning" type="submit" id="delp2_<?=$ph2index?>" name="delp2_<?=$ph2index?>" value="delp2_<?=$ph2index?>" title="<?=gettext('delete phase2 entry'); ?>">delete</button>
 											</td>
 										</tr>
@@ -524,7 +519,7 @@ display_top_tabs($tab_array);
 													<?=gettext("Add P2")?>
 												</a>
 											</td>
-											<td colspan="8"></td>
+											<td colspan="7"></td>
 										</tr>
 									</tbody>
 								</table>
@@ -561,11 +556,10 @@ display_top_tabs($tab_array);
 	</nav>
 </form>
 
-<div id="infoblock">
-	<?=print_info_box('<strong>' . gettext("Note:") . '</strong><br />' .
-	gettext("You can check your IPsec status at ") . '<a href="status_ipsec.php">' . gettext("Status:IPsec") . '</a>.<br />' .
-	gettext("IPsec Debug Mode can be enabled at ") . '<a href="vpn_ipsec_settings.php">' .gettext("VPN:IPsec:Advanced Settings") . '</a>.<br />' .
-	gettext("IPsec can be set to prefer older SAs at ") . '<a href="vpn_ipsec_settings.php">' . gettext("VPN:IPsec:Advanced Settings") . '</a>', info)?>
+<div class="infoblock">
+	<?php print_info_box(sprintf(gettext("The IPsec status can be checked at %s%s%s."), '<a href="status_ipsec.php">', gettext("Status:IPsec"), '</a>') . '<br />' .
+	sprintf(gettext("IPsec debug mode can be enabled at %s%s%s."), '<a href="vpn_ipsec_settings.php">', gettext("VPN:IPsec:Advanced Settings"), '</a>') . '<br />' .
+	sprintf(gettext("IPsec can be set to prefer older SAs at %s%s%s."), '<a href="vpn_ipsec_settings.php">', gettext("VPN:IPsec:Advanced Settings"), '</a>'), 'info', false); ?>
 </div>
 
 <script type="text/javascript">
@@ -579,17 +573,24 @@ function show_phase2(id, buttonid) {
 
 events.push(function() {
 	$('[id^=Xmove_]').click(function (event) {
+		// ToDo: We POST shift="yes" if the user has the shift key depressed, but that is not yet used
+		// by the $_POST code. It is intended to allow the user to choose to move stuff to the row before or
+		// after the clicked anchor icon
+		if (event.shiftKey) {
+			$('form').append('<input type="hidden" id="shift" name="shift" value="yes" />');
+		}
+
 		$('#' + event.target.id.slice(1)).click();
 	});
 
 	$('[id^=Xdel_]').click(function (event) {
-		if (confirm("<?=gettext('Are you sure you wish to delete this P1 entry?')?>")) {
+		if (confirm("<?=gettext('Confirmation required to delete this P1 entry.')?>")) {
 			$('#' + event.target.id.slice(1)).click();
 		}
 	});
 
 	$('[id^=Xdelp2_]').click(function (event) {
-		if (confirm("<?=gettext('Are you sure you wish to delete this P2 entry?')?>")) {
+		if (confirm("<?=gettext('Confirmation required to delete this P2 entry.')?>")) {
 			$('#' + event.target.id.slice(1)).click();
 		}
 	});

@@ -72,8 +72,6 @@ $ca_methods = array(
 $ca_keylens = array("512", "1024", "2048", "4096");
 $openssl_digest_algs = array("sha1", "sha224", "sha256", "sha384", "sha512");
 
-$pgtitle = array(gettext("System"), gettext("Certificate Manager"), gettext("CAs"));
-
 if (is_numericint($_GET['id'])) {
 	$id = $_GET['id'];
 }
@@ -128,7 +126,7 @@ if ($act == "del") {
 	$name = $a_ca[$id]['descr'];
 	unset($a_ca[$id]);
 	write_config();
-	$savemsg = sprintf(gettext("Certificate Authority %s and its CRLs (if any) successfully deleted"), htmlspecialchars($name)) . "<br />";
+	$savemsg = sprintf(gettext("Certificate Authority %s and its CRLs (if any) successfully deleted."), htmlspecialchars($name));
 	pfSenseHeader("system_camanager.php");
 	exit;
 }
@@ -246,20 +244,20 @@ if ($_POST) {
 	if ($pconfig['method'] != "existing") {
 		/* Make sure we do not have invalid characters in the fields for the certificate */
 		if (preg_match("/[\?\>\<\&\/\\\"\']/", $_POST['descr'])) {
-			array_push($input_errors, "The field 'Descriptive Name' contains invalid characters.");
+			array_push($input_errors, gettext("The field 'Descriptive Name' contains invalid characters."));
 		}
 
 		for ($i = 0; $i < count($reqdfields); $i++) {
 			if ($reqdfields[$i] == 'dn_email') {
 				if (preg_match("/[\!\#\$\%\^\(\)\~\?\>\<\&\/\\\,\"\']/", $_POST["dn_email"])) {
-					array_push($input_errors, "The field 'Distinguished name Email Address' contains invalid characters.");
+					array_push($input_errors, gettext("The field 'Distinguished name Email Address' contains invalid characters."));
 				}
 			} else if ($reqdfields[$i] == 'dn_commonname') {
 				if (preg_match("/[\!\@\#\$\%\^\(\)\~\?\>\<\&\/\\\,\"\']/", $_POST["dn_commonname"])) {
-					array_push($input_errors, "The field 'Distinguished name Common Name' contains invalid characters.");
+					array_push($input_errors, gettext("The field 'Distinguished name Common Name' contains invalid characters."));
 				}
 			} else if (($reqdfields[$i] != "descr") && preg_match("/[\!\@\#\$\%\^\(\)\~\?\>\<\&\/\\\,\.\"\']/", $_POST["$reqdfields[$i]"])) {
-				array_push($input_errors, "The field '" . $reqdfieldsn[$i] . "' contains invalid characters.");
+				array_push($input_errors, sprintf(gettext("The field '%s' contains invalid characters."), $reqdfieldsn[$i]));
 			}
 		}
 		if (!in_array($_POST["keylen"], $ca_keylens)) {
@@ -350,6 +348,11 @@ if ($_POST) {
 	}
 }
 
+$pgtitle = array(gettext("System"), gettext("Certificate Manager"), gettext("CAs"));
+
+if ($act == "new" || $act == "edit" || $act == gettext("Save") || $input_errors) {
+	$pgtitle[] = gettext('Edit');
+}
 include("head.inc");
 
 if ($input_errors) {
@@ -379,19 +382,22 @@ display_top_tabs($tab_array);
 
 if (!($act == "new" || $act == "edit" || $act == gettext("Save") || $input_errors)) {
 ?>
-<div class="table-responsive">
-<table class="table table-striped table-hover">
-	<thead>
-		<tr>
-			<th><?=gettext("Name")?></th>
-			<th><?=gettext("Internal")?></th>
-			<th><?=gettext("Issuer")?></th>
-			<th><?=gettext("Certificates")?></th>
-			<th><?=gettext("Distinguished Name")?></th>
-			<th><?=gettext("Actions")?></th>
-		</tr>
-	</thead>
-	<tbody>
+<div class="panel panel-default">
+	<div class="panel-heading"><h2 class="panel-title"><?=gettext('Certificate Authorities')?></h2></div>
+	<div class="panel-body">
+		<div class="table-responsive">
+		<table class="table table-striped table-hover">
+			<thead>
+				<tr>
+					<th><?=gettext("Name")?></th>
+					<th><?=gettext("Internal")?></th>
+					<th><?=gettext("Issuer")?></th>
+					<th><?=gettext("Certificates")?></th>
+					<th><?=gettext("Distinguished Name")?></th>
+					<th><?=gettext("Actions")?></th>
+				</tr>
+			</thead>
+			<tbody>
 <?php
 foreach ($a_ca as $i => $ca):
 	$name = htmlspecialchars($ca['descr']);
@@ -412,9 +418,6 @@ foreach ($a_ca as $i => $ca):
 		$issuer_name = $issuer_ca['descr'];
 	}
 
-	// TODO : Need gray certificate icon
-	$internal = (!!$ca['prv']);
-
 	foreach ($a_cert as $cert) {
 		if ($cert['caref'] == $ca['refid']) {
 			$certcount++;
@@ -427,30 +430,33 @@ foreach ($a_ca as $i => $ca):
 		}
 	}
 ?>
-		<tr>
-			<td><?=$name?></td>
-			<td><?=$internal?></td>
-			<td><i><?=$issuer_name?></i></td>
-			<td><?=$certcount?></td>
-			<td>
-				<?=$subj?>
-				<br />
-				<small>
-					<?=gettext("Valid From")?>: <b><?=$startdate ?></b><br /><?=gettext("Valid Until")?>: <b><?=$enddate ?></b>
-				</small>
-			</td>
-			<td>
-				<a class="fa fa-pencil"	title="<?=gettext("Edit")?>"	href="system_camanager.php?act=edit&amp;id=<?=$i?>"></a>
-				<a class="fa fa-sign-in"	title="<?=gettext("Export")?>"	href="system_camanager.php?act=exp&amp;id=<?=$i?>"></a>
-			<?php if ($ca['prv']): ?>
-				<a class="fa fa-key"	title="<?=gettext("Export key")?>"	href="system_camanager.php?act=expkey&amp;id=<?=$i?>"></a>
-			<?php endif?>
-				<a class="fa fa-trash" 	title="<?=gettext("Delete")?>"	href="system_camanager.php?act=del&amp;id=<?=$i?>"></a>
-			</td>
-		</tr>
+				<tr>
+					<td><?=$name?></td>
+					<td><i class="fa fa-<?= (!empty($ca['prv'])) ? "check" : "times" ; ?>"></i></td>
+					<td><i><?=$issuer_name?></i></td>
+					<td><?=$certcount?></td>
+					<td>
+						<?=$subj?>
+						<br />
+						<small>
+							<?=gettext("Valid From")?>: <b><?=$startdate ?></b><br /><?=gettext("Valid Until")?>: <b><?=$enddate ?></b>
+						</small>
+					</td>
+					<td>
+						<a class="fa fa-pencil"	title="<?=gettext("Edit CA")?>"	href="system_camanager.php?act=edit&amp;id=<?=$i?>"></a>
+						<a class="fa fa-certificate"	title="<?=gettext("Export CA")?>"	href="system_camanager.php?act=exp&amp;id=<?=$i?>"></a>
+					<?php if ($ca['prv']): ?>
+						<a class="fa fa-key"	title="<?=gettext("Export key")?>"	href="system_camanager.php?act=expkey&amp;id=<?=$i?>"></a>
+					<?php endif?>
+						<a class="fa fa-trash" 	title="<?=gettext("Delete CA")?>"	href="system_camanager.php?act=del&amp;id=<?=$i?>"></a>
+					</td>
+				</tr>
 <?php endforeach; ?>
-	</tbody>
-</table>
+			</tbody>
+		</table>
+		</div>
+	</div>
+</div>
 
 <nav class="action-buttons">
 	<a href="?act=new" class="btn btn-success btn-sm">
@@ -458,7 +464,7 @@ foreach ($a_ca as $i => $ca):
 		<?=gettext("Add")?>
 	</a>
 </nav>
-<?
+<?php
 	include("foot.inc");
 	exit;
 }
@@ -483,7 +489,7 @@ if ($act == "edit") {
 	));
 }
 
-$section = new Form_Section('Create / edit CA');
+$section = new Form_Section('Create / Edit CA');
 
 $section->addInput(new Form_Input(
 	'descr',
@@ -517,7 +523,7 @@ $section->addInput(new Form_Textarea(
 	'Certificate Private Key (optional)',
 	$pconfig['key']
 ))->setHelp('Paste the private key for the above certificate here. This is '.
-	'optional in most cases, but required if you need to generate a '.
+	'optional in most cases, but is required when generating a '.
 	'Certificate Revocation List (CRL).');
 
 $section->addInput(new Form_Input(
@@ -633,3 +639,4 @@ foreach ($a_ca as $ca) {
 }
 
 include('foot.inc');
+?>

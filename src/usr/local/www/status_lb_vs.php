@@ -62,11 +62,6 @@
 ##|-PRIV
 
 define('COLOR', true);
-define('LIGHTGREEN', '#90EE90');
-define('LIGHTCORAL', '#F08080');
-define('KHAKI',		 '#F0E68C');
-define('LIGHTGRAY',	 '#D3D3D3');
-define('WHITE',		 '#FFFFFF');
 
 require_once("guiconfig.inc");
 require_once("vslb.inc");
@@ -91,7 +86,7 @@ $tab_array[] = array(gettext("Virtual Servers"), true, "status_lb_vs.php");
 display_top_tabs($tab_array);
 
 if (empty($a_vs)) {
-	print('<div class="alert alert-danger">No load balancers have been configured!</div>');
+	print_info_box(gettext("No load balancers have been configured."), 'danger', false);
 } else {
 ?>
 <div class="table-responsive"></div>
@@ -132,40 +127,34 @@ if (empty($a_vs)) {
 				<?php
 				switch (trim($rdr_a[$vsent['name']]['status'])) {
 					case 'active':
-					  $bgcolor = LIGHTGREEN;
-					  $rdr_a[$vsent['name']]['status'] = "Active";
+					  $bgcolor = "bg-success";
+					  $rdr_a[$vsent['name']]['status'] = gettext("Active");
 					  break;
 					case 'down':
-					  $bgcolor = LIGHTCORAL;
-					  $rdr_a[$vsent['name']]['status'] = "Down";
+					  $bgcolor = "bg-danger";
+					  $rdr_a[$vsent['name']]['status'] = gettext("Down");
 					  break;
 					default:
-					  $bgcolor = LIGHTGRAY;
-					  $rdr_a[$vsent['name']]['status'] = 'Unknown - relayd not running?';
+					  $bgcolor = "bg-info";
+					  $rdr_a[$vsent['name']]['status'] = gettext('Unknown - relayd not running?');
 				  }
 
 				if (!COLOR) {
-					$bgcolor = WHITE;
+					$bgcolor = "";
 				}
 ?>
-				<td bgcolor="<?=$bgcolor?>">
+				<td class="<?=$bgcolor?>">
 					<?=$rdr_a[$vsent['name']]['status']?>
 
 <?php
 					if (!empty($rdr_a[$vsent['name']]['total'])) {
-?>
-						Total Sessions: <?=$rdr_a[$vsent['name']]['total']?><br>/>
-<?php
+						echo sprintf(gettext("Total Sessions: %s"), $rdr_a[$vsent['name']]['total'] . "<br />");
 					}
 					if (!empty($rdr_a[$vsent['name']]['last'])) {
-?>
-						Last: <?=$rdr_a[$vsent['name']]['last']?><br>/>
-<?php
+						echo sprintf(gettext("Last: %s"), $rdr_a[$vsent['name']]['last'] . "<br />");
 					}
 					if (!empty($rdr_a[$vsent['name']]['average'])) {
-?>
-						Average: <?=$rdr_a[$vsent['name']]['average']?>
-<?php
+						echo sprintf(gettext("Average: %s"), $rdr_a[$vsent['name']]['average']);
 					}
 ?>
 				</td>

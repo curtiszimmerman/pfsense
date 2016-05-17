@@ -66,7 +66,7 @@
 require("guiconfig.inc");
 require_once("config.inc");
 
-$pgtitle = array(gettext("Status"), gettext("DHCP leases"));
+$pgtitle = array(gettext("Status"), gettext("DHCP Leases"));
 $shortcut_section = "dhcp";
 
 $leasesfile = "{$g['dhcpd_chroot_path']}/var/db/dhcpd.leases";
@@ -170,6 +170,15 @@ $i = 0;
 $l = 0;
 $p = 0;
 
+// Translate these once so we don't do it over and over in the loops below.
+$online_string = gettext("online");
+$offline_string = gettext("offline");
+$active_string = gettext("active");
+$expired_string = gettext("expired");
+$reserved_string = gettext("reserved");
+$dynamic_string = gettext("dynamic");
+$static_string = gettext("static");
+
 // Put everything together again
 foreach ($leases_content as $lease) {
 	/* split the line by space */
@@ -198,7 +207,7 @@ foreach ($leases_content as $lease) {
 				continue 3;
 			case "lease":
 				$leases[$l]['ip'] = $data[$f+1];
-				$leases[$l]['type'] = "dynamic";
+				$leases[$l]['type'] = $dynamic_string;
 				$f = $f+2;
 				break;
 			case "starts":
@@ -233,15 +242,15 @@ foreach ($leases_content as $lease) {
 			case "binding":
 				switch ($data[$f+2]) {
 					case "active":
-						$leases[$l]['act'] = "active";
+						$leases[$l]['act'] = $active_string;
 						break;
 					case "free":
-						$leases[$l]['act'] = "expired";
-						$leases[$l]['online'] = "offline";
+						$leases[$l]['act'] = $expired_string;
+						$leases[$l]['online'] = $offline_string;
 						break;
 					case "backup":
-						$leases[$l]['act'] = "reserved";
-						$leases[$l]['online'] = "offline";
+						$leases[$l]['act'] = $reserved_string;
+						$leases[$l]['online'] = $offline_string;
 						break;
 				}
 				$f = $f+1;
@@ -258,9 +267,9 @@ foreach ($leases_content as $lease) {
 				$leases[$l]['mac'] = $data[$f+2];
 				/* check if it's online and the lease is active */
 				if (in_array($leases[$l]['ip'], $arpdata_ip)) {
-					$leases[$l]['online'] = 'online';
+					$leases[$l]['online'] = $online_string;
 				} else {
-					$leases[$l]['online'] = 'offline';
+					$leases[$l]['online'] = $offline_string;
 				}
 				$f = $f+2;
 				break;
@@ -306,14 +315,15 @@ foreach ($config['interfaces'] as $ifname => $ifarr) {
 		foreach ($config['dhcpd'][$ifname]['staticmap'] as $static) {
 			$slease = array();
 			$slease['ip'] = $static['ipaddr'];
-			$slease['type'] = "static";
+			$slease['type'] = $static_string;
 			$slease['mac'] = $static['mac'];
 			$slease['if'] = $ifname;
 			$slease['start'] = "";
 			$slease['end'] = "";
 			$slease['hostname'] = htmlentities($static['hostname']);
-			$slease['act'] = "static";
-			$slease['online'] = in_array(strtolower($slease['mac']), $arpdata_mac) ? 'online' : 'offline';
+			$slease['descr'] = htmlentities($static['descr']);
+			$slease['act'] = $static_string;
+			$slease['online'] = in_array(strtolower($slease['mac']), $arpdata_mac) ? $online_string : $offline_string;
 			$slease['staticmap_array_index'] = $staticmap_array_index;
 			$leases[] = $slease;
 			$staticmap_array_index++;
@@ -329,7 +339,7 @@ if ($_GET['order']) {
 if (count($pools) > 0) {
 ?>
 <div class="panel panel-default">
-	<div class="panel-heading"><h2 class="panel-title"><?=gettext('Pool status')?></h2></div>
+	<div class="panel-heading"><h2 class="panel-title"><?=gettext('Pool Status')?></h2></div>
 	<div class="panel-body table-responsive">
 		<table class="table table-striped table-hover table-condensed sortable-theme-bootstrap" data-sortable>
 		<thead>
@@ -342,7 +352,7 @@ if (count($pools) > 0) {
 			</tr>
 		</thead>
 		<tbody>
-<? foreach ($pools as $data):?>
+<?php foreach ($pools as $data):?>
 			<tr>
 				<td><?=$data['name']?></td>
 				<td><?=$data['mystate']?></td>
@@ -350,7 +360,7 @@ if (count($pools) > 0) {
 				<td><?=$data['peerstate']?></td>
 				<td><?=adjust_gmt($data['peerdate'])?></td>
 			</tr>
-<? endforeach?>
+<?php endforeach; ?>
 		</tbody>
 		</table>
 	</div>
@@ -369,10 +379,12 @@ if (count($pools) > 0) {
 					<th><?=gettext("IP address")?></th>
 					<th><?=gettext("MAC address")?></th>
 					<th><?=gettext("Hostname")?></th>
+					<th><?=gettext("Description")?></th>
 					<th><?=gettext("Start")?></th>
 					<th><?=gettext("End")?></th>
 					<th><?=gettext("Online")?></th>
 					<th><?=gettext("Lease Type")?></th>
+					<th data-sortable="false"><?=gettext("Actions")?></th>
 				</tr>
 			</thead>
 			<tbody>
@@ -381,36 +393,52 @@ $dhcp_leases_subnet_counter = array(); //array to sum up # of leases / subnet
 $iflist = get_configured_interface_with_descr(); //get interface descr for # of leases
 
 foreach ($leases as $data):
-	if ($data['act'] != "active" && $data['act'] != "static" && $_GET['all'] != 1) {
+	if ($data['act'] != $active_string && $data['act'] != $static_string && $_GET['all'] != 1) {
 		continue;
 	}
 
-	if ($data['act'] == 'active') {
+	if ($data['act'] == $active_string) {
+		/* Active DHCP Lease */
 		$icon = 'fa-check-circle-o';
-	} elseif ($data['act'] == 'expired') {
+	} elseif ($data['act'] == $expired_string) {
+		/* Expired DHCP Lease */
 		$icon = 'fa-ban';
 	} else {
-		$icon = 'fa-times-circle-o';
+		/* Static Mapping */
+		$icon = 'fa-user';
 	}
 
-	$lip = ip2ulong($data['ip']);
-
-	if ($data['act'] != "static") {
-		$dlsc=0;
+	if ($data['act'] != $static_string) {
 		foreach ($config['dhcpd'] as $dhcpif => $dhcpifconf) {
 			if (!is_array($dhcpifconf['range'])) {
 				continue;
 			}
-			if (($lip >= ip2ulong($dhcpifconf['range']['from'])) && ($lip <= ip2ulong($dhcpifconf['range']['to']))) {
+			if (is_inrange_v4($data['ip'], $dhcpifconf['range']['from'], $dhcpifconf['range']['to'])) {
 				$data['if'] = $dhcpif;
-				$dhcp_leases_subnet_counter[$dlsc]['dhcpif'] = $dhcpif;
-				$dhcp_leases_subnet_counter[$dlsc]['from'] = $dhcpifconf['range']['from'];
-				$dhcp_leases_subnet_counter[$dlsc]['to'] = $dhcpifconf['range']['to'];
-				$dhcp_leases_subnet_counter[$dlsc]['count'] = $dhcp_leases_subnet_counter[$dlsc]['count']+1;
+				$dlskey = $dhcpif . "-" . $dhcpifconf['range']['from'];
+				$dhcp_leases_subnet_counter[$dlskey]['dhcpif'] = $dhcpif;
+				$dhcp_leases_subnet_counter[$dlskey]['from'] = $dhcpifconf['range']['from'];
+				$dhcp_leases_subnet_counter[$dlskey]['to'] = $dhcpifconf['range']['to'];
+				$dhcp_leases_subnet_counter[$dlskey]['count'] += 1;
 				break;
 			}
 
-			$dlsc++;
+			// Check if the IP is in the range of any DHCP pools
+			if (is_array($dhcpifconf['pool'])) {
+				foreach ($dhcpifconf['pool'] as $dhcppool) {
+					if (is_array($dhcppool['range'])) {
+						if (is_inrange_v4($data['ip'], $dhcppool['range']['from'], $dhcppool['range']['to'])) {
+							$data['if'] = $dhcpif;
+							$dlskey = $dhcpif . "-" . $dhcppool['range']['from'];
+							$dhcp_leases_subnet_counter[$dlskey]['dhcpif'] = $dhcpif;
+							$dhcp_leases_subnet_counter[$dlskey]['from'] = $dhcppool['range']['from'];
+							$dhcp_leases_subnet_counter[$dlskey]['to'] = $dhcppool['range']['to'];
+							$dhcp_leases_subnet_counter[$dlskey]['count'] += 1;
+							break 2;
+						}
+					}
+				}
+			}
 		}
 	}
 
@@ -423,36 +451,37 @@ foreach ($leases as $data):
 					<td>
 						<?=$mac?>
 
-						<? if (isset($mac_man[$mac_hi])):?>
+						<?php if (isset($mac_man[$mac_hi])):?>
 							(<?=$mac_man[$mac_hi]?>)
-						<?endif?>
+						<?php endif; ?>
 					</td>
-					<td><?=htmlentities($data['hostname'])?></td>
-<? if ($data['type'] != "static"):?>
-					<td><?=adjust_gmt($data['start'])?></td>
-					<td><?=adjust_gmt($data['end'])?></td>
-<? else: ?>
-					<td>n/a</td>
-					<td>n/a</td>
-<? endif; ?>
+					<td><?=$data['hostname']?></td>
+					<td><?=$data['descr']?></td>
+					<? if ($data['type'] != "static"): ?>
+						<td><?=adjust_gmt($data['start'])?></td>
+						<td><?=adjust_gmt($data['end'])?></td>
+					<? else: ?>
+						<td><?=gettext("n/a")?></td>
+						<td><?=gettext("n/a")?></td>
+					<? endif; ?>
 					<td><?=$data['online']?></td>
 					<td><?=$data['act']?></td>
 					<td>
-<? if ($data['type'] == "dynamic"): ?>
+<?php if ($data['type'] == $dynamic_string): ?>
 						<a class="fa fa-plus-square-o"	title="<?=gettext("Add static mapping")?>"	href="services_dhcp_edit.php?if=<?=$data['if']?>&amp;mac=<?=$data['mac']?>&amp;hostname=<?=htmlspecialchars($data['hostname'])?>"></a>
-<? else: ?>
+<?php else: ?>
 						<a class="fa fa-pencil"	title="<?=gettext('Edit static mapping')?>"	href="services_dhcp_edit.php?if=<?=$data['if']?>&amp;id=<?=$data['staticmap_array_index']?>"></a>
-<? endif; ?>
-						<a class="fa fa-plus-square" title="<?=gettext("Add WOL mapping")?>" href="services_wol_edit.php?if=<?=$data['if']?>&amp;mac=<?=$data['mac']?>&amp;descr=<?=htmlentities($data['hostname'])?>"></a>
-<? if ($data['online'] != "online"):?>
+<?php endif; ?>
+						<a class="fa fa-plus-square" title="<?=gettext("Add WOL mapping")?>" href="services_wol_edit.php?if=<?=$data['if']?>&amp;mac=<?=$data['mac']?>&amp;descr=<?=$data['hostname']?>"></a>
+<?php if ($data['online'] != $online_string):?>
 						<a class="fa fa-power-off" title="<?=gettext("Send WOL packet")?>" href="services_wol.php?if=<?=$data['if']?>&amp;mac=<?=$data['mac']?>"></a>
-<? endif; ?>
+<?php endif; ?>
 
-<? if ($data['type'] == "dynamic" && $data['online'] != "online"):?>
+<?php if ($data['type'] == $dynamic_string && $data['online'] != $online_string):?>
 						<a class="fa fa-trash" title="<?=gettext('Delete lease')?>"	href="status_dhcp_leases.php?deleteip=<?=$data['ip']?>&amp;all=<?=intval($_GET['all'])?>"></a>
-<? endif?>
+<?php endif; ?>
 					</td>
-<? endforeach; ?>
+<?php endforeach; ?>
 				</tr>
 			</tbody>
 		</table>
@@ -460,7 +489,7 @@ foreach ($leases as $data):
 </div>
 
 <div class="panel panel-default">
-	<div class="panel-heading"><h2 class="panel-title"><?=gettext('Leases in use')?></h2></div>
+	<div class="panel-heading"><h2 class="panel-title"><?=gettext('Leases in Use')?></h2></div>
 	<div class="panel-body table-responsive">
 		<table class="table table-striped table-hover table-condensed sortable-theme-bootstrap" data-sortable>
 			<thead>
@@ -472,23 +501,26 @@ foreach ($leases as $data):
 				</tr>
 			</thead>
 			<tbody>
-<? foreach ($dhcp_leases_subnet_counter as $listcounters):?>
+<?php
+	ksort($dhcp_leases_subnet_counter);
+	foreach ($dhcp_leases_subnet_counter as $listcounters):
+?>
 				<tr>
 					<td><?=$iflist[$listcounters['dhcpif']]?></td>
 					<td><?=$listcounters['from']?></td>
 					<td><?=$listcounters['to']?></td>
 					<td><?=$listcounters['count']?></td>
 				</tr>
-<? endforeach; ?>
+<?php endforeach; ?>
 			</tbody>
 		</table>
 	</div>
 </div>
 
 <?php if ($_GET['all']): ?>
-	<a class="btn btn-default" href="status_dhcp_leases.php?all=0"><?=gettext("Show active and static leases only")?></a>
+	<a class="btn btn-info" href="status_dhcp_leases.php?all=0"><i class="fa fa-minus-circle icon-embed-btn"></i><?=gettext("Show active and static leases only")?></a>
 <?php else: ?>
-	<a class="btn btn-default" href="status_dhcp_leases.php?all=1"><?=gettext("Show all configured leases")?></a>
+	<a class="btn btn-info" href="status_dhcp_leases.php?all=1"><i class="fa fa-plus-circle icon-embed-btn"></i><?=gettext("Show all configured leases")?></a>
 <?php endif;
 
 include("foot.inc");

@@ -1,14 +1,12 @@
 <?php
-/****h* pfSense/service-utils
-	NAME
-		service-utils.inc - Service facility
-	DESCRIPTION
-		This file contains various functions used by the pfSense service facility.
-	HISTORY
-	$Id$
+/*
+	service-utils.inc
 
+	part of pfSense (https://www.pfsense.org)
 	Copyright (C) 2005-2006 Colin Smith (ethethlay@gmail.com)
+	Copyright (c) 2005-2016 Electric Sheep Fencing, LLC.
 	All rights reserved.
+
 	Redistribution and use in source and binary forms, with or without
 	modification, are permitted provided that the following conditions are met:
 
@@ -16,21 +14,43 @@
 	   this list of conditions and the following disclaimer.
 
 	2. Redistributions in binary form must reproduce the above copyright
-	   notice, this list of conditions and the following disclaimer in the
-	   documentation and/or other materials provided with the distribution.
+	   notice, this list of conditions and the following disclaimer in
+	   the documentation and/or other materials provided with the
+	   distribution.
 
-	THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
-	INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
-	AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
-	AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
-	OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-	SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-	INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-	CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-	RISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-	POSSIBILITY OF SUCH DAMAGE.
+	3. All advertising materials mentioning features or use of this software
+	   must display the following acknowledgment:
+	   "This product includes software developed by the pfSense Project
+	   for use in the pfSense® software distribution. (http://www.pfsense.org/).
 
- */
+	4. The names "pfSense" and "pfSense Project" must not be used to
+	   endorse or promote products derived from this software without
+	   prior written permission. For written permission, please contact
+	   coreteam@pfsense.org.
+
+	5. Products derived from this software may not be called "pfSense"
+	   nor may "pfSense" appear in their names without prior written
+	   permission of the Electric Sheep Fencing, LLC.
+
+	6. Redistributions of any form whatsoever must retain the following
+	   acknowledgment:
+
+	"This product includes software developed by the pfSense Project
+	for use in the pfSense software distribution (http://www.pfsense.org/).
+
+	THIS SOFTWARE IS PROVIDED BY THE pfSense PROJECT ``AS IS'' AND ANY
+	EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+	IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+	PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE pfSense PROJECT OR
+	ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+	SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+	NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+	LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+	HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+	STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+	ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
+	OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
 
 require_once("globals.inc");
 require_once("captiveportal.inc");
@@ -279,7 +299,7 @@ function get_services() {
 				$pconfig = array();
 				$pconfig['name'] = "captiveportal";
 				$pconfig['zone'] = $zone;
-				$pconfig['description'] = gettext("Captive Portal") . ": ".htmlspecialchars($setting['zone']);
+				$pconfig['description'] = gettext("Captive Portal") . ": " . htmlspecialchars($setting['zone']);
 				$services[] = $pconfig;
 			}
 		}
@@ -367,7 +387,7 @@ function get_services() {
 					$pconfig['mode'] = $mode;
 					$pconfig['id'] = $id;
 					$pconfig['vpnid'] = $setting['vpnid'];
-					$pconfig['description'] = gettext("OpenVPN") . " ".$mode.": ".htmlspecialchars($setting['description']);
+					$pconfig['description'] = gettext("OpenVPN") . " " . $mode . ": " . htmlspecialchars($setting['description']);
 					$services[] = $pconfig;
 				}
 			}
@@ -420,6 +440,13 @@ function service_name_compare($a, $b) {
 	return (strtolower($a['name']) < strtolower($b['name'])) ? -1 : 1;
 }
 
+function service_dispname_compare($a, $b) {
+	if (strtolower($a['dispname']) == strtolower($b['dispname'])) {
+		return 0;
+	}
+	return (strtolower($a['name']) < strtolower($b['name'])) ? -1 : 1;
+}
+
 function get_pkg_descr($package_name) {
 	global $config;
 	if (is_array($config['installedpackages']['package'])) {
@@ -439,9 +466,9 @@ function get_service_status($service) {
 			$running = is_pid_running("{$g['varrun_path']}/openvpn_{$service['mode']}{$service['vpnid']}.pid");
 			break;
 		case "captiveportal":
-			$running = is_pid_running("{$g['varrun_path']}/lighty-{$service['zone']}-CaptivePortal.pid");
+			$running = is_pid_running("{$g['varrun_path']}/nginx-{$service['zone']}-CaptivePortal.pid");
 			if (isset($config['captiveportal'][$service['zone']]['httpslogin'])) {
-				$running = $running && is_pid_running("{$g['varrun_path']}/lighty-{$service['zone']}-CaptivePortal-SSL.pid");
+				$running = $running && is_pid_running("{$g['varrun_path']}/nginx-{$service['zone']}-CaptivePortal-SSL.pid");
 			}
 			break;
 		case "vhosts-http":
@@ -483,6 +510,8 @@ function get_service_status_icon($service, $withtext = true, $smallicon = false)
 	return $output;
 }
 
+/* This function is no longer required since services now use the POST method via JavaScript
+   Commenting out for now. It should be removed in the next version
 
 // This version proved GET formatted links
 function get_service_control_GET_links($service, $addname = false) {
@@ -498,7 +527,7 @@ function get_service_control_GET_links($service, $addname = false) {
 			$link = '<a title="%s" href="status_services.php?mode=%s&amp;service=' . $service['name'] . '&amp;zone=' . $service['zone'] . '">';
 		break;
 		default:
-			$link = '<a title="%s" href="status_services.php?mode=%s&amp;service=' . $service['name'] . '">';
+			$link = '<a title="%s" href="/status_services.php?mode=%s&amp;service=' . $service['name'] . '">';
 	}
 
 	if (get_service_status($service)) {
@@ -510,7 +539,7 @@ function get_service_control_GET_links($service, $addname = false) {
 				$output .= "<a href=\"status_services.php?mode=restartservice&amp;service={$service['name']}&amp;zone={$service['zone']}\">";
 				break;
 			default:
-				$output .= "<a href=\"status_services.php?mode=restartservice&amp;service={$service['name']}\">";
+				$output .= "<a href=\"/status_services.php?mode=restartservice&amp;service={$service['name']}\">";
 		}
 		$output .= "<i class=\"fa fa-repeat\" title=\"" . sprintf(gettext("Restart %sService"), $stitle) . "\"></i></a>\n";
 		switch ($service['name']) {
@@ -521,7 +550,7 @@ function get_service_control_GET_links($service, $addname = false) {
 				$output .= "<a href=\"status_services.php?mode=stopservice&amp;service={$service['name']}&amp;zone={$service['zone']}\">";
 				break;
 			default:
-				$output .= "<a href=\"status_services.php?mode=stopservice&amp;service={$service['name']}\">";
+				$output .= "<a href=\"/status_services.php?mode=stopservice&amp;service={$service['name']}\">";
 		}
 		$output .= "<i class=\"fa fa-stop-circle-o\" title=\"" . sprintf(gettext("Stop %sService"), $stitle) . "\"></i></a>";
 	} else {
@@ -535,6 +564,7 @@ function get_service_control_GET_links($service, $addname = false) {
 
 	return $output;
 }
+*/
 
 function get_service_control_links($service, $addname = false) {
 	global $g;
@@ -665,8 +695,8 @@ function service_control_stop($name, $extras) {
 			break;
 		case 'captiveportal':
 			$zone = htmlspecialchars($extras['zone']);
-			killbypid("{$g['varrun_path']}/lighty-{$zone}-CaptivePortal.pid");
-			killbypid("{$g['varrun_path']}/lighty-{$zone}-CaptivePortal-SSL.pid");
+			killbypid("{$g['varrun_path']}/nginx-{$zone}-CaptivePortal.pid");
+			killbypid("{$g['varrun_path']}/nginx-{$zone}-CaptivePortal-SSL.pid");
 			break;
 		case 'ntpd':
 			killbyname("ntpd");
@@ -736,8 +766,8 @@ function service_control_restart($name, $extras) {
 			break;
 		case 'captiveportal':
 			$zone = htmlspecialchars($extras['zone']);
-			killbypid("{$g['varrun_path']}/lighty-{$zone}-CaptivePortal.pid");
-			killbypid("{$g['varrun_path']}/lighty-{$zone}-CaptivePortal-SSL.pid");
+			killbypid("{$g['varrun_path']}/nginx-{$zone}-CaptivePortal.pid");
+			killbypid("{$g['varrun_path']}/nginx-{$zone}-CaptivePortal-SSL.pid");
 			captiveportal_init_webgui_zonename($zone);
 			break;
 		case 'ntpd':

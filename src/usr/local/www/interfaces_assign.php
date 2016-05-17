@@ -59,12 +59,12 @@
 
 ##|+PRIV
 ##|*IDENT=page-interfaces-assignnetworkports
-##|*NAME=Interfaces: Assign network ports
-##|*DESCR=Allow access to the 'Interfaces: Assign network ports' page.
+##|*NAME=Interfaces: Interface Assignments
+##|*DESCR=Allow access to the 'Interfaces: Interface Assignments' page.
 ##|*MATCH=interfaces_assign.php*
 ##|-PRIV
 
-$pgtitle = array(gettext("Interfaces"), gettext("Assign network ports"));
+$pgtitle = array(gettext("Interfaces"), gettext("Interface Assignments"));
 $shortcut_section = "interfaces";
 
 require("guiconfig.inc");
@@ -80,6 +80,10 @@ function interface_assign_description($portinfo, $portname) {
 	global $ovpn_descrs;
 	if ($portinfo['isvlan']) {
 		$descr = sprintf(gettext('VLAN %1$s on %2$s'), $portinfo['tag'], $portinfo['if']);
+		$iface = convert_real_interface_to_friendly_interface_name($portinfo['if']);
+		if (isset($iface) && strlen($iface) > 0) {
+			$descr .= " - $iface";
+		}
 		if ($portinfo['descr']) {
 			$descr .= " (" . $portinfo['descr'] . ")";
 		}
@@ -274,6 +278,7 @@ if (isset($_POST['add']) && isset($_POST['if_add'])) {
 		write_config();
 
 		$savemsg = gettext("Interface has been added.");
+		$class = "success";
 	}
 
 } else if (isset($_POST['apply'])) {
@@ -284,12 +289,13 @@ if (isset($_POST['add']) && isset($_POST['if_add'])) {
 		write_config();
 
 		$retval = filter_configure();
-		$savemsg = get_std_save_message($retval);
 
 		if (stristr($retval, "error") <> true) {
 			$savemsg = get_std_save_message($retval);
+			$class = "success";
 		} else {
 			$savemsg = $retval;
+			$class = "danger";
 		}
 	}
 
@@ -334,7 +340,7 @@ if (isset($_POST['add']) && isset($_POST['if_add'])) {
 				$members = explode(",", strtoupper($bridge['members']));
 				foreach ($members as $member) {
 					if ($member == $ifnames[0]) {
-						$input_errors[] = sprintf(gettext("You cannot set port %s to interface %s because this interface is a member of %s."), $portname, $member, $portname);
+						$input_errors[] = sprintf(gettext('Cannot set port %1$s to interface %2$s because this interface is a member of %3$s.'), $portname, $member, $portname);
 						break;
 					}
 				}
@@ -345,7 +351,7 @@ if (isset($_POST['add']) && isset($_POST['if_add'])) {
 	if (is_array($config['vlans']['vlan'])) {
 		foreach ($config['vlans']['vlan'] as $vlan) {
 			if (does_interface_exist($vlan['if']) == false) {
-				$input_errors[] = "Vlan parent interface {$vlan['if']} does not exist anymore so vlan id {$vlan['tag']} cannot be created please fix the issue before continuing.";
+				$input_errors[] = sprintf(gettext('Vlan parent interface %1$s does not exist anymore so vlan id %2$s cannot be created please fix the issue before continuing.'), $vlan['if'], $vlan['tag']);
 			}
 		}
 	}
@@ -433,6 +439,11 @@ if (isset($_POST['add']) && isset($_POST['if_add'])) {
 				services_dhcpd_configure();
 			}
 
+			if (is_array($config['dhcpdv6']) && is_array($config['dhcpdv6'][$id])) {
+				unset($config['dhcpdv6'][$id]);
+				services_dhcpdv6_configure();
+			}
+
 			if (count($config['filter']['rule']) > 0) {
 				foreach ($config['filter']['rule'] as $x => $rule) {
 					if ($rule['interface'] == $id) {
@@ -461,6 +472,7 @@ if (isset($_POST['add']) && isset($_POST['if_add'])) {
 			link_interface_to_vlans($realid, "update");
 
 			$savemsg = gettext("Interface has been deleted.");
+			$class = "success";
 		}
 	}
 }
@@ -485,21 +497,24 @@ include("head.inc");
 if (file_exists("/var/run/interface_mismatch_reboot_needed")) {
 	if ($_POST) {
 		if ($rebootingnow) {
-			$savemsg = gettext("The system is now rebooting.  Please wait.");
+			$savemsg = gettext("The system is now rebooting. Please wait.");
+			$class = "success";
 		} else {
 			$savemsg = gettext("Reboot is needed. Please apply the settings in order to reboot.");
+			$class = "warning";
 		}
 	} else {
-		$savemsg = gettext("Interface mismatch detected.  Please resolve the mismatch and click 'Apply changes'.  The firewall will reboot afterwards.");
+		$savemsg = gettext("Interface mismatch detected. Please resolve the mismatch and click 'Apply Changes'. The firewall will reboot afterwards.");
+		$class = "warning";
 	}
 }
 
 if (file_exists("/tmp/reload_interfaces")) {
 	echo "<p>\n";
-	print_info_box_np(gettext("The interface configuration has been changed.<br />You must apply the changes in order for them to take effect."));
+	print_apply_box(gettext("The interface configuration has been changed.") . "<br />" . gettext("The changes must be applied for them to take effect."));
 	echo "<br /></p>\n";
 } elseif ($savemsg) {
-	print_info_box($savemsg);
+	print_info_box($savemsg, $class);
 }
 
 pfSense_handle_custom_code("/usr/local/pkg/interfaces_assign/pre_input_errors");
@@ -509,16 +524,16 @@ if ($input_errors) {
 }
 
 $tab_array = array();
-$tab_array[] = array(gettext("Interface assignments"), true, "interfaces_assign.php");
+$tab_array[] = array(gettext("Interface Assignments"), true, "interfaces_assign.php");
 $tab_array[] = array(gettext("Interface Groups"), false, "interfaces_groups.php");
 $tab_array[] = array(gettext("Wireless"), false, "interfaces_wireless.php");
 $tab_array[] = array(gettext("VLANs"), false, "interfaces_vlan.php");
 $tab_array[] = array(gettext("QinQs"), false, "interfaces_qinq.php");
 $tab_array[] = array(gettext("PPPs"), false, "interfaces_ppps.php");
-$tab_array[] = array(gettext("GRE"), false, "interfaces_gre.php");
-$tab_array[] = array(gettext("GIF"), false, "interfaces_gif.php");
+$tab_array[] = array(gettext("GREs"), false, "interfaces_gre.php");
+$tab_array[] = array(gettext("GIFs"), false, "interfaces_gif.php");
 $tab_array[] = array(gettext("Bridges"), false, "interfaces_bridge.php");
-$tab_array[] = array(gettext("LAGG"), false, "interfaces_lagg.php");
+$tab_array[] = array(gettext("LAGGs"), false, "interfaces_lagg.php");
 display_top_tabs($tab_array);
 ?>
 <form action="interfaces_assign.php" method="post">
@@ -528,6 +543,7 @@ display_top_tabs($tab_array);
 		<tr>
 			<th><?=gettext("Interface")?></th>
 			<th><?=gettext("Network port")?></th>
+			<th>&nbsp;</th>
 		</tr>
 	</thead>
 	<tbody>
@@ -587,9 +603,12 @@ display_top_tabs($tab_array);
 	</table>
 	</div>
 
-	<button name="Submit" type="submit" class="btn btn-primary" value="<?=gettext('Save')?>"><?=gettext('Save')?></button>
+	<button name="Submit" type="submit" class="btn btn-primary" value="<?=gettext('Save')?>"><i class="fa fa-save icon-embed-btn"></i><?=gettext('Save')?></button>
 </form>
 <br />
-<p class="alert alert-info"><?=gettext("Interfaces that are configured as members of a lagg(4) interface will not be shown.")?></p>
+
+<?php
+print_info_box(gettext("Interfaces that are configured as members of a lagg(4) interface will not be shown."), 'info', false);
+?>
 
 <?php include("foot.inc")?>

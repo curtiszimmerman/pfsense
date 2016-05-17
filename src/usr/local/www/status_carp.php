@@ -63,17 +63,28 @@
 require_once("guiconfig.inc");
 require_once("globals.inc");
 
-function gentitle_pkg($pgname) {
-	global $config;
-	return $config['system']['hostname'] . "." . $config['system']['domain'] . " - " . $pgname;
-}
-
 unset($interface_arr_cache);
-unset($carp_interface_count_cache);
 unset($interface_ip_arr_cache);
 
+
+function find_ipalias($carpif) {
+	global $config;
+
+	$ips = array();
+	foreach ($config['virtualip']['vip'] as $vip) {
+		if ($vip['mode'] != "ipalias") {
+			continue;
+		}
+		if ($vip['interface'] != $carpif) {
+			continue;
+		}
+		$ips[] = "{$vip['subnet']}/{$vip['subnet_bits']}";
+	}
+
+	return ($ips);
+}
+
 $status = get_carp_status();
-$status = intval($status);
 
 if ($_POST['carp_maintenancemode'] != "") {
 	interfaces_carp_set_maintenancemode(!isset($config["virtualip_carp_maintenancemode"]));
@@ -85,29 +96,12 @@ if ($_POST['disablecarp'] != "") {
 		if (is_array($config['virtualip']['vip'])) {
 			$viparr = &$config['virtualip']['vip'];
 			foreach ($viparr as $vip) {
-				switch ($vip['mode']) {
-					case "carp":
-						interface_vip_bring_down($vip);
+				if ($vip['mode'] != "carp" && $vip['mode'] != "ipalias")
+					continue;
+				if ($vip['mode'] == "ipalias" && substr($vip['interface'], 0, 4) != "_vip")
+					continue;
 
-						/*
-						 * Reconfigure radvd when necessary
-						 * XXX: Is it the best way to do it?
-						 */
-						if (isset($config['dhcpdv6']) && is_array($config['dhcpdv6'])) {
-							foreach ($config['dhcpdv6'] as $dhcpv6if => $dhcpv6ifconf) {
-								if ($dhcpv6if !== $vip['interface'] ||
-								    $dhcpv6ifconf['ramode'] === "disabled") {
-									continue;
-								}
-
-								services_radvd_configure();
-								break;
-							}
-						}
-
-						sleep(1);
-						break;
-				}
+				interface_vip_bring_down($vip);
 			}
 		}
 		$savemsg = sprintf(gettext("%s IPs have been disabled. Please note that disabling does not survive a reboot and some configuration changes will re-enable."), $carp_counter);
@@ -120,10 +114,9 @@ if ($_POST['disablecarp'] != "") {
 				switch ($vip['mode']) {
 					case "carp":
 						interface_carp_configure($vip);
-						sleep(1);
 						break;
 					case 'ipalias':
-						if (strpos($vip['interface'], '_vip')) {
+						if (substr($vip['interface'], 0, 4) == "_vip") {
 							interface_ipalias_configure($vip);
 						}
 						break;
@@ -162,17 +155,13 @@ if (is_array($config['virtualip']['vip'])) {
 	}
 }
 
-
 // If $carpcount > 0 display buttons then display table
 // otherwise display error box and quit
 
-?>
-
-<?php
 if ($carpcount == 0) {
 	print_info_box(gettext('No CARP interfaces have been defined.') . '<br />' .
 				   '<a href="system_hasync.php" class="alert-link">' .
-				   gettext("You can configure high availability sync settings here") .
+				   gettext("High availability sync settings can be configured here.") .
 				   '</a>');
 } else {
 ?>
@@ -187,22 +176,24 @@ if ($carpcount == 0) {
 	// Sadly this needs to be here so that it is inside the form
 	if ($carp_detected_problems > 0) {
 		print_info_box(
-			gettext("CARP has detected a problem and this unit has been demoted to BACKUP status.") . "<br/>" .
-			gettext("Check the link status on all interfaces with configured CARP VIPs.") . "<br/>" .
-			gettext("Search the") .
-			" <a href=\"/status_logs.php?filtertext=carp%3A+demoted+by\">" .
-			gettext("system log") .
-			"</a> " .
-			gettext("for CARP demotion-related events.") . "<br/><br/>" .
-			'<input type="submit" class="btn btn-warning" name="resetdemotion" id="resetdemotion" value="' .
-			gettext("Reset CARP Demotion Status") .
-			'" />', 'danger'
+			gettext("CARP has detected a problem and this unit has been demoted to BACKUP status.") .
+			"<br/>" .
+			gettext("Check the link status on all interfaces with configured CARP VIPs.") .
+			"<br/>" .
+			sprintf(gettext('Search the %1$sSystem Log%2$s for CARP demotion-related events.'), "<a href=\"/status_logs.php?filtertext=carp%3A+demoted+by\">", "</a>") .
+			"<br/><br/>" .
+			'<button type="submit" class="btn btn-warning" name="resetdemotion" id="resetdemotion" value="' .
+			gettext("Reset CARP Demotion Status.") .
+			'"><i class="fa fa-undo icon-embed-btn"></i>' .
+			gettext("Reset CARP Demotion Status.") .
+			'</button>',
+			'danger'
 		);
 	}
 
 ?>
-	<input type="submit" class="btn btn-warning" name="disablecarp" value="<?=($carp_enabled ? gettext("Temporarily Disable CARP") : gettext("Enable CARP"))?>" />
-	<input type="submit" class="btn btn-info" name="carp_maintenancemode" id="carp_maintenancemode" value="<?=(isset($config["virtualip_carp_maintenancemode"]) ? gettext("Leave Persistent CARP Maintenance Mode") : gettext("Enter Persistent CARP Maintenance Mode"))?>" />
+	<button type="submit" class="btn btn-warning" name="disablecarp" value="<?=($carp_enabled ? gettext("Temporarily Disable CARP") : gettext("Enable CARP"))?>" ><i class="fa fa-<?=($carp_enabled) ? 'ban' : 'check' ; ?> icon-embed-btn"></i><?=($carp_enabled ? gettext("Temporarily Disable CARP") : gettext("Enable CARP"))?></button>
+	<button type="submit" class="btn btn-info" name="carp_maintenancemode" id="carp_maintenancemode" value="<?=(isset($config["virtualip_carp_maintenancemode"]) ? gettext("Leave Persistent CARP Maintenance Mode") : gettext("Enter Persistent CARP Maintenance Mode"))?>" ><i class="fa fa-wrench icon-embed-btn"></i><?=(isset($config["virtualip_carp_maintenancemode"]) ? gettext("Leave Persistent CARP Maintenance Mode") : gettext("Enter Persistent CARP Maintenance Mode"))?></button>
 
 	<br /><br />
 
@@ -224,26 +215,33 @@ if ($carpcount == 0) {
 			continue;
 		}
 
-		$ipaddress = $carp['subnet'];
 		$vhid = $carp['vhid'];
 		$status = get_carp_interface_status("_vip{$carp['uniqid']}");
+		$aliases = find_ipalias("_vip{$carp['uniqid']}");
 
 		if ($carp_enabled == false) {
 			$icon = 'times-circle';
 			$status = "DISABLED";
 		} else {
 			if ($status == "MASTER") {
-				$icon = 'check-circle';
+				$icon = 'play-circle text-success';
 			} else if ($status == "BACKUP") {
-				$icon = 'check-circle-o';
+				$icon = 'pause-circle text-warning';
 			} else if ($status == "INIT") {
-				$icon = 'question-circle';
+				$icon = 'question-circle text-danger';
 			}
 		}
 ?>
 					<tr>
 						<td><?=convert_friendly_interface_to_friendly_descr($carp['interface'])?>@<?=$vhid?></td>
-						<td><?=$ipaddress?></td>
+						<td>
+<?php
+		printf("{$carp['subnet']}/{$carp['subnet_bits']}");
+		for ($i = 0; $i < count($aliases); $i++) {
+			printf("<br>{$aliases[$i]}");
+		}
+?>
+						</td>
 						<td><i class="fa fa-<?=$icon?>"></i>&nbsp;<?=$status?></td>
 					</tr>
 <?php }?>
@@ -254,12 +252,18 @@ if ($carpcount == 0) {
 </form>
 
 <div class="panel panel-default">
-	<div class="panel-heading"><h2 class="panel-title"><?=gettext('pfSync nodes')?></h2></div>
+	<div class="panel-heading"><h2 class="panel-title"><?=gettext('pfSync Nodes')?></h2></div>
 	<div class="panel-body">
 		<ul>
 <?php
-	foreach (explode("\n", exec_command("/sbin/pfctl -vvss | /usr/bin/grep creator | /usr/bin/cut -d\" \" -f7 | /usr/bin/sort -u")) as $node) {
-		echo '<li>'. $node .'</li>';
+
+	$nodes = array();
+	$states = pfSense_get_pf_states();
+	for ($i = 0; $states != NULL && $i < count($states); $i++) {
+		$nodes[$states[$i]['creatorid']] = 1;
+	}
+	foreach ($nodes as $node => $nenabled) {
+		echo "<li>$node</li>";
 	}
 ?>
 		</ul>

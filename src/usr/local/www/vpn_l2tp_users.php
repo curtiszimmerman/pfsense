@@ -102,15 +102,15 @@ if ($_GET['act'] == "del") {
 include("head.inc");
 
 if ($savemsg) {
-	print_info_box($savemsg, success);
+	print_info_box($savemsg, 'success');
 }
 
 if (isset($config['l2tp']['radius']['enable'])) {
-	print_info_box(gettext("Warning: RADIUS is enabled. The local user database will not be used."));
+	print_info_box(gettext("RADIUS is enabled. The local user database will not be used."));
 }
 
 if (is_subsystem_dirty('l2tpusers')) {
-	print_info_box_np(gettext("The l2tp user list has been modified") . ".<br />" . gettext("You must apply the changes in order for them to take effect") . ".<br /><b>" . gettext("Warning: this will terminate all current l2tp sessions!") . "</b>");
+	print_apply_box(gettext("The L2TP user list has been modified.") . "<br />" . gettext("The changes must be applied for them to take effect") . ".<br /><b>" . gettext("Warning: this will terminate all current L2TP sessions!") . "</b>");
 }
 
 
@@ -119,35 +119,39 @@ $tab_array[] = array(gettext("Configuration"), false, "vpn_l2tp.php");
 $tab_array[] = array(gettext("Users"), true, "vpn_l2tp_users.php");
 display_top_tabs($tab_array);
 ?>
-<div class="table-responsive">
-	<table class="table table-striped table-hover">
-		<thead>
-			<tr>
-				<th><?=gettext("Username")?></th>
-				<th><?=gettext("IP address")?></th>
-				<th><?=gettext("Actions")?></th>
-			</tr>
-		</thead>
-		<tbody>
+<div class="panel panel-default">
+	<div class="panel-heading"><h2 class="panel-title"><?=gettext('L2TP Users')?></h2></div>
+	<div class="panel-body">
+		<div class="table-responsive">
+			<table class="table table-striped table-hover">
+				<thead>
+					<tr>
+						<th><?=gettext("Username")?></th>
+						<th><?=gettext("IP address")?></th>
+						<th><?=gettext("Actions")?></th>
+					</tr>
+				</thead>
+				<tbody>
 <?php $i = 0; foreach ($a_secret as $secretent):?>
-			<tr>
-				<td>
-					<?=htmlspecialchars($secretent['name'])?>
-				</td>
-				<td>
-					<?php if ($secretent['ip'] == "") $secretent['ip'] = "Dynamic"?>
-					<?=htmlspecialchars($secretent['ip'])?>&nbsp;
-				</td>
-				<td>
-					<a class="fa fa-pencil"	title="<?=gettext('Edit user')?>"	href="vpn_l2tp_users_edit.php?id=<?=$i?>"></a>
-					<a class="fa fa-trash"	title="<?=gettext('Delete user')?>"	href="vpn_l2tp_users.php?act=del&amp;id=<?=$i?>"></a>
-				</td>
-			</tr>
+					<tr>
+						<td>
+							<?=htmlspecialchars($secretent['name'])?>
+						</td>
+						<td>
+							<?php if ($secretent['ip'] == "") $secretent['ip'] = "Dynamic"?>
+							<?=htmlspecialchars($secretent['ip'])?>&nbsp;
+						</td>
+						<td>
+							<a class="fa fa-pencil"	title="<?=gettext('Edit user')?>"	href="vpn_l2tp_users_edit.php?id=<?=$i?>"></a>
+							<a class="fa fa-trash"	title="<?=gettext('Delete user')?>"	href="vpn_l2tp_users.php?act=del&amp;id=<?=$i?>"></a>
+						</td>
+					</tr>
 <?php $i++; endforeach?>
-		</tbody>
-	</table>
+				</tbody>
+			</table>
+		</div>
+	</div>
 </div>
-
 <nav class="action-buttons">
 	<a class="btn btn-success btn-sm" href="vpn_l2tp_users_edit.php">
 		<i class="fa fa-plus icon-embed-btn"></i>

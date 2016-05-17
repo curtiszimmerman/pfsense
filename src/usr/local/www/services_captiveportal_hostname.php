@@ -63,7 +63,7 @@
 $directionicons = array('to' => '&#x2192;', 'from' => '&#x2190;', 'both' => '&#x21c4;');
 
 $notestr =
-	gettext('Adding new hostnames will allow a DNS hostname access to/from the captive portal without being taken to the portal page.' .
+	gettext('Adding new hostnames will allow a DNS hostname access to/from the captive portal without being taken to the portal page. ' .
 	'This can be used for a web server serving images for the portal page, or a DNS server on another network, for example. ' .
 	'By specifying <em>from</em> addresses, it may be used to always allow pass-through access from a client behind the captive portal.');
 
@@ -77,6 +77,7 @@ $cpzone = $_GET['zone'];
 if (isset($_POST['zone'])) {
 	$cpzone = $_POST['zone'];
 }
+$cpzone = strtolower($cpzone);
 
 if (empty($cpzone) || empty($config['captiveportal'][$cpzone])) {
 	header("Location: services_captiveportal_zones.php");
@@ -92,7 +93,7 @@ if (isset($cpzone) && !empty($cpzone) && isset($a_cp[$cpzone]['zoneid'])) {
 	$cpzoneid = $a_cp[$cpzone]['zoneid'];
 }
 
-$pgtitle = array(gettext("Services"), gettext("Captive Portal"), "Zone " . $a_cp[$cpzone]['zone'], gettext("Allowed Hostnames"));
+$pgtitle = array(gettext("Services"), gettext("Captive Portal"), $a_cp[$cpzone]['zone'], gettext("Allowed Hostnames"));
 $shortcut_section = "captiveportal";
 
 if ($_GET['act'] == "del" && !empty($cpzone) && isset($cpzoneid)) {
@@ -131,12 +132,12 @@ if ($_GET['act'] == "del" && !empty($cpzone) && isset($cpzoneid)) {
 include("head.inc");
 
 if ($savemsg) {
-	print_info_box($savemsg);
+	print_info_box($savemsg, 'success');
 }
 
 $tab_array = array();
 $tab_array[] = array(gettext("Configuration"), false, "services_captiveportal.php?zone={$cpzone}");
-$tab_array[] = array(gettext("MAC"), false, "services_captiveportal_mac.php?zone={$cpzone}");
+$tab_array[] = array(gettext("MACs"), false, "services_captiveportal_mac.php?zone={$cpzone}");
 $tab_array[] = array(gettext("Allowed IP Addresses"), false, "services_captiveportal_ip.php?zone={$cpzone}");
 $tab_array[] = array(gettext("Allowed Hostnames"), true, "services_captiveportal_hostname.php?zone={$cpzone}");
 $tab_array[] = array(gettext("Vouchers"), false, "services_captiveportal_vouchers.php?zone={$cpzone}");
@@ -147,9 +148,9 @@ display_top_tabs($tab_array, true);
 	<table class="table table-hover table-striped table-condensed">
 		<thead>
 			<tr>
-			  <th><?=gettext("Hostname"); ?></th>
-			  <th><?=gettext("Description"); ?></th>
-			  <th><!-- Buttons --></th>
+				<th><?=gettext("Hostname"); ?></th>
+				<th><?=gettext("Description"); ?></th>
+				<th><?=gettext("Actions"); ?></th>
 			</tr>
 		</thead>
 
@@ -196,8 +197,8 @@ endif;
 	</a>
 </nav>
 
-<div id="infoblock">
-	<?=print_info_box($notestr)?>
+<div class="infoblock">
+	<?php print_info_box($notestr, 'info', false); ?>
 </div>
 
 <?php

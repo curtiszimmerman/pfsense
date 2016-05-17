@@ -72,6 +72,7 @@ $cpzone = $_GET['zone'];
 if (isset($_POST['zone'])) {
 	$cpzone = $_POST['zone'];
 }
+$cpzone = strtolower($cpzone);
 
 if (empty($cpzone)) {
 	header("Location: services_captiveportal_zones.php");
@@ -82,7 +83,7 @@ if (!is_array($config['captiveportal'])) {
 	$config['captiveportal'] = array();
 }
 $a_cp =& $config['captiveportal'];
-$pgtitle = array(gettext("Status"), gettext("Captive portal"), gettext("Voucher Rolls"), $a_cp[$cpzone]['zone']);
+$pgtitle = array(gettext("Status"), gettext("Captive Portal"), $a_cp[$cpzone]['zone'], gettext("Voucher Rolls"));
 $shortcut_section = "captiveportal-vouchers";
 
 if (!is_array($config['voucher'][$cpzone]['roll'])) {

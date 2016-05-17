@@ -326,6 +326,7 @@ foreach ($data as &$entry) {
 		$entry['dnsresolve'] = "Z_ ";
 	}
 }
+unset($entry);
 
 // Sort the data alpha first
 $data = msort($data, "dnsresolve");
@@ -333,6 +334,10 @@ $data = msort($data, "dnsresolve");
 // Load MAC-Manufacturer table
 $mac_man = load_mac_manufacturer_table();
 ?>
+<div class="panel panel-default">
+	<div class="panel-heading"><h2 class="panel-title"><?=gettext('ARP Table')?></h2></div>
+	<div class="panel-body">
+
 <div class="table-responsive">
 	<table class="sortable-theme-bootstrap table table-striped table-hover" data-sortable>
 		<thead>
@@ -368,6 +373,9 @@ $mac_man = load_mac_manufacturer_table();
 	</table>
 </div>
 
+	</div>
+</div>
+
 <script type="text/javascript">
 //<![CDATA[
 // Clear the "loading" div once the page has loaded"
@@ -377,7 +385,12 @@ events.push(function() {
 //]]>
 </script>
 
+<div class="infoblock blockopen">
 <?php
-print_info_box(gettext("Local IPv6 peers use ") . '<a href="diag_ndp.php">' . gettext("NDP") . '</a>' . gettext(" instead of ARP"), 'info');
+print_info_box(gettext("Local IPv6 peers use ") . '<a href="diag_ndp.php">' . gettext("NDP") . '</a>' . gettext(" instead of ARP."), 'info', false);
+?>
+</div>
 
-include("foot.inc")?>
+<?php
+include("foot.inc");
+?>

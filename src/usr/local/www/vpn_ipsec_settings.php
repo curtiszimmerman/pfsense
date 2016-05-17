@@ -94,16 +94,16 @@ if ($_POST) {
 
 	foreach ($ipsec_log_cats as $cat => $desc) {
 		if (!in_array(intval($pconfig[$cat]), array_keys($ipsec_log_sevs), true)) {
-			$input_errors[] = "A valid value must be specified for {$desc} debug.";
+			$input_errors[] = sprintf(gettext("A valid value must be specified for %s debug."), $desc);
 		}
 	}
 
 	if (isset($pconfig['maxmss'])) {
 		if (!is_numericint($pconfig['maxmss']) && $pconfig['maxmss'] != '') {
-			$input_errors[] = "An integer must be specified for Maximum MSS.";
+			$input_errors[] = gettext("An integer must be specified for Maximum MSS.");
 		}
 		if ($pconfig['maxmss'] <> '' && $pconfig['maxmss'] < 576 || $pconfig['maxmss'] > 65535) {
-			$input_errors[] = "An integer between 576 and 65535 must be specified for Maximum MSS";
+			$input_errors[] = gettext("An integer between 576 and 65535 must be specified for Maximum MSS");
 		}
 	}
 
@@ -210,8 +210,10 @@ if ($_POST) {
 		$retval = filter_configure();
 		if (stristr($retval, "error") <> true) {
 			$savemsg = get_std_save_message(gettext($retval));
+			$class = 'success';
 		} else {
 			$savemsg = gettext($retval);
+			$class = 'warning';
 		}
 
 		vpn_ipsec_configure($needsrestart);
@@ -242,9 +244,9 @@ include("head.inc");
 
 function maxmss_checked(obj) {
 	if (obj.checked) {
-		jQuery('#maxmss').attr('disabled', false);
+		$('#maxmss').attr('disabled', false);
 	} else {
-		jQuery('#maxmss').attr('disabled', 'true');
+		$('#maxmss').attr('disabled', 'true');
 	}
 }
 
@@ -253,7 +255,7 @@ function maxmss_checked(obj) {
 
 <?php
 if ($savemsg) {
-	print_info_box($savemsg);
+	print_info_box($savemsg, $class);
 }
 
 if ($input_errors) {
@@ -269,7 +271,7 @@ display_top_tabs($tab_array);
 
 $form = new Form;
 
-$section = new Form_Section('Start IPsec in debug mode based on sections selected');
+$section = new Form_Section('IPsec Logging Controls');
 
 foreach ($ipsec_log_cats as $cat => $desc) {
 	$section->addInput(new Form_Select(
@@ -281,12 +283,12 @@ foreach ($ipsec_log_cats as $cat => $desc) {
 }
 
 $section->addInput(new Form_StaticText('', ''))->setHelp(
-	'Launches IPsec in debug mode so that more verbose logs will be generated to aid in troubleshooting.'
+	'Changes the log verbosity for the IPsec daemon, so that more detail will be generated to aid in troubleshooting.'
 );
 
 $form->add($section);
 
-$section = new Form_Section('IPsec Advanced Settings');
+$section = new Form_Section('Advanced IPsec Settings');
 
 $section->addInput(new Form_Select(
 	'uniqueids',
@@ -323,10 +325,10 @@ $section->addInput(new Form_Checkbox(
 	'Accept unencrypted ID and HASH payloads in IKEv1 Main Mode',
 	$pconfig['acceptunencryptedmainmode']
 ))->setHelp(
-	'Some implementations send the third Main Mode message unencrypted, probably to find the PSKs for the specified ID for authentication.' .
+	'Some implementations send the third Main Mode message unencrypted, probably to find the PSKs for the specified ID for authentication. ' .
 	'This is very similar to Aggressive Mode, and has the same security implications: ' .
-	'A passive attacker can sniff the negotiated Identity, and start brute forcing the PSK using the HASH payload.' .
-	'It is recommended to keep this option to no, unless you know exactly what the implications are and require compatibility to such devices (for example, some SonicWall boxes).'
+	'A passive attacker can sniff the negotiated Identity, and start brute forcing the PSK using the HASH payload. ' .
+	'It is recommended to keep this option to no, unless the exact implications are known and compatibility is required for such devices (for example, some SonicWall boxes).'
 );
 
 $section->addInput(new Form_Checkbox(
@@ -357,10 +359,10 @@ $section->add($group);
 
 $section->addInput(new Form_Checkbox(
 	'unityplugin',
-	'Disable Cisco Extensions',
-	'Disable Unity Plugin',
+	'Enable Cisco Extensions',
+	'Enable Unity Plugin',
 	$pconfig['unityplugin']
-))->setHelp('Disable Unity Plugin which provides Cisco Extension support as Split-Include, Split-Exclude, Split-Dns, ...');
+))->setHelp('Enable Unity Plugin which provides Cisco Extension support such as Split-Include, Split-Exclude and Split-Dns.');
 
 $section->addInput(new Form_Checkbox(
 	'strictcrlpolicy',
@@ -374,9 +376,9 @@ $section->addInput(new Form_Checkbox(
 	'Make before Break',
 	'Initiate IKEv2 reauthentication with a make-before-break',
 	$pconfig['makebeforebreak']
-))->setHelp('instead of a break-before-make scheme. Make-before-break uses overlapping IKE and CHILD_SA during reauthentication ' .
+))->setHelp('Instead of a break-before-make scheme. Make-before-break uses overlapping IKE and CHILD_SA during reauthentication ' .
 			'by first recreating all new SAs before deleting the old ones. This behavior can be beneficial to avoid connectivity gaps ' .
-			'during reauthentication, but requires support for overlapping SAs by the peer');
+			'during reauthentication, but requires support for overlapping SAs by the peer.');
 
 $section->addInput(new Form_Checkbox(
 	'autoexcludelanaddress',

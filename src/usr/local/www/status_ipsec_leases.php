@@ -60,8 +60,6 @@
 ##|*MATCH=status_ipsec_leases.php*
 ##|-PRIV
 
-define(DEBUG, true); // Force dummy data for testing. Setting up a pFSense box to get real data is far too hard!
-
 require("guiconfig.inc");
 require("ipsec.inc");
 
@@ -74,8 +72,8 @@ $mobile = ipsec_dump_mobile();
 $tab_array = array();
 $tab_array[] = array(gettext("Overview"), false, "status_ipsec.php");
 $tab_array[] = array(gettext("Leases"), true, "status_ipsec_leases.php");
-$tab_array[] = array(gettext("SAD"), false, "status_ipsec_sad.php");
-$tab_array[] = array(gettext("SPD"), false, "status_ipsec_spd.php");
+$tab_array[] = array(gettext("SADs"), false, "status_ipsec_sad.php");
+$tab_array[] = array(gettext("SPDs"), false, "status_ipsec_spd.php");
 display_top_tabs($tab_array);
 
 if (isset($mobile['pool']) && is_array($mobile['pool'])) {
@@ -152,6 +150,17 @@ if (isset($mobile['pool']) && is_array($mobile['pool'])) {
 	print_info_box(gettext('No IPsec pools.'));
 }
 
-print_info_box(gettext('You can configure your IPsec subsystem by clicking ') . '<a href="vpn_ipsec.php">' . gettext("here.") . '</a>');
-
+if (ipsec_enabled()) {
+?>
+<div class="infoblock">
+<?php
+} else {
+?>
+<div class="infoblock blockopen">
+<?php
+}
+print_info_box(sprintf(gettext('IPsec can be configured %1$shere%2$s.'), '<a href="vpn_ipsec.php">', '</a>'), 'info', false);
+?>
+</div>
+<?php
 include("foot.inc");

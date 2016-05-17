@@ -59,8 +59,8 @@
 
 ##|+PRIV
 ##|*IDENT=page-system-advanced-firewall
-##|*NAME=System: Advanced: Firewall and NAT
-##|*DESCR=Allow access to the 'System: Advanced: Firewall and NAT' page.
+##|*NAME=System: Advanced: Firewall & NAT
+##|*DESCR=Allow access to the 'System: Advanced: Firewall & NAT' page.
 ##|*MATCH=system_advanced_firewall.php*
 ##|-PRIV
 
@@ -365,8 +365,8 @@ if ($_POST) {
 			unset($config['system']['tftpinterface']);
 		}
 
-		if ($_POST['update-frequency'] != $config['system']['bogons']['interval']) {
-			switch ($_POST['update-frequency']) {
+		if ($_POST['bogonsinterval'] != $config['system']['bogons']['interval']) {
+			switch ($_POST['bogonsinterval']) {
 				case 'daily':
 					install_cron_job("/usr/bin/nice -n20 /etc/rc.update_bogons.sh", true, "1", "3", "*", "*", "*");
 					break;
@@ -378,7 +378,7 @@ if ($_POST) {
 				default:
 					install_cron_job("/usr/bin/nice -n20 /etc/rc.update_bogons.sh", true, "1", "3", "1", "*", "*");
 			}
-			$config['system']['bogons']['interval'] = $_POST['update-frequency'];
+			$config['system']['bogons']['interval'] = $_POST['bogonsinterval'];
 		}
 
 		write_config();
@@ -393,25 +393,27 @@ if ($_POST) {
 		$retval = filter_configure();
 		if (stristr($retval, "error") <> true) {
 			$savemsg = get_std_save_message($retval);
+			$class = 'success';
 		} else {
 			$savemsg = $retval;
+			$class = 'warning';
 		}
 	}
 }
 
-$pgtitle = array(gettext("System"), gettext("Advanced"), gettext("Firewall and NAT"));
+$pgtitle = array(gettext("System"), gettext("Advanced"), htmlspecialchars(gettext("Firewall & NAT")));
 include("head.inc");
 
 if ($input_errors) {
 	print_input_errors($input_errors);
 }
 if ($savemsg) {
-	print_info_box($savemsg);
+	print_info_box($savemsg, $class);
 }
 
 $tab_array = array();
 $tab_array[] = array(gettext("Admin Access"), false, "system_advanced_admin.php");
-$tab_array[] = array(gettext("Firewall / NAT"), true, "system_advanced_firewall.php");
+$tab_array[] = array(htmlspecialchars(gettext("Firewall & NAT")), true, "system_advanced_firewall.php");
 $tab_array[] = array(gettext("Networking"), false, "system_advanced_network.php");
 $tab_array[] = array(gettext("Miscellaneous"), false, "system_advanced_misc.php");
 $tab_array[] = array(gettext("System Tunables"), false, "system_advanced_sysctl.php");
@@ -449,9 +451,9 @@ $section->addInput($input = new Form_Select(
 	$config['system']['optimization'],
 	array(
 		'normal' => 'Normal',
-		'high-latency' => 'High-latency',
-		'aggressive' => 'Aggressive',
-		'conservative' => 'Conservative',
+		'high-latency' => gettext('High-latency'),
+		'aggressive' => gettext('Aggressive'),
+		'conservative' => gettext('Conservative'),
 	)
 ))->setHelp('Select the type of state table optimization to use');
 
@@ -461,14 +463,14 @@ $section->addInput(new Form_Checkbox(
 	'Disable all packet filtering.',
 	isset($config['system']['disablefilter'])
 ))->setHelp('Note: This converts %s into a routing only platform!<br/>'.
-	'Note: This will also turn off NAT! If you only want to disable NAT, '.
+	'Note: This will also turn off NAT! To only disable NAT, '.
 	'and not firewall rules, visit the <a href="firewall_nat_out.php">Outbound '.
 	'NAT</a> page.', [$g["product_name"]]);
 
 $section->addInput(new Form_Checkbox(
 	'disablescrub',
 	'Disable Firewall Scrub',
-	'Disables the PF scrubbing option which can sometimes interfere with NFS and PPTP traffic.',
+	'Disables the PF scrubbing option which can sometimes interfere with NFS traffic.',
 	isset($config['system']['disablescrub'])
 ));
 
@@ -507,7 +509,7 @@ $section->addInput(new Form_Input(
 	$pconfig['maximumstates'],
 	['min' => 1, 'placeholder' => pfsense_default_state_size()]
 ))->setHelp('Maximum number of connections to hold in the firewall state table. '.
-	'<br/>Note: Leave this blank for the default. On your system the default '.
+	'<br/>Note: Leave this blank for the default. On this system the default '.
 	'size is: %d', [pfsense_default_state_size()]);
 
 $section->addInput(new Form_Input(
@@ -518,7 +520,7 @@ $section->addInput(new Form_Input(
 	['placeholder' => pfsense_default_table_entries_size()]
 ))->setHelp('Maximum number of table entries for systems such as aliases, '.
 	'sshlockout, snort, etc, combined.<br/>Note: Leave this blank for the '.
-	'default. On your system the default size is: %d',
+	'default. On this system the default size is: %d',
 	[pfsense_default_table_entries_size()]);
 
 $section->addInput(new Form_Input(
@@ -533,8 +535,8 @@ $section->addInput(new Form_Checkbox(
 	'Static route filtering',
 	'Bypass firewall rules for traffic on the same interface',
 	$pconfig['bypassstaticroutes']
-))->setHelp('This option only applies if you have defined one or more static '.
-	'routes. If it is enabled, traffic that enters and leaves through the same '.
+))->setHelp('This option only applies if one or more static routes have been defined. '.
+	'If it is enabled, traffic that enters and leaves through the same '.
 	'interface will not be checked by the firewall. This may be desirable in some '.
 	'situations where multiple subnets are connected to the same interface.');
 
@@ -543,17 +545,16 @@ $section->addInput(new Form_Checkbox(
 	'Disable Auto-added VPN rules',
 	'Disable all auto-added VPN rules.',
 	isset($config['system']['disablevpnrules'])
-))->setHelp('<span>Note: This disables automatically added rules for IPsec, '.
-	'PPTP.</span>');
+))->setHelp('Note: This disables automatically added rules for IPsec.');
 
 $section->addInput(new Form_Checkbox(
 	'disablereplyto',
 	'Disable reply-to',
 	'Disable reply-to on WAN rules',
 	$pconfig['disablereplyto']
-))->setHelp('With Multi-WAN you generally want to ensure traffic leaves the same '.
+))->setHelp('With Multi-WAN it is generally desired to ensure traffic leaves the same '.
 	'interface it arrives on, hence reply-to is added automatically by default. When '.
-	'using bridging, you must disable this behavior if the WAN gateway IP is '.
+	'using bridging, this behavior must be disabled if the WAN gateway IP is '.
 	'different from the gateway IP of the hosts behind the bridged interface.');
 
 $section->addInput(new Form_Checkbox(
@@ -561,10 +562,9 @@ $section->addInput(new Form_Checkbox(
 	'Disable Negate rules',
 	'Disable Negate rule on policy routing rules',
 	$pconfig['disablenegate']
-))->setHelp('With Multi-WAN you generally want to ensure traffic reaches directly '.
-	'connected networks and VPN networks when using policy routing. You can disable '.
-	'this for special purposes but it requires manually creating rules for these '.
-	'networks');
+))->setHelp('With Multi-WAN it is generally desired to ensure traffic reaches directly '.
+	'connected networks and VPN networks when using policy routing. This can be disabled '.
+	'for special purposes but it requires manually creating rules for these networks.');
 
 $section->addInput(new Form_Input(
 	'aliasesresolveinterval',
@@ -573,7 +573,7 @@ $section->addInput(new Form_Input(
 	$pconfig['aliasesresolveinterval'],
 	['placeholder' => '300']
 ))->setHelp('Interval, in seconds, that will be used to resolve hostnames '.
-	'configured on aliases.. <br/>Note:	 Leave this blank for the default '.
+	'configured on aliases. <br/>Note:	 Leave this blank for the default '.
 	'(300s).');
 
 $section->addInput(new Form_Checkbox(
@@ -592,9 +592,9 @@ $section->addInput(new Form_Select(
 	'Update Frequency',
 	empty($pconfig['bogonsinterval']) ? 'monthly' : $pconfig['bogonsinterval'],
 	array(
-		'monthly' => 'Monthly',
-		'weekly' => 'Weekly',
-		'daily' => 'Daily',
+		'monthly' => gettext('Monthly'),
+		'weekly' => gettext('Weekly'),
+		'daily' => gettext('Daily'),
 	)
 ))->setHelp('The frequency of updating the lists of IP addresses that are '.
 	'reserved (but not RFC 1918) or not yet assigned by IANA.');
@@ -617,11 +617,11 @@ if (count($config['interfaces']) > 1) {
 		'NAT Reflection mode for port forwards',
 		$value,
 		array(
-			'disable' => 'disabled',
-			'proxy' => 'NAT + proxy',
-			'purenat' => 'Pure NAT',
+			'disable' => gettext('disabled'),
+			'proxy' => gettext('NAT + proxy'),
+			'purenat' => gettext('Pure NAT'),
 		)
-	))->setHelp('<ul><li>The pure NAT mode uses a set of NAT rules to direct '.
+	))->setHelp('</span><ul class="help-block"><li>The pure NAT mode uses a set of NAT rules to direct '.
 		'packets to the target of the port forward. It has better scalability, '.
 		'but it must be possible to accurately determine the interface and '.
 		'gateway IP used for communication with the target at the time the '.
@@ -634,7 +634,7 @@ if (count($config['interfaces']) > 1) {
 		'the time the rules are loaded. Reflection rules are not created for '.
 		'ranges larger than 500 ports and will not be used for more than 1000 '.
 		'ports total between all port forwards. Only TCP and UDP protocols are '.
-		'supported.</li></ul>Individual rules may be configured to override '.
+		'supported.</li></ul><span class="help-block">Individual rules may be configured to override '.
 		'this system setting on a per-rule basis.');
 
 	$section->addInput(new Form_Input(
@@ -649,7 +649,7 @@ if (count($config['interfaces']) > 1) {
 	$section->addInput(new Form_Checkbox(
 		'enablebinatreflection',
 		'Enable NAT Reflection for 1:1 NAT',
-		'Automatic creation of additional NAT redirect rules from within your internal networks.',
+		'Automatic creation of additional NAT redirect rules from within the internal networks.',
 		isset($config['system']['enablebinatreflection'])
 	))->setHelp('Note: Reflection on 1:1 mappings is only for the inbound component of '.
 		'the 1:1 mappings. This functions the same as the pure NAT mode for port '.
@@ -673,12 +673,12 @@ if (count($config['interfaces']) > 1) {
 		$pconfig['tftpinterface'],
 		get_configured_interface_with_descr(),
 		true
-	))->setHelp('Choose the interfaces where you want TFTP proxy helper to be enabled.');
+	))->setHelp('Choose the interfaces on which to enable TFTP proxy helper.');
 
 	$form->add($section);
 }
 
-$section = new Form_Section('State Timeouts in seconds. (Leave blank for default)');
+$section = new Form_Section('State Timeouts (seconds - blank for default)');
 
 $tcpTimeouts = array('First', 'Opening', 'Established', 'Closing', 'FIN Wait', 'Closed');
 foreach ($tcpTimeouts as $name) {
@@ -728,7 +728,7 @@ $form->add($section);
 
 print $form;
 
-?>
+?></div>
 <script type="text/javascript">
 //<![CDATA[
 events.push(function() {
@@ -741,13 +741,13 @@ events.push(function() {
 		var htext = '<span class="text-success">';
 
 		if (val == 'normal') {
-			htext += 'The default optimization algorithm';
+			htext += '<?=gettext("The default optimization algorithm");?>';
 		} else if (val == 'high-latency') {
-			htext += 'Used for eg. satellite links. Expires idle connections later than default';
+			htext += '<?=gettext("Used for eg. satellite links. Expires idle connections later than default");?>';
 		} else if (val == 'aggressive') {
-			htext += 'Expires idle connections quicker. More efficient use of CPU and memory but can drop legitimate idle connections';
+			htext += '<?=gettext("Expires idle connections quicker. More efficient use of CPU and memory but can drop legitimate idle connections");?>';
 		} else if (val == 'conservative') {
-			htext += 'Tries to avoid dropping any legitimate idle connections at the expense of increased memory usage and CPU utilization';
+			htext += '<?=gettext("Tries to avoid dropping any legitimate idle connections at the expense of increased memory usage and CPU utilization");?>';
 		}
 
 		htext += '</span>';
@@ -768,3 +768,4 @@ events.push(function() {
 </script>
 <?php
 include("foot.inc");
+?>

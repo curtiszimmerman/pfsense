@@ -244,7 +244,8 @@ if ($savemsg) {
 }
 
 if (is_subsystem_dirty('natconf')) {
-	print_info_box_np(gettext("The NAT configuration has been changed.")."<br />".gettext("You must apply the changes in order for them to take effect."));
+	print_apply_box(gettext('The NAT configuration has been changed.') . '<br />' .
+					gettext('The changes must be applied for them to take effect.'));
 }
 
 $tab_array = array();
@@ -300,7 +301,7 @@ print($form);
 
 <form action="firewall_nat_out.php" method="post" name="iform">
 	<div class="panel panel-default">
-		<div class="panel-heading"><?=gettext('Mappings')?></div>
+		<div class="panel-heading"><h2 class="panel-title"><?=gettext('Mappings')?></h2></div>
 		<div class="panel-body table-responsive">
 			<table class="table table-hover table-striped table-condensed">
 				<thead>
@@ -326,8 +327,12 @@ print($form);
 			foreach ($a_out as $natent):
 				$iconfn = "pass";
 				$textss = $textse = "";
+				$trclass = '';
+
 				if ($mode == "disabled" || $mode == "automatic" || isset($natent['disabled'])) {
 					$iconfn .= "_d";
+					$trclass = 'class="disabled"';
+
 				}
 
 
@@ -339,7 +344,7 @@ print($form);
 				);
 ?>
 
-					<tr id="fr<?=$i;?>" onClick="fr_toggle(<?=$i;?>)" ondblclick="document.location='firewall_nat_out_edit.php?id=<?=$i;?>';">
+					<tr id="fr<?=$i;?>" <?=$trclass?> onClick="fr_toggle(<?=$i;?>)" ondblclick="document.location='firewall_nat_out_edit.php?id=<?=$i;?>';">
 						<td >
 							<input type="checkbox" id="frc<?=$i;?>" onClick="fr_toggle(<?=$i;?>)" name="rule[]" value="<?=$i;?>"/>
 						</td>
@@ -353,12 +358,16 @@ print($form);
 				else:
 ?>
 							<a href="?act=toggle&amp;id=<?=$i?>">
-								<i class="fa <?= ($iconfn == "pass") ? "fa-check":"fa-hidden"?>" title="<?=gettext("Click to toggle enabled/disabled status")?>"></i>
+								<i class="fa <?= ($iconfn == "pass") ? "fa-check":"fa-times"?>" title="<?=gettext("Click to toggle enabled/disabled status")?>"></i>
 							</a>
 
 <?php
 				endif;
 ?>
+<?php 				if (isset($natent['nonat'])): ?>
+							&nbsp;<i class="fa fa-hand-stop-o text-danger" title="<?=gettext("Negated: This rule excludes NAT from a later rule")?>"></i>
+<?php 				endif; ?>
+
 						</td>
 
 						<td>
@@ -368,15 +377,14 @@ print($form);
 						<td>
 <?php
 						$natent['source']['network'] = ($natent['source']['network'] == "(self)") ? "This Firewall" : $natent['source']['network'];
-?>
-<?php
+
 						if (isset($alias['src'])):
 ?>
 							<a href="/firewall_aliases_edit.php?id=<?=$alias['src']?>" data-toggle="popover" data-trigger="hover focus" title="Alias details" data-content="<?=alias_info_popup($alias['src'])?>" data-html="true">
 <?php
 						endif;
 ?>
-							<?=htmlspecialchars($natent['source']['network'])?>
+							<?=str_replace('_', ' ', htmlspecialchars($natent['source']['network']))?>
 <?php
 						if (isset($alias['src'])):
 ?>
@@ -399,7 +407,7 @@ print($form);
 <?php
 							endif;
 ?>
-							<?=htmlspecialchars($natent['sourceport'])?>
+							<?=str_replace('_', ' ', htmlspecialchars($natent['sourceport']))?>
 <?php
 							if (isset($alias['srcport'])):
 ?>
@@ -426,7 +434,7 @@ print($form);
 <?php
 							endif;
 ?>
-							<?=htmlspecialchars($natent['destination']['address'])?>
+							<?=str_replace('_', ' ', htmlspecialchars($natent['destination']['address']))?>
 <?php
 							if (isset($alias['dst'])):
 ?>
@@ -450,7 +458,7 @@ print($form);
 <?php
 							endif;
 ?>
-							<?=htmlspecialchars($natent['dstport'])?>
+							<?=str_replace('_', ' ', htmlspecialchars($natent['dstport']))?>
 <?php
 							if (isset($alias['dstport'])):
 ?>
@@ -487,13 +495,11 @@ print($form);
 						</td>
 
 						<td>
-<?php
-						if (isset($natent['staticnatport'])) {
-							echo gettext("YES");
-						} else {
-							echo gettext("NO");
-						}
-?>
+<?php						if (isset($natent['staticnatport'])) { ?>
+							<i class="fa fa-check" title="Keep Source Port Static"></i>
+<?php						} else { ?>
+							<i class="fa fa-random" title="Randomize Source Port"></i>
+<?php						} ?>
 						</td>
 
 						<td>
@@ -529,7 +535,7 @@ print($form);
 			<i class="fa fa-trash icon-embed-btn"></i>
 			<?=gettext("Delete"); ?>
 		</button>
-		<button type="submit" id="order-store" class="btn btn-primary btn-sm" value="Save changes" disabled name="order-store" title="<?=gettext('Save map order')?>">
+		<button type="submit" id="order-store" class="btn btn-primary btn-sm" value="Save changes" disabled name="order-store" title="<?=gettext('Save mapping order')?>">
 			<i class="fa fa-save icon-embed-btn"></i>
 			<?=gettext("Save")?>
 		</button>
@@ -549,7 +555,7 @@ if ($mode == "automatic" || $mode == "hybrid"):
 	unset($FilterIflist, $GatewaysList);
 ?>
 	<div class="panel panel-default">
-		<div class="panel-heading"><?=gettext("Automatic rules:")?></div>
+		<div class="panel-heading"><h2 class="panel-title"><?=gettext("Automatic Rules:")?></h2></div>
 		<div class="panel-body table-responsive">
 			<table class="table table-hover table-striped table-condensed">
 				<thead>
@@ -638,13 +644,11 @@ if ($mode == "automatic" || $mode == "hybrid"):
 ?>
 						</td>
 						<td>
-<?php
-		if (isset($natent['staticnatport'])) {
-			echo gettext("YES");
-		} else {
-			echo gettext("NO");
-		}
-?>
+<?php						if (isset($natent['staticnatport'])) { ?>
+							<i class="fa fa-check" title="Keep Source Port Static"></i>
+<?php						} else { ?>
+							<i class="fa fa-random" title="Randomize Source Port"></i>
+<?php						} ?>
 						</td>
 						<td>
 							<?=htmlspecialchars($natent['descr'])?>
@@ -660,17 +664,17 @@ endif;
 	</div>
 </form>
 
-<div id="infoblock">
+<div class="infoblock">
 <?php
 	print_info_box(gettext('If automatic outbound NAT is selected, a mapping is automatically generated for each interface\'s subnet (except WAN-type connections) and the rules ' .
 							'on the "Mappings" section of this page are ignored.' . '<br />' .
-							'If manual outbound NAT is selected, outbound NAT rules will not be automatically generated and only the mappings you specify on this page ' .
+							'If manual outbound NAT is selected, outbound NAT rules will not be automatically generated and only the mappings specified on this page ' .
 							'will be used.' . '<br />' .
-							'If hybrid outbound NAT is selected, mappings you specify on this page will be used, followed by the automatically generated ones.' . '<br />' .
+							'If hybrid outbound NAT is selected, mappings specified on this page will be used, followed by the automatically generated ones.' . '<br />' .
 							'If disable outbound NAT is selected, no rules will be used.' . '<br />' .
 							'If a target address other than an interface\'s IP address is used, then depending on the way the WAN connection is setup, a ') .
 							'<a href="firewall_virtual_ip.php">' . gettext("Virtual IP") . '</a>' . gettext(" may also be required."),
-				   info);
+				   'info', false);
 ?>
 </div>
 
@@ -683,12 +687,29 @@ events.push(function() {
 		cursor: 'grabbing',
 		update: function(event, ui) {
 			$('#order-store').removeAttr('disabled');
+			dirty = true;
 		}
 	});
 
 	// Check all of the rule checkboxes so that their values are posted
 	$('#order-store').click(function () {
 	   $('[id^=frc]').prop('checked', true);
+
+		// Suppress the "Do you really want to leave the page" message
+		saving = true;
+	});
+
+	// Globals
+	saving = false;
+	dirty = false;
+
+	// provide a warning message if the user tries to change page before saving
+	$(window).bind('beforeunload', function(){
+		if (!saving && dirty) {
+			return ("<?=gettext('One or more NAT outbound mappings have been moved but have not yet been saved')?>");
+		} else {
+			return undefined;
+		}
 	});
 });
 //]]>

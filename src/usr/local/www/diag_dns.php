@@ -73,7 +73,7 @@ if (!is_array($config['aliases']['alias'])) {
 }
 $a_aliases = &$config['aliases']['alias'];
 
-$aliasname = str_replace(array(".", "-"), "_", $host);
+$aliasname = substr(str_replace(array(".", "-"), "_", $host), 0, 31);
 $alias_exists = false;
 $counter = 0;
 foreach ($a_aliases as $a) {
@@ -85,9 +85,6 @@ foreach ($a_aliases as $a) {
 }
 
 if (isset($_POST['create_alias']) && (is_hostname($host) || is_ipaddr($host))) {
-	if ($_POST['override']) {
-		$override = true;
-	}
 	$resolved = gethostbyname($host);
 	$type = "hostname";
 	if ($resolved) {
@@ -99,27 +96,30 @@ if (isset($_POST['create_alias']) && (is_hostname($host) || is_ipaddr($host))) {
 				if (!$isfirst) {
 					$addresses .= " ";
 				}
-				$addresses .= rtrim($re) . "/32";
+				$re = rtrim($re);
+				if (is_ipaddr($re)) {
+					$sn = is_ipaddrv6($re) ? '/128' : '/32';
+				} else {
+					// The name was a CNAME and resolved to another name, rather than an address.
+					// In this case the alias entry will have a FQDN, so do not put a CIDR after it.
+					$sn = "";
+				}
+				$addresses .= $re . $sn;
 				$isfirst = false;
 			}
 		}
 		$newalias = array();
-		if ($override) {
-			$alias_exists = false;
+		$newalias['name'] = $aliasname;
+		$newalias['type'] = "network";
+		$newalias['address'] = $addresses;
+		$newalias['descr'] = gettext("Created from Diagnostics-> DNS Lookup");
+		if ($alias_exists) {
+			$a_aliases[$id] = $newalias;
+		} else {
+			$a_aliases[] = $newalias;
 		}
-		if ($alias_exists == false) {
-			$newalias['name'] = $aliasname;
-			$newalias['type'] = "network";
-			$newalias['address'] = $addresses;
-			$newalias['descr'] = "Created from Diagnostics-> DNS Lookup";
-			if ($override) {
-				$a_aliases[$id] = $newalias;
-			} else {
-				$a_aliases[] = $newalias;
-			}
-			write_config();
-			$createdalias = true;
-		}
+		write_config();
+		$createdalias = true;
 	}
 }
 
@@ -212,14 +212,18 @@ include("head.inc");
 if ($input_errors) {
 	print_input_errors($input_errors);
 } else if (!$resolved && $type) {
-	print('<div class="alert alert-warning" role="alert">' . gettext("Host") .' "'. $host .'" '. gettext("could not be resolved") . '</div>');
+	print_info_box(sprintf(gettext('Host "%s" could not be resolved.'), $host), 'warning', false);
 }
 
 if ($createdalias) {
-	print('<div class="alert alert-success" role="alert">'.gettext("Alias was created/updated successfully").'</div>');
+	if ($alias_exists) {
+		print_info_box(gettext("Alias was updated successfully."), 'success');
+	} else {
+		print_info_box(gettext("Alias was created successfully."), 'success');
+	}
 }
 
-$form = new Form('Lookup');
+$form = new Form(false);
 $section = new Form_Section('DNS Lookup');
 
 $section->addInput(new Form_Input(
@@ -231,27 +235,42 @@ $section->addInput(new Form_Input(
 ));
 
 if (!empty($resolved)) {
+	if ($alias_exists) {
+		$button_text = gettext("Update alias");
+	} else {
+		$button_text = gettext("Add alias");
+	}
 	$form->addGlobal(new Form_Button(
 		'create_alias',
-		'Add alias'
+		$button_text,
+		null,
+		'fa-plus'
 	))->removeClass('btn-primary')->addClass('btn-success');
 }
 
 $form->add($section);
+
+$form->addGlobal(new Form_Button(
+	'Submit',
+	'Lookup',
+	null,
+	'fa-search'
+))->addClass('btn-primary');
+
 print $form;
 
 if (!$input_errors && $type) {
 	if ($resolved):
 ?>
 <div class="panel panel-default">
-	<div class="panel-heading"><h2 class="panel-title">Results</h2></div>
+	<div class="panel-heading"><h2 class="panel-title"><?=gettext('Results')?></h2></div>
 	<div class="panel-body">
 		<ul class="list-group">
-<?
+<?php
 		foreach ((array)$resolved as $hostitem) {
 ?>
 			<li class="list-group-item"><?=$hostitem?></li>
-<?
+<?php
 			if ($hostitem != "") {
 				$found++;
 			}
@@ -260,26 +279,26 @@ if (!$input_errors && $type) {
 		</ul>
 	</div>
 </div>
-<? endif?>
+<?php endif; ?>
 
 <!-- Second table displays the server resolution times -->
 <div class="panel panel-default">
-	<div class="panel-heading"><h2 class="panel-title">Timings</h2></div>
+	<div class="panel-heading"><h2 class="panel-title"><?=gettext('Timings')?></h2></div>
 	<div class="panel-body">
 		<table class="table">
 		<thead>
 			<tr>
-				<th>Name server</th>
-				<th>Query time</th>
+				<th><?=gettext('Name server')?></th>
+				<th><?=gettext('Query time')?></th>
 			</tr>
 		</thead>
 
 		<tbody>
-<? foreach ((array)$dns_speeds as $qt):?>
+<?php foreach ((array)$dns_speeds as $qt):?>
 		<tr>
 			<td><?=$qt['dns_server']?></td><td><?=$qt['query_time']?></td>
 		</tr>
-<? endforeach?>
+<?php endforeach; ?>
 		</tbody>
 		</table>
 	</div>
@@ -287,7 +306,7 @@ if (!$input_errors && $type) {
 
 <!-- Third table displays "More information" -->
 <div class="panel panel-default">
-	<div class="panel-heading"><h2 class="panel-title">More information</h2></div>
+	<div class="panel-heading"><h2 class="panel-title"><?=gettext('More Information')?></h2></div>
 	<div class="panel-body">
 		<ul class="list-group">
 			<li class="list-group-item"><a href="/diag_ping.php?host=<?=htmlspecialchars($host)?>&amp;count=3"><?=gettext("Ping")?></a></li>
@@ -295,8 +314,8 @@ if (!$input_errors && $type) {
 		</ul>
 		<h5><?=gettext("NOTE: The following links are to external services, so their reliability cannot be guaranteed.");?></h5>
 		<ul class="list-group">
-			<li class="list-group-item"><a target="_blank" href="http://private.dnsstuff.com/tools/whois.ch?ip=<?php echo $ipaddr; ?>"><?=gettext("IP WHOIS @ DNS Stuff");?></a></li>
-			<li class="list-group-item"><a target="_blank" href="http://private.dnsstuff.com/tools/ipall.ch?ip=<?php echo $ipaddr; ?>"><?=gettext("IP Info @ DNS Stuff");?></a></li>
+			<li class="list-group-item"><a target="_blank" href="http://private.dnsstuff.com/tools/whois.ch?ip=<?=$ipaddr;?>"><?=gettext("IP WHOIS @ DNS Stuff");?></a></li>
+			<li class="list-group-item"><a target="_blank" href="http://private.dnsstuff.com/tools/ipall.ch?ip=<?=$ipaddr;?>"><?=gettext("IP Info @ DNS Stuff");?></a></li>
 		</ul>
 	</div>
 </div>

@@ -1,9 +1,9 @@
 <?php
 /*
 	captiveportal.inc
+
 	part of pfSense (https://www.pfsense.org)
-	Copyright (C) 2004-2011 Scott Ullrich <sullrich@gmail.com>
-	Copyright (C) 2009-2012 Ermal Luçi <eri@pfsense.org>
+	Copyright (c) 2004-2016 Electric Sheep Fencing, LLC. All rights reserved.
 	Copyright (C) 2003-2006 Manuel Kasper <mk@neon1.net>.
 
 	originally part of m0n0wall (http://m0n0.ch/wall)
@@ -16,25 +16,42 @@
 	   this list of conditions and the following disclaimer.
 
 	2. Redistributions in binary form must reproduce the above copyright
-	   notice, this list of conditions and the following disclaimer in the
-	   documentation and/or other materials provided with the distribution.
+	   notice, this list of conditions and the following disclaimer in
+	   the documentation and/or other materials provided with the
+	   distribution.
 
-	THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
-	INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
-	AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
-	AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
-	OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-	SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-	INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-	CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-	ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-	POSSIBILITY OF SUCH DAMAGE.
+	3. All advertising materials mentioning features or use of this software
+	   must display the following acknowledgment:
+	   "This product includes software developed by the pfSense Project
+	   for use in the pfSense® software distribution. (http://www.pfsense.org/).
 
-	This version of captiveportal.inc has been modified by Rob Parker
-	<rob.parker@keycom.co.uk> to include changes for per-user bandwidth management
-	via returned RADIUS attributes. This page has been modified to delete any
-	added rules which may have been created by other per-user code (index.php, etc).
-	These changes are (c) 2004 Keycom PLC.
+	4. The names "pfSense" and "pfSense Project" must not be used to
+	   endorse or promote products derived from this software without
+	   prior written permission. For written permission, please contact
+	   coreteam@pfsense.org.
+
+	5. Products derived from this software may not be called "pfSense"
+	   nor may "pfSense" appear in their names without prior written
+	   permission of the Electric Sheep Fencing, LLC.
+
+	6. Redistributions of any form whatsoever must retain the following
+	   acknowledgment:
+
+	"This product includes software developed by the pfSense Project
+	for use in the pfSense software distribution (http://www.pfsense.org/).
+
+	THIS SOFTWARE IS PROVIDED BY THE pfSense PROJECT ``AS IS'' AND ANY
+	EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+	IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+	PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE pfSense PROJECT OR
+	ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+	SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+	NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+	LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+	HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+	STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+	ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
+	OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 /* include all configuration functions */
@@ -47,6 +64,10 @@ require_once("voucher.inc");
 function get_default_captive_portal_html() {
 	global $config, $g, $cpzone;
 
+	$translated_text1 = sprintf(gettext("%s captive portal"), $g['product_name']);
+	$translated_text2 = sprintf(gettext("Welcome to the %s Captive Portal!"), $g['product_name']);
+	$translated_text3 = gettext("Username:");
+	$translated_text4 = gettext("Password:");
 	$htmltext = <<<EOD
 <html>
 <body>
@@ -55,11 +76,11 @@ function get_default_captive_portal_html() {
 	<input name="zone" type="hidden" value="\$PORTAL_ZONE\$">
 	<center>
 	<table cellpadding="6" cellspacing="0" width="550" height="380" style="border:1px solid #000000">
-	<tr height="10" bgcolor="#990000">
+	<tr height="10" style="background-color:#990000">
 		<td style="border-bottom:1px solid #000000">
 			<font color='white'>
 			<b>
-				{$g['product_name']} captive portal
+				{$translated_text1}
 			</b>
 			</font>
 		</td>
@@ -89,27 +110,29 @@ function get_default_captive_portal_html() {
 								<br />
 								<div id='loginbox'>
 								<table>
-									<tr><td colspan="2"><center>Welcome to the {$g['product_name']} Captive Portal!</td></tr>
+									<tr><td colspan="2"><center>{$translated_text2}</td></tr>
 									<tr><td>&nbsp;</td></tr>
-									<tr><td align="right">Username:</td><td><input name="auth_user" type="text" style="border: 1px dashed;"></td></tr>
-									<tr><td align="right">Password:</td><td><input name="auth_pass" type="password" style="border: 1px dashed;"></td></tr>
+									<tr><td class="text-right">{$translated_text3}</td><td><input name="auth_user" type="text" style="border: 1px dashed;"></td></tr>
+									<tr><td class="text-right">{$translated_text4}</td><td><input name="auth_pass" type="password" style="border: 1px dashed;"></td></tr>
 									<tr><td>&nbsp;</td></tr>
 
 EOD;
 
 	if (isset($config['voucher'][$cpzone]['enable'])) {
+		$translated_text = gettext("Enter Voucher Code:");
 		$htmltext .= <<<EOD
 									<tr>
-										<td align="right">Enter Voucher Code: </td>
+										<td class="text-right">{$translated_text} </td>
 										<td><input name="auth_voucher" type="text" style="border:1px dashed;" size="22"></td>
 									</tr>
 
 EOD;
 	}
 
+	$translated_text = gettext("Continue");
 	$htmltext .= <<<EOD
 									<tr>
-										<td colspan="2"><center><input name="accept" type="submit" value="Continue"></center></td>
+										<td colspan="2"><center><input name="accept" type="submit" value="{$translated_text}"></center></td>
 									</tr>
 								</table>
 								</div>
@@ -221,7 +244,6 @@ function captiveportal_configure_zone($cpcfg) {
 			$htmltext = str_replace("\$PORTAL_MESSAGE\$", "#PORTAL_MESSAGE#", $htmltext);
 			$htmltext = str_replace("\$CLIENT_MAC\$", "#CLIENT_MAC#", $htmltext);
 			$htmltext = str_replace("\$CLIENT_IP\$", "#CLIENT_IP#", $htmltext);
-			$htmltext = str_replace("\$ORIGINAL_PORTAL_IP\$", "#ORIGINAL_PORTAL_IP#", $htmltext);
 			$htmltext = str_replace("\$PORTAL_ACTION\$", "#PORTAL_ACTION#", $htmltext);
 			if ($cpcfg['preauthurl']) {
 				$htmltext = str_replace("\$PORTAL_REDIRURL\$", "{$cpcfg['preauthurl']}", $htmltext);
@@ -249,7 +271,6 @@ function captiveportal_configure_zone($cpcfg) {
 			$errtext = str_replace("\$PORTAL_MESSAGE\$", "#PORTAL_MESSAGE#", $errtext);
 			$errtext = str_replace("\$CLIENT_MAC\$", "#CLIENT_MAC#", $errtext);
 			$errtext = str_replace("\$CLIENT_IP\$", "#CLIENT_IP#", $errtext);
-			$errtext = str_replace("\$ORIGINAL_PORTAL_IP\$", "#ORIGINAL_PORTAL_IP#", $errtext);
 			$errtext = str_replace("\$PORTAL_ACTION\$", "#PORTAL_ACTION#", $errtext);
 			if ($cpcfg['preauthurl']) {
 				$errtext = str_replace("\$PORTAL_REDIRURL\$", "{$cpcfg['preauthurl']}", $errtext);
@@ -265,26 +286,30 @@ function captiveportal_configure_zone($cpcfg) {
 			$logouttext = base64_decode($cpcfg['page']['logouttext']);
 		} else {
 			/* example page */
+			$translated_text1 = gettext("Redirecting...");
+			$translated_text2 = gettext("Redirecting to");
+			$translated_text3 = gettext("Logout");
+			$translated_text4 = gettext("Click the button below to disconnect");
 			$logouttext = <<<EOD
 <html>
-<head><title>Redirecting...</title></head>
+<head><title>{$translated_text1}</title></head>
 <body>
 <span style="font-family: Tahoma, Verdana, Arial, Helvetica, sans-serif; font-size: 11px;">
-<b>Redirecting to <a href="<?=\$my_redirurl;?>"><?=\$my_redirurl;?></a>...</b>
+<b>{$translated_text2} <a href="<?=\$my_redirurl;?>"><?=\$my_redirurl;?></a>...</b>
 </span>
 <script type="text/javascript">
 //<![CDATA[
 LogoutWin = window.open('', 'Logout', 'toolbar=0,scrollbars=0,location=0,statusbar=0,menubar=0,resizable=0,width=256,height=64');
 if (LogoutWin) {
 	LogoutWin.document.write('<html>');
-	LogoutWin.document.write('<head><title>Logout</title></head>') ;
-	LogoutWin.document.write('<body bgcolor="#435370">');
-	LogoutWin.document.write('<div align="center" style="color: #ffffff; font-family: Tahoma, Verdana, Arial, Helvetica, sans-serif; font-size: 11px;">') ;
-	LogoutWin.document.write('<b>Click the button below to disconnect</b><p />');
+	LogoutWin.document.write('<head><title>{$translated_text3}</title></head>') ;
+	LogoutWin.document.write('<body style="background-color:#435370">');
+	LogoutWin.document.write('<div class="text-center" style="color: #ffffff; font-family: Tahoma, Verdana, Arial, Helvetica, sans-serif; font-size: 11px;">') ;
+	LogoutWin.document.write('<b>{$translated_text4}</b><p />');
 	LogoutWin.document.write('<form method="POST" action="<?=\$logouturl;?>">');
 	LogoutWin.document.write('<input name="logout_id" type="hidden" value="<?=\$sessionid;?>" />');
 	LogoutWin.document.write('<input name="zone" type="hidden" value="<?=\$cpzone;?>" />');
-	LogoutWin.document.write('<input name="logout" type="submit" value="Logout" />');
+	LogoutWin.document.write('<input name="logout" type="submit" value="{$translated_text3}" />');
 	LogoutWin.document.write('</form>');
 	LogoutWin.document.write('</div></body>');
 	LogoutWin.document.write('</html>');
@@ -310,9 +335,9 @@ EOD;
 		/* write elements */
 		captiveportal_write_elements();
 
-		/* kill any running mini_httpd */
-		killbypid("{$g['varrun_path']}/lighty-{$cpzone}-CaptivePortal.pid");
-		killbypid("{$g['varrun_path']}/lighty-{$cpzone}-CaptivePortal-SSL.pid");
+		/* kill any running CP nginx instances */
+		killbypid("{$g['varrun_path']}/nginx-{$cpzone}-CaptivePortal.pid");
+		killbypid("{$g['varrun_path']}/nginx-{$cpzone}-CaptivePortal-SSL.pid");
 
 		/* start up the webserving daemon */
 		captiveportal_init_webgui_zone($cpcfg);
@@ -337,8 +362,8 @@ EOD;
 		}
 
 	} else {
-		killbypid("{$g['varrun_path']}/lighty-{$cpzone}-CaptivePortal.pid");
-		killbypid("{$g['varrun_path']}/lighty-{$cpzone}-CaptivePortal-SSL.pid");
+		killbypid("{$g['varrun_path']}/nginx-{$cpzone}-CaptivePortal.pid");
+		killbypid("{$g['varrun_path']}/nginx-{$cpzone}-CaptivePortal-SSL.pid");
 		killbypid("{$g['varrun_path']}/cp_prunedb_{$cpzone}.pid");
 		@unlink("{$g['varetc_path']}/captiveportal_{$cpzone}.html");
 		@unlink("{$g['varetc_path']}/captiveportal-{$cpzone}-error.html");
@@ -417,35 +442,35 @@ function captiveportal_init_webgui_zone($cpcfg) {
 		$key = base64_decode($cert['prv']);
 		$ca = ca_chain($cert);
 
-		/* generate lighttpd configuration */
+		/* generate nginx configuration */
 		if (!empty($cpcfg['listenporthttps'])) {
 			$listenporthttps = $cpcfg['listenporthttps'];
 		} else {
 			$listenporthttps = 8001 + $cpcfg['zoneid'];
 		}
-		system_generate_lighty_config("{$g['varetc_path']}/lighty-{$cpzone}-CaptivePortal-SSL.conf",
-			$crt, $key, $ca, "lighty-{$cpzone}-CaptivePortal-SSL.pid", $listenporthttps, "/usr/local/captiveportal",
+		system_generate_nginx_config("{$g['varetc_path']}/nginx-{$cpzone}-CaptivePortal-SSL.conf",
+			$crt, $key, $ca, "nginx-{$cpzone}-CaptivePortal-SSL.pid", $listenporthttps, "/usr/local/captiveportal",
 			"cert-{$cpzone}-portal.pem", "ca-{$cpzone}-portal.pem", $cpzone);
 	}
 
-	/* generate lighttpd configuration */
+	/* generate nginx configuration */
 	if (!empty($cpcfg['listenporthttp'])) {
 		$listenporthttp = $cpcfg['listenporthttp'];
 	} else {
 		$listenporthttp = 8000 + $cpcfg['zoneid'];
 	}
-	system_generate_lighty_config("{$g['varetc_path']}/lighty-{$cpzone}-CaptivePortal.conf",
-		"", "", "", "lighty-{$cpzone}-CaptivePortal.pid", $listenporthttp, "/usr/local/captiveportal",
+	system_generate_nginx_config("{$g['varetc_path']}/nginx-{$cpzone}-CaptivePortal.conf",
+		"", "", "", "nginx-{$cpzone}-CaptivePortal.pid", $listenporthttp, "/usr/local/captiveportal",
 		"", "", $cpzone);
 
-	@unlink("{$g['varrun']}/lighty-{$cpzone}-CaptivePortal.pid");
-	/* attempt to start lighttpd */
-	$res = mwexec("/usr/local/sbin/lighttpd -f {$g['varetc_path']}/lighty-{$cpzone}-CaptivePortal.conf");
+	@unlink("{$g['varrun']}/nginx-{$cpzone}-CaptivePortal.pid");
+	/* attempt to start nginx */
+	$res = mwexec("/usr/local/sbin/nginx -c {$g['varetc_path']}/nginx-{$cpzone}-CaptivePortal.conf");
 
 	/* fire up https instance */
 	if (isset($cpcfg['httpslogin'])) {
-		@unlink("{$g['varrun']}/lighty-{$cpzone}-CaptivePortal-SSL.pid");
-		$res = mwexec("/usr/local/sbin/lighttpd -f {$g['varetc_path']}/lighty-{$cpzone}-CaptivePortal-SSL.conf");
+		@unlink("{$g['varrun']}/nginx-{$cpzone}-CaptivePortal-SSL.pid");
+		$res = mwexec("/usr/local/sbin/nginx -c {$g['varetc_path']}/nginx-{$cpzone}-CaptivePortal-SSL.conf");
 	}
 }
 
@@ -659,8 +684,8 @@ function captiveportal_prune_old() {
 	 * If something is missed next run will catch it!
 	 */
 	$pruning_time = time();
-	$stop_time = $pruning_time;
 	foreach ($cpdb as $cpentry) {
+		$stop_time = $pruning_time;
 
 		$timedout = false;
 		$term_cause = 1;
@@ -727,19 +752,32 @@ function captiveportal_prune_old() {
 		/* do periodic RADIUS reauthentication? */
 		if (!$timedout && !empty($radiusservers)) {
 			if (isset($cpcfg['radacct_enable'])) {
-				if ($cpcfg['reauthenticateacct'] == "stopstart") {
+				if (substr($cpcfg['reauthenticateacct'], 0, 9) == "stopstart") {
 					/* stop and restart accounting */
+					if ($cpcfg['reauthenticateacct'] == "stopstartfreeradius") {
+						$rastart_time = 0;
+						$rastop_time = 60;
+					} else {
+						$rastart_time = $cpentry[0];
+						$rastop_time = null;
+					}
 					RADIUS_ACCOUNTING_STOP($cpentry[1], // ruleno
 						$cpentry[4], // username
 						$cpentry[5], // sessionid
-						$cpentry[0], // start time
+						$rastart_time, // start time
 						$radiusservers,
 						$cpentry[2], // clientip
 						$cpentry[3], // clientmac
-						10); // NAS Request
+						10, // NAS Request
+						false, // Not an interim request
+						$rastop_time); // Stop Time
 					$clientsn = (is_ipaddrv6($cpentry[2])) ? 128 : 32;
 					$_gb = @pfSense_ipfw_Tableaction($cpzoneid, IP_FW_TABLE_XZEROENTRY, 1, $cpentry[2], $clientsn, $cpentry[3]);
 					$_gb = @pfSense_ipfw_Tableaction($cpzoneid, IP_FW_TABLE_XZEROENTRY, 2, $cpentry[2], $clientsn, $cpentry[3]);
+					if ($cpcfg['reauthenticateacct'] == "stopstartfreeradius") {
+						/* Need to pause here or the FreeRADIUS server gets confused about packet ordering. */
+						sleep(1);
+					}
 					RADIUS_ACCOUNTING_START($cpentry[1], // ruleno
 						$cpentry[4], // username
 						$cpentry[5], // sessionid
@@ -877,10 +915,17 @@ function captiveportal_disconnect($dbent, $radiusservers, $term_cause = 1, $stop
 
 	/* this client needs to be deleted - remove ipfw rules */
 	if (isset($config['captiveportal'][$cpzone]['radacct_enable']) && !empty($radiusservers)) {
+		if ($config['captiveportal'][$cpzone]['reauthenticateacct'] == "stopstartfreeradius") {
+			/* Interim updates are on so the session time must be reported as the elapsed time since the previous interim update. */
+			$session_time = ($stop_time - $dbent[0]) % 60;
+			$start_time = $stop_time - $session_time;
+		} else {
+			$start_time = $dbent[0];
+		}
 		RADIUS_ACCOUNTING_STOP($dbent[1], // ruleno
 			$dbent[4], // username
 			$dbent[5], // sessionid
-			$dbent[0], // start time
+			$start_time, // start time
 			$radiusservers,
 			$dbent[2], // clientip
 			$dbent[3], // clientmac
@@ -1265,7 +1310,7 @@ function captiveportal_init_radius_servers() {
 		$cprdsrvlck = lock("captiveportalradius{$cpzone}", LOCK_EX);
 		$fd = @fopen("{$g['vardb_path']}/captiveportal_radius_{$cpzone}.db", "w");
 		if (!$fd) {
-			captiveportal_syslog("Error: cannot open radius DB file in captiveportal_configure().\n");
+			captiveportal_syslog("Error: cannot open RADIUS DB file in captiveportal_configure().\n");
 			unlock($cprdsrvlck);
 			return 1;
 		}
@@ -1444,7 +1489,7 @@ function captiveportal_opendb() {
 			if (!is_numericint($cpzoneid)) {
 				if (is_array($config['captiveportal'])) {
 					foreach ($config['captiveportal'] as $cpkey => $cp) {
-						if ($cpzone == $cp['zone']) {
+						if ($cpzone == $cpkey) {
 							$cpzoneid = $cp['zoneid'];
 						}
 					}
@@ -1911,8 +1956,8 @@ function portal_reply_page($redirurl, $type = null, $message = null, $clientmac 
 	/* substitute other variables */
 	$ourhostname = portal_hostname_from_client_ip($clientip);
 	$protocol = (isset($cpcfg['httpslogin'])) ? 'https://' : 'http://';
-	$htmltext = str_replace("\$PORTAL_ACTION\$", "{$protocol}{$ourhostname}/", $htmltext);
-	$htmltext = str_replace("#PORTAL_ACTION#", "{$protocol}{$ourhostname}/", $htmltext);
+	$htmltext = str_replace("\$PORTAL_ACTION\$", "{$protocol}{$ourhostname}/index.php?zone={$cpzone}", $htmltext);
+	$htmltext = str_replace("#PORTAL_ACTION#", "{$protocol}{$ourhostname}/index.php?zone={$cpzone}", $htmltext);
 
 	$htmltext = str_replace("\$PORTAL_ZONE\$", htmlspecialchars($cpzone), $htmltext);
 	$htmltext = str_replace("\$PORTAL_REDIRURL\$", htmlspecialchars($redirurl), $htmltext);
@@ -2041,7 +2086,7 @@ function portal_allow($clientip, $clientmac, $username, $password = null, $attri
 
 	/* read in client database */
 	$query = "WHERE ip = '{$clientip}'";
-	$tmpusername = strtolower($username);
+	$tmpusername = SQLite3::escapeString(strtolower($username));
 	if (isset($config['captiveportal'][$cpzone]['noconcurrentlogins'])) {
 		$query .= " OR (username != 'unauthenticated' AND lower(username) = '{$tmpusername}')";
 	}

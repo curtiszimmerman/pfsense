@@ -90,7 +90,7 @@ if ($_POST) {
 
 	foreach ($a_cp as $cpkey => $cpent) {
 		if ($cpent['zone'] == $_POST['zone']) {
-			$input_errors[] = sprintf("[%s] %s.", $_POST['zone'], gettext("already exists"));
+			$input_errors[] = sprintf(gettext("Zone [%s] already exists."), $_POST['zone']);
 			break;
 		}
 	}
@@ -114,10 +114,7 @@ if ($input_errors) {
 	print_input_errors($input_errors);
 }
 
-$form = new Form(new Form_Button(
-	'submit',
-	'Continue'
-));
+$form = new Form(false);
 
 $section = new Form_Section('Add Captive Portal Zone');
 
@@ -129,9 +126,16 @@ $section->addInput(new Form_Input(
 $section->addInput(new Form_Input(
 	'descr',
 	'Zone description'
-))->setHelp('You may enter a description here for your reference (not parsed).');
+))->setHelp('A description may be entered here for administrative reference (not parsed).');
 
 $form->add($section);
+
+$form->addGlobal(new Form_Button(
+	'Submit',
+	'Save & Continue',
+	null,
+	'fa-save'
+))->addClass('btn-primary');
 
 print($form);
 

@@ -122,11 +122,15 @@ if ($savemsg) {
 }
 
 if (is_subsystem_dirty('vpnpppoe')) {
-	print_info_box_np(gettext('The PPPoE entry list has been changed') . '.<br />' . gettext('You must apply the changes in order for them to take effect.'));
+	print_apply_box(gettext('The PPPoE entry list has been changed.') . '<br />' . gettext('The changes must be applied for them to take effect.'));
 }
 ?>
 
-<div class="table-responsive">
+<div class="panel panel-default">
+	<div class="panel-heading"><h2 class="panel-title"><?=gettext('PPPoE Server')?></h2></div>
+	<div class="panel-body">
+	
+	<div class="table-responsive">
 	<table class="table table-striped table-hover table-condensed">
 		<thead>
 			<tr>
@@ -134,7 +138,7 @@ if (is_subsystem_dirty('vpnpppoe')) {
 				<th><?=gettext("Local IP")?></th>
 				<th><?=gettext("Number of users")?></th>
 				<th><?=gettext("Description")?></th>
-				<th><!-- Action buttons --></th>
+				<th><?=gettext("Actions")?></th>
 			</tr>
 		</thead>
 		<tbody>
@@ -166,6 +170,9 @@ endforeach;
 ?>
 		</tbody>
 	</table>
+</div>
+
+	</div>
 </div>
 
 <nav class="action-buttons">

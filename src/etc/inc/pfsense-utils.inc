@@ -1,14 +1,11 @@
 <?php
-/****h* pfSense/pfsense-utils
-	NAME
-		pfsense-utils.inc - Utilities specific to pfSense
-	DESCRIPTION
-		This include contains various pfSense specific functions.
-	HISTORY
-		$Id$
+/*
+	pfsense-utils.inc
 
-	Copyright (C) 2004-2007 Scott Ullrich (sullrich@gmail.com)
+	part of pfSense (https://www.pfsense.org)
+	Copyright (c) 2004-2016 Electric Sheep Fencing, LLC.
 	All rights reserved.
+
 	Redistribution and use in source and binary forms, with or without
 	modification, are permitted provided that the following conditions are met:
 
@@ -16,19 +13,42 @@
 	   this list of conditions and the following disclaimer.
 
 	2. Redistributions in binary form must reproduce the above copyright
-	   notice, this list of conditions and the following disclaimer in the
-	   documentation and/or other materials provided with the distribution.
+	   notice, this list of conditions and the following disclaimer in
+	   the documentation and/or other materials provided with the
+	   distribution.
 
-	THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
-	INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
-	AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
-	AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
-	OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-	SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-	INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-	CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-	ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-	POSSIBILITY OF SUCH DAMAGE.
+	3. All advertising materials mentioning features or use of this software
+	   must display the following acknowledgment:
+	   "This product includes software developed by the pfSense Project
+	   for use in the pfSense® software distribution. (http://www.pfsense.org/).
+
+	4. The names "pfSense" and "pfSense Project" must not be used to
+	   endorse or promote products derived from this software without
+	   prior written permission. For written permission, please contact
+	   coreteam@pfsense.org.
+
+	5. Products derived from this software may not be called "pfSense"
+	   nor may "pfSense" appear in their names without prior written
+	   permission of the Electric Sheep Fencing, LLC.
+
+	6. Redistributions of any form whatsoever must retain the following
+	   acknowledgment:
+
+	"This product includes software developed by the pfSense Project
+	for use in the pfSense software distribution (http://www.pfsense.org/).
+
+	THIS SOFTWARE IS PROVIDED BY THE pfSense PROJECT ``AS IS'' AND ANY
+	EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+	IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+	PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE pfSense PROJECT OR
+	ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+	SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+	NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+	LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+	HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+	STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+	ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
+	OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 /****f* pfsense-utils/have_natpfruleint_access
@@ -395,39 +415,30 @@ function convert_ip_to_network_format($ip, $subnet) {
 }
 
 /*
- * get_carp_interface_status($carpinterface): returns the status of a carp ip
+ * get_carp_interface_status($carpid): returns the status of a carp uniqid
  */
-function get_carp_interface_status($carpinterface) {
-	global $config;
+function get_carp_interface_status($carpid) {
 
-	foreach ($config['virtualip']['vip'] as $carp) {
-		if ($carp['mode'] != "carp") {
-			continue;
-		}
-		$carpif = "_vip{$carp['uniqid']}";
-		if ($carpinterface !== $carpif) {
-			continue;
-		}
+	$carpiface = get_configured_vip_interface($carpid);
+	if ($carpiface == NULL)
+		return "";
+	$interface = get_real_interface($carpiface);
+	if ($interface == NULL)
+		return "";
 
-		$interface = get_real_interface($carp['interface']);
-		$vhid = $carp['vhid'];
-		$carp_query = '';
-		$_gb = exec("/sbin/ifconfig $interface | /usr/bin/grep carp: | /usr/bin/grep \"vhid $vhid\"", $carp_query);
-		foreach ($carp_query as $int) {
-			if (stripos($int, "MASTER")) {
-				return "MASTER";
-			}
-			if (stripos($int, "BACKUP")) {
-				return "BACKUP";
-			}
-			if (stripos($int, "INIT")) {
-				return "INIT";
-			}
-		}
-		break;
+	$vhid = $carp['vhid'];
+	$carp_query = '';
+	$_gb = exec("/sbin/ifconfig $interface | /usr/bin/grep carp: | /usr/bin/grep \"vhid $vhid\"", $carp_query);
+	foreach ($carp_query as $int) {
+		if (stripos($int, "MASTER"))
+			return "MASTER";
+		elseif (stripos($int, "BACKUP"))
+			return "BACKUP";
+		elseif (stripos($int, "INIT"))
+			return "INIT";
 	}
 
-	return;
+	return "";
 }
 
 /*
@@ -532,7 +543,7 @@ function WakeOnLan($addr, $mac) {
 		}
 		$e = socket_sendto($s, $msg, strlen($msg), 0, $addr, 2050);
 		socket_close($s);
-		log_error(sprintf(gettext('Magic Packet sent (%1$s) to {%2$s} MAC=%3$s'), $e, $addr, $mac));
+		log_error(sprintf(gettext('Magic Packet sent (%1$s) to (%2$s) MAC=%3$s'), $e, $addr, $mac));
 		return true;
 	}
 
@@ -873,6 +884,7 @@ function setup_serial_port($when = "save", $path = "") {
 		} else {
 			$specific_platform = system_identify_specific_platform();
 			if ($specific_platform['name'] == 'RCC-VE' ||
+			    $specific_platform['name'] == 'RCC' ||
 			    $specific_platform['name'] == 'RCC-DFF') {
 				$serial_only = true;
 			}
@@ -940,6 +952,7 @@ function setup_serial_port($when = "save", $path = "") {
 
 			$specplatform = system_identify_specific_platform();
 			if ($specplatform['name'] == 'RCC-VE' ||
+			    $specplatform['name'] == 'RCC' ||
 			    $specplatform['name'] == 'RCC-DFF') {
 				$new_boot_config[] = 'comconsole_port="0x2F8"';
 				$new_boot_config[] = 'hint.uart.0.flags="0x00"';
@@ -1512,7 +1525,7 @@ function pfsense_default_tables_size() {
 
 function pfsense_default_table_entries_size() {
 	$current = `pfctl -sm | grep table-entries | awk '{print $4};'`;
-	return $current;
+	return (trim($current));
 }
 
 /* Compare the current hostname DNS to the DNS cache we made
@@ -1573,7 +1586,7 @@ function load_crypto() {
 	}
 
 	if (!empty($config['system']['crypto_hardware']) && !is_module_loaded($config['system']['crypto_hardware'])) {
-		log_error("Loading {$config['system']['crypto_hardware']} cryptographic accelerator module.");
+		log_error(sprintf(gettext("Loading %s cryptographic accelerator module."), $config['system']['crypto_hardware']));
 		mwexec("/sbin/kldload {$config['system']['crypto_hardware']}");
 	}
 }
@@ -1590,7 +1603,7 @@ function load_thermal_hardware() {
 	}
 
 	if (!empty($config['system']['thermal_hardware']) && !is_module_loaded($config['system']['thermal_hardware'])) {
-		log_error("Loading {$config['system']['thermal_hardware']} thermal monitor module.");
+		log_error(sprintf(gettext("Loading %s thermal monitor module."), $config['system']['thermal_hardware']));
 		mwexec("/sbin/kldload {$config['system']['thermal_hardware']}");
 	}
 }
@@ -1663,25 +1676,34 @@ function download_file($url, $destination, $verify_ssl = true, $connect_timeout 
 	$http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 	fclose($fp);
 	curl_close($ch);
-	return ($http_code == 200) ? true : $http_code;
+	if ($http_code == 200) {
+		return true;
+	} else {
+		log_error(sprintf(gettext('Download file failed with status code %1$s. URL: %2$s'), $http_code, $url));
+		unlink_if_exists($destination);
+		return false;
+	}
 }
 
-function download_file_with_progress_bar($url_file, $destination_file, $readbody = 'read_body', $connect_timeout = 5, $timeout = 0) {
+function download_file_with_progress_bar($url, $destination, $verify_ssl = true, $readbody = 'read_body', $connect_timeout = 5, $timeout = 0) {
 	global $config, $g;
 	global $ch, $fout, $file_size, $downloaded, $config, $first_progress_update;
 	$file_size = 1;
 	$downloaded = 1;
 	$first_progress_update = TRUE;
 	/* open destination file */
-	$fout = fopen($destination_file, "wb");
+	$fout = fopen($destination, "wb");
 
+	if (!$fout) {
+		return false;
+	}
 	/*
 	 *      Originally by Author: Keyvan Minoukadeh
 	 *      Modified by Scott Ullrich to return Content-Length size
 	 */
-
 	$ch = curl_init();
-	curl_setopt($ch, CURLOPT_URL, $url_file);
+	curl_setopt($ch, CURLOPT_URL, $url);
+	curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, $verify_ssl);
 	curl_setopt($ch, CURLOPT_HEADERFUNCTION, 'read_header');
 	curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
 	curl_setopt($ch, CURLOPT_WRITEFUNCTION, $readbody);
@@ -1707,11 +1729,15 @@ function download_file_with_progress_bar($url_file, $destination_file, $readbody
 
 	@curl_exec($ch);
 	$http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-	if ($fout) {
-		fclose($fout);
-	}
+	fclose($fout);
 	curl_close($ch);
-	return ($http_code == 200) ? true : $http_code;
+	if ($http_code == 200) {
+		return true;
+	} else {
+		log_error(sprintf(gettext('Download file failed with status code %1$s. URL: %2$s'), $http_code, $url));
+		unlink_if_exists($destination);
+		return false;
+	}
 }
 
 function read_header($ch, $string) {
@@ -1893,7 +1919,7 @@ function update_alias_names_upon_change($section, $field, $new_alias_name, $orig
 
 }
 
-function parse_aliases_file($filename, $type = "url", $max_items = -1) {
+function parse_aliases_file($filename, $type = "url", $max_items = -1, $kflc = false) {
 	/*
 	 * $filename = file to process for example blocklist like DROP:  http://www.spamhaus.org/drop/drop.txt
 	 * $type = if set to 'url' then subnets and ips will be returned,
@@ -1903,37 +1929,46 @@ function parse_aliases_file($filename, $type = "url", $max_items = -1) {
 	 * RETURNS an array of ip subnets and ip's or ports and port-ranges, returns NULL upon a error conditions (file not found)
 	 */
 
+	if (filesize($filename) == 0) {
+		log_error(sprintf(gettext("Could not process empty file from alias: %s"), $filename));
+		return null;
+	}
 	$fd = @fopen($filename, 'r');
 	if (!$fd) {
-		log_error(gettext("Could not process aliases from alias: {$alias_url}"));
+		log_error(sprintf(gettext("Could not process aliases from alias: %s"), $filename));
 		return null;
 	}
 	$items = array();
+	$comments = array();
 	/* NOTE: fgetss() is not a typo RTFM before being smart */
 	while (($fc = fgetss($fd)) !== FALSE) {
 		$tmp = trim($fc, " \t\n\r");
 		if (empty($tmp)) {
 			continue;
 		}
-		$tmp_str = strstr($tmp, '#', true);
-		if (!empty($tmp_str)) {
-			$tmp = $tmp_str;
-		}
-		$tmp_str = strstr($tmp, ' ', true);
-		if (!empty($tmp_str)) {
-			$tmp = $tmp_str;
-		}
-		$valid = ($type == "url" && (is_ipaddr($tmp) || is_subnet($tmp))) ||
-			 ($type == "url_ports" && (is_port($tmp) || is_portrange($tmp)));
-		if ($valid) {
-			$items[] = $tmp;
-			if (count($items) == $max_items) {
-				break;
+		if (($kflc) && (strpos($tmp, '#') === 0)) {	// Keep Full Line Comments (lines beginning with #).
+			$comments[] = $tmp;
+		} else {
+			$tmp_str = strstr($tmp, '#', true);
+			if (!empty($tmp_str)) {
+				$tmp = $tmp_str;
+			}
+			$tmp_str = strstr($tmp, ' ', true);
+			if (!empty($tmp_str)) {
+				$tmp = $tmp_str;
+			}
+			$valid = ($type == "url" && (is_ipaddr($tmp) || is_subnet($tmp))) ||
+				($type == "url_ports" && (is_port($tmp) || is_portrange($tmp)));
+			if ($valid) {
+				$items[] = $tmp;
+				if (count($items) == $max_items) {
+					break;
+				}
 			}
 		}
 	}
 	fclose($fd);
-	return $items;
+	return array_merge($comments, $items);
 }
 
 function update_alias_url_data() {
@@ -1956,20 +1991,19 @@ function update_alias_url_data() {
 				unlink($temp_filename);
 				$verify_ssl = isset($config['system']['checkaliasesurlcert']);
 				mkdir($temp_filename);
-				download_file($alias_url, $temp_filename . "/aliases", $verify_ssl);
+				if (!download_file($alias_url, $temp_filename . "/aliases", $verify_ssl)) {
+					log_error(sprintf(gettext("Failed to download alias %s"), $alias_url));
+					continue;
+				}
 
 				/* if the item is tar gzipped then extract */
 				if (stripos($alias_url, '.tgz')) {
 					if (!process_alias_tgz($temp_filename)) {
 						continue;
 					}
-				} else if (stripos($alias_url, '.zip')) {
-					if (!process_alias_unzip($temp_filename)) {
-						continue;
-					}
 				}
 				if (file_exists("{$temp_filename}/aliases")) {
-					$address = parse_aliases_file("{$temp_filename}/aliases", $alias['type'], 3000);
+					$address = parse_aliases_file("{$temp_filename}/aliases", $alias['type'], 5000);
 					mwexec("/bin/rm -rf {$temp_filename}");
 				}
 			}
@@ -1985,39 +2019,6 @@ function update_alias_url_data() {
 	return $updated;
 }
 
-function process_alias_unzip($temp_filename) {
-	if (!file_exists("/usr/local/bin/unzip")) {
-		log_error(gettext("Alias archive is a .zip file which cannot be decompressed because utility is missing!"));
-		return false;
-	}
-	rename("{$temp_filename}/aliases", "{$temp_filename}/aliases.zip");
-	mwexec("/usr/local/bin/unzip {$temp_filename}/aliases.tgz -d {$temp_filename}/aliases/");
-	unlink("{$temp_filename}/aliases.zip");
-	$files_to_process = return_dir_as_array("{$temp_filename}/");
-	/* foreach through all extracted files and build up aliases file */
-	$fd = @fopen("{$temp_filename}/aliases", "w");
-	if (!$fd) {
-		log_error(gettext("Could not open {$temp_filename}/aliases for writing!"));
-		return false;
-	}
-	foreach ($files_to_process as $f2p) {
-		$tmpfd = @fopen($f2p, 'r');
-		if (!$tmpfd) {
-			log_error(gettext("The following file could not be read {$f2p} from {$temp_filename}"));
-			continue;
-		}
-		while (($tmpbuf = fread($tmpfd, 65536)) !== FALSE) {
-			fwrite($fd, $tmpbuf);
-		}
-		fclose($tmpfd);
-		unlink($f2p);
-	}
-	fclose($fd);
-	unset($tmpbuf);
-
-	return true;
-}
-
 function process_alias_tgz($temp_filename) {
 	if (!file_exists('/usr/bin/tar')) {
 		log_error(gettext("Alias archive is a .tar/tgz file which cannot be decompressed because utility is missing!"));
@@ -2030,13 +2031,13 @@ function process_alias_tgz($temp_filename) {
 	/* foreach through all extracted files and build up aliases file */
 	$fd = @fopen("{$temp_filename}/aliases", "w");
 	if (!$fd) {
-		log_error(gettext("Could not open {$temp_filename}/aliases for writing!"));
+		log_error(sprintf(gettext("Could not open %s/aliases for writing!"), $temp_filename));
 		return false;
 	}
 	foreach ($files_to_process as $f2p) {
 		$tmpfd = @fopen($f2p, 'r');
 		if (!$tmpfd) {
-			log_error(gettext("The following file could not be read {$f2p} from {$temp_filename}"));
+			log_error(sprintf(gettext('The following file could not be read %1$s from %2$s'), $f2p, $temp_filename));
 			continue;
 		}
 		while (($tmpbuf = fread($tmpfd, 65536)) !== FALSE) {
@@ -2149,11 +2150,12 @@ function pfs_version_compare($cur_time, $cur_text, $remote) {
 	}
 	return $v;
 }
-function process_alias_urltable($name, $url, $freq, $forceupdate=false) {
-	global $config;
+function process_alias_urltable($name, $url, $freq, $forceupdate=false, $validateonly=false) {
+	global $g, $config;
 
 	$urltable_prefix = "/var/db/aliastables/";
 	$urltable_filename = $urltable_prefix . $name . ".txt";
+	$tmp_urltable_filename = $urltable_filename . ".tmp";
 
 	// Make the aliases directory if it doesn't exist
 	if (!file_exists($urltable_prefix)) {
@@ -2164,24 +2166,41 @@ function process_alias_urltable($name, $url, $freq, $forceupdate=false) {
 	}
 
 	// If the file doesn't exist or is older than update_freq days, fetch a new copy.
-	if (!file_exists($urltable_filename) ||
+	if (!file_exists($urltable_filename) || (filesize($urltable_filename) == "0") ||
 	    ((time() - filemtime($urltable_filename)) > ($freq * 86400 - 90)) ||
 	    $forceupdate) {
 
 		// Try to fetch the URL supplied
 		conf_mount_rw();
-		unlink_if_exists($urltable_filename . ".tmp");
+		unlink_if_exists($tmp_urltable_filename);
 		$verify_ssl = isset($config['system']['checkaliasesurlcert']);
-		if (download_file($url, $urltable_filename . ".tmp", $verify_ssl)) {
-			mwexec("/usr/bin/sed -E 's/\;.*//g; /^[[:space:]]*($|#)/d' ". escapeshellarg($urltable_filename . ".tmp") . " > " . escapeshellarg($urltable_filename));
+		if (download_file($url, $tmp_urltable_filename, $verify_ssl)) {
+			// Convert lines that begin with '$' or ';' to comments '#' instead of deleting them.
+			mwexec("/usr/bin/sed -i \"\" -E 's/^[[:space:]]*($|#|;)/#/g; /^#/!s/\;.*//g;' ". escapeshellarg($tmp_urltable_filename));
 			if (alias_get_type($name) == "urltable_ports") {
-				$ports = explode("\n", str_replace("\r", "", file_get_contents($urltable_filename)));
-				$ports = group_ports($ports);
+				$ports = parse_aliases_file($tmp_urltable_filename, "url_ports", "-1", true);
+				$ports = group_ports($ports, true);
 				file_put_contents($urltable_filename, implode("\n", $ports));
+			} else {
+				$urltable = parse_aliases_file($tmp_urltable_filename, "url", "-1", true);
+				if (is_array($urltable)) {
+					file_put_contents($urltable_filename, implode("\n", $urltable));
+				}
 			}
-			unlink_if_exists($urltable_filename . ".tmp");
+			/* If this backup is still there on a full install, but we aren't going to use ram disks, remove the archive since this is a transition. */
+			if (($g['platform'] == $g['product_name']) && !isset($config['system']['use_mfs_tmpvar'])) {
+				unlink_if_exists("{$g['cf_conf_path']}/RAM_Disk_Store{$urltable_filename}.tgz");
+			} else {
+				/* Update the RAM disk store with the new/updated table file. */
+				mwexec("cd / && /usr/bin/tar -czf \"{$g['cf_conf_path']}/RAM_Disk_Store{$urltable_filename}.tgz\" -C / \"{$urltable_filename}\"");
+			}
+			unlink_if_exists($tmp_urltable_filename);
 		} else {
-			touch($urltable_filename);
+			if (!$validateonly) {
+				touch($urltable_filename);
+			}
+			conf_mount_ro();
+			return false;
 		}
 		conf_mount_ro();
 		return true;
@@ -2688,20 +2707,6 @@ function where_is_ipaddr_configured($ipaddr, $ignore_if = "", $check_localip = f
 		}
 	}
 
-	$interface_list_vips = get_configured_vips_list(true);
-	foreach ($interface_list_vips as $id => $vip) {
-		/* Skip CARP interfaces here since they were already checked above */
-		if ($id == $ignore_vip_id || (substr($ignore_if, 0, 4) == '_vip') && $ignore_vip_if === $vip['if']) {
-			continue;
-		}
-		if (strcasecmp($ipaddr, $vip['ipaddr']) == 0) {
-			$where_entry = array();
-			$where_entry['if'] = $vip['if'];
-			$where_entry['ip_or_subnet'] = $vip['ipaddr'];
-			$where_configured[] = $where_entry;
-		}
-	}
-
 	if ($check_localip) {
 		if (!is_array($config['l2tp']) && !empty($config['l2tp']['localip']) && (strcasecmp($ipaddr, $config['l2tp']['localip']) == 0)) {
 			$where_entry = array();
@@ -2736,11 +2741,21 @@ function pfSense_handle_custom_code($src_dir) {
 	}
 }
 
-function set_language($lang = 'en_US', $encoding = "UTF-8") {
-	setlocale(LC_ALL, "{$lang}.{$encoding}");
+function set_language() {
+	global $config, $g;
+
+	if (!empty($config['system']['language'])) {
+		$lang = $config['system']['language'];
+	} elseif (!empty($g['language'])) {
+		$lang = $g['language'];
+	}
+	$lang .= ".UTF-8";
+
+	putenv("LANG={$lang}");
+	setlocale(LC_ALL, $lang);
 	textdomain("pfSense");
 	bindtextdomain("pfSense", "/usr/local/share/locale");
-	bind_textdomain_codeset("pfSense", "{$lang}.{$encoding}");
+	bind_textdomain_codeset("pfSense", $lang);
 }
 
 function get_locale_list() {
@@ -2827,6 +2842,90 @@ function calculate_ipv6_delegation_length($if) {
 	return($pdlen);
 }
 
+function merge_ipv6_delegated_prefix($prefix, $suffix, $len = 64) {
+	$prefix = Net_IPv6::uncompress($prefix, true);
+	$suffix = Net_IPv6::uncompress($suffix, true);
+
+	/*
+	 * xxxx:xxxx:xxxx:xxxx:xxxx:xxxx:xxxx:xxxx
+	 *                ^^^^ ^
+	 *                |||| \-> 64
+	 *                |||\---> 63, 62, 61, 60
+	 *                ||\----> 56
+	 *                |\-----> 52
+	 *                \------> 48
+	 */
+
+	switch ($len) {
+	case 48:
+		$prefix_len = 15;
+		break;
+	case 52:
+		$prefix_len = 16;
+		break;
+	case 56:
+		$prefix_len = 17;
+		break;
+	case 60:
+		$prefix_len = 18;
+		break;
+	/*
+	 * XXX 63, 62 and 61 should use 18 but PD can change and if
+	 * we let user chose this bit it can end up out of PD network
+	 *
+	 * Leave this with 20 for now until we find a way to let user
+	 * chose it. The side-effect is users with PD with one of these
+	 * lengths will not be able to setup DHCP server range for full
+	 * PD size, only for last /64 network
+	 */
+	case 63:
+	case 62:
+	case 61:
+	default:
+		$prefix_len = 20;
+		break;
+	}
+
+	return Net_IPv6::compress(substr($prefix, 0, $prefix_len) .
+	    substr($suffix, $prefix_len));
+}
+
+function dhcpv6_pd_str_help($pdlen) {
+	$result = '';
+
+	switch ($pdlen) {
+	case 48:
+		$result = '::xxxx:xxxx:xxxx:xxxx:xxxx';
+		break;
+	case 52:
+		$result = '::xxx:xxxx:xxxx:xxxx:xxxx';
+		break;
+	case 56:
+		$result = '::xx:xxxx:xxxx:xxxx:xxxx';
+		break;
+	case 60:
+		$result = '::x:xxxx:xxxx:xxxx:xxxx';
+		break;
+	/*
+	 * XXX 63, 62 and 61 should use same mask of 60 but it would
+	 * we let user chose this bit it can end up out of PD network
+	 *
+	 * Leave this with the same of 64 for now until we find a way to
+	 * let user chose it. The side-effect is users with PD with one
+	 * of these lengths will not be able to setup DHCP server range
+	 * for full PD size, only for last /64 network
+	 */
+	case 61:
+	case 62:
+	case 63:
+	case 64:
+		$result = '::xxxx:xxxx:xxxx:xxxx';
+		break;
+	}
+
+	return $result;
+}
+
 function huawei_rssi_to_string($rssi) {
 	$dbm = array();
 	$i = 0;
@@ -2841,7 +2940,7 @@ function huawei_rssi_to_string($rssi) {
 }
 
 function huawei_mode_to_string($mode, $submode) {
-	$modes[0] = "None";
+	$modes[0] = gettext("None");
 	$modes[1] = "AMPS";
 	$modes[2] = "CDMA";
 	$modes[3] = "GSM/GPRS";
@@ -2849,7 +2948,7 @@ function huawei_mode_to_string($mode, $submode) {
 	$modes[5] = "WCDMA";
 	$modes[6] = "GPS";
 
-	$submodes[0] = "No Service";
+	$submodes[0] = gettext("No Service");
 	$submodes[1] = "GSM";
 	$submodes[2] = "GPRS";
 	$submodes[3] = "EDGE";
@@ -2859,28 +2958,28 @@ function huawei_mode_to_string($mode, $submode) {
 	$submodes[7] = "HSDPA+HSUPA";
 	$submodes[8] = "TD-SCDMA";
 	$submodes[9] = "HSPA+";
-	$string = "{$modes[$mode]}, {$submodes[$submode]} Mode";
+	$string = "{$modes[$mode]}, {$submodes[$submode]} " . gettext("Mode");
 	return $string;
 }
 
 function huawei_service_to_string($state) {
-	$modes[0] = "No";
-	$modes[1] = "Restricted";
-	$modes[2] = "Valid";
-	$modes[3] = "Restricted Regional";
-	$modes[4] = "Powersaving";
-	$string = "{$modes[$state]} Service";
+	$modes[0] = gettext("No Service");
+	$modes[1] = gettext("Restricted Service");
+	$modes[2] = gettext("Valid Service");
+	$modes[3] = gettext("Restricted Regional Service");
+	$modes[4] = gettext("Powersaving Service");
+	$string = $modes[$state];
 	return $string;
 }
 
 function huawei_simstate_to_string($state) {
-	$modes[0] = "Invalid SIM/locked";
-	$modes[1] = "Valid SIM";
-	$modes[2] = "Invalid SIM CS";
-	$modes[3] = "Invalid SIM PS";
-	$modes[4] = "Invalid SIM CS/PS";
-	$modes[255] = "Missing SIM";
-	$string = "{$modes[$state]} State";
+	$modes[0] = gettext("Invalid SIM/locked State");
+	$modes[1] = gettext("Valid SIM State");
+	$modes[2] = gettext("Invalid SIM CS State");
+	$modes[3] = gettext("Invalid SIM PS State");
+	$modes[4] = gettext("Invalid SIM CS/PS State");
+	$modes[255] = gettext("Missing SIM State");
+	$string = $modes[$state];
 	return $string;
 }
 
@@ -2889,8 +2988,8 @@ function zte_rssi_to_string($rssi) {
 }
 
 function zte_mode_to_string($mode, $submode) {
-	$modes[0] = "No Service";
-	$modes[1] = "Limited Service";
+	$modes[0] = gettext("No Service");
+	$modes[1] = gettext("Limited Service");
 	$modes[2] = "GPRS";
 	$modes[3] = "GSM";
 	$modes[4] = "UMTS";
@@ -2901,25 +3000,25 @@ function zte_mode_to_string($mode, $submode) {
 	$submodes[1] = "PS_ONLY";
 	$submodes[2] = "CS_PS";
 	$submodes[3] = "CAMPED";
-	$string = "{$modes[$mode]}, {$submodes[$submode]} Mode";
+	$string = "{$modes[$mode]}, {$submodes[$submode]} " . gettext("Mode");
 	return $string;
 }
 
-function zte_service_to_string($state) {
-	$modes[0] = "Initializing";
-	$modes[1] = "Network Lock error";
-	$modes[2] = "Network Locked";
-	$modes[3] = "Unlocked or correct MCC/MNC";
-	$string = "{$modes[$state]} Service";
+function zte_service_to_string($service) {
+	$modes[0] = gettext("Initializing Service");
+	$modes[1] = gettext("Network Lock error Service");
+	$modes[2] = gettext("Network Locked Service");
+	$modes[3] = gettext("Unlocked or correct MCC/MNC Service");
+	$string = $modes[$service];
 	return $string;
 }
 
 function zte_simstate_to_string($state) {
-	$modes[0] = "No action";
-	$modes[1] = "Network lock";
-	$modes[2] = "(U)SIM card lock";
-	$modes[3] = "Network Lock and (U)SIM card Lock";
-	$string = "{$modes[$state]} State";
+	$modes[0] = gettext("No action State");
+	$modes[1] = gettext("Network lock State");
+	$modes[2] = gettext("(U)SIM card lock State");
+	$modes[3] = gettext("Network Lock and (U)SIM card Lock State");
+	$string = $modes[$state];
 	return $string;
 }
 
@@ -2991,6 +3090,38 @@ function pkg_call_plugins($plugin_type, $plugin_params) {
 		}
 	}
 	return $results;
+}
+
+function restore_aliastables() {
+	global $g, $config;
+
+	$dbpath = "{$g['vardb_path']}/aliastables/";
+
+	/* restore the alias tables, if we have them */
+	$files = glob("{$g['cf_conf_path']}/RAM_Disk_Store{$dbpath}*.tgz");
+	if (count($files)) {
+		echo "Restoring alias tables...";
+		foreach ($files as $file) {
+			if (file_exists($file)) {
+				$aliastablesrestore = "";
+				$aliastablesreturn = "";
+				exec("cd /;LANG=C /usr/bin/tar -xzf {$file} 2>&1", $aliastablesrestore, $aliastablesreturn);
+				$aliastablesrestore = implode(" ", $aliastablesrestore);
+				if ($aliastablesreturn <> 0) {
+					log_error(sprintf(gettext('Alias table restore failed exited with %1$s, the error is: %2$s %3$s%4$s'), $aliastablesreturn, $aliastablesrestore, $file, "\n"));
+				} else {
+					log_error(sprintf(gettext('Alias table restore succeeded exited with %1$s, the result is: %2$s %3$s%4$s'), $aliastablesreturn, $aliastablesrestore, $dbpath.basename($file, ".tgz"), "\n"));
+				}
+			}
+			/* If this backup is still there on a full install, but we aren't going to use ram disks, remove the archive since this is a transition. */
+			if (($g['platform'] == $g['product_name']) && !isset($config['system']['use_mfs_tmpvar'])) {
+				unlink_if_exists("{$file}");
+			}
+		}
+		echo "done.\n";
+		return true;
+	}
+	return false;
 }
 
 ?>

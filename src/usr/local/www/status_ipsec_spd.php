@@ -63,13 +63,13 @@
 ##|*MATCH=status_ipsec_spd.php*
 ##|-PRIV
 
-define(RIGHTARROW, '&#x25ba;');
-define(LEFTARROW,  '&#x25c0;');
+define('RIGHTARROW', '&#x25ba;');
+define('LEFTARROW',  '&#x25c4;');
 
 require("guiconfig.inc");
 require("ipsec.inc");
 
-$pgtitle = array(gettext("Status"), gettext("IPsec"), gettext("SPD"));
+$pgtitle = array(gettext("Status"), gettext("IPsec"), gettext("SPDs"));
 $shortcut_section = "ipsec";
 include("head.inc");
 
@@ -78,8 +78,8 @@ $spd = ipsec_dump_spd();
 $tab_array = array();
 $tab_array[0] = array(gettext("Overview"), false, "status_ipsec.php");
 $tab_array[1] = array(gettext("Leases"), false, "status_ipsec_leases.php");
-$tab_array[2] = array(gettext("SAD"), false, "status_ipsec_sad.php");
-$tab_array[3] = array(gettext("SPD"), true, "status_ipsec_spd.php");
+$tab_array[2] = array(gettext("SADs"), false, "status_ipsec_sad.php");
+$tab_array[3] = array(gettext("SPDs"), true, "status_ipsec_spd.php");
 display_top_tabs($tab_array);
 
 if (count($spd)) {
@@ -100,9 +100,9 @@ if (count($spd)) {
 <?php
 		foreach ($spd as $sp) {
 			if ($sp['dir'] == 'in') {
-				$dirstr = LEFTARROW . ' Inbound';
+				$dirstr = LEFTARROW . gettext(' Inbound');
 			} else {
-				$dirstr = RIGHTARROW . ' Outbound';
+				$dirstr = RIGHTARROW . gettext(' Outbound');
 			}
 ?>
 				<tr>
@@ -133,6 +133,17 @@ if (count($spd)) {
 	print_info_box(gettext('No IPsec security policies configured.'));
 }
 
-print_info_box(gettext('You can configure your IPsec subsystem by clicking ') . '<a href="vpn_ipsec.php">' . gettext("here.") . '</a>');
-
+if (ipsec_enabled()) {
+?>
+<div class="infoblock">
+<?php
+} else {
+?>
+<div class="infoblock blockopen">
+<?php
+}
+print_info_box(sprintf(gettext('IPsec can be configured %1$shere%2$s.'), '<a href="vpn_ipsec.php">', '</a>'), 'info', false);
+?>
+</div>
+<?php
 include("foot.inc");

@@ -104,7 +104,7 @@ if ($_GET['act'] == "del") {
 	}
 }
 
-$pgtitle = array(gettext("Services"), gettext("Load Balancer"), gettext("Monitor"));
+$pgtitle = array(gettext("Services"), gettext("Load Balancer"), gettext("Monitors"));
 $shortcut_section = "relayd";
 
 include("head.inc");
@@ -118,7 +118,7 @@ if ($savemsg) {
 }
 
 if (is_subsystem_dirty('loadbalancer')) {
-	print_info_box_np(gettext("The load balancer configuration has been changed") . ".<br />" . gettext("You must apply the changes in order for them to take effect."));
+	print_apply_box(gettext("The load balancer configuration has been changed.") . "<br />" . gettext("The changes must be applied for them to take effect."));
 }
 
 /* active tabs */
@@ -140,7 +140,7 @@ display_top_tabs($tab_array);
 						<th><?=gettext('Name')?></th>
 						<th><?=gettext('Type')?></th>
 						<th><?=gettext('Description')?></th>
-						<th><?=gettext('Action')?></th>
+						<th><?=gettext('Actions')?></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -160,8 +160,8 @@ foreach ($a_monitor as $monitor) {
 						</td>
 						<td>
 							<a class="fa fa-pencil"	title="<?=gettext('Edit monitor')?>"	href="load_balancer_monitor_edit.php?id=<?=$idx?>"></a>
-							<a class="fa fa-clone"	title="<?=gettext('Copy monitor')?>"	href="load_balancer_monitor_edit.php?act=dup&id=<?=$idx?>"></a>
-							<a class="fa fa-trash"	title="<?=gettext('Delete monitor')?>"	href="load_balancer_monitor.php?act=del&id=<?=$idx?>"></a>
+							<a class="fa fa-clone"	title="<?=gettext('Copy monitor')?>"	href="load_balancer_monitor_edit.php?act=dup&amp;id=<?=$idx?>"></a>
+							<a class="fa fa-trash"	title="<?=gettext('Delete monitor')?>"	href="load_balancer_monitor.php?act=del&amp;id=<?=$idx?>"></a>
 						</td>
 					</tr>
 <?php

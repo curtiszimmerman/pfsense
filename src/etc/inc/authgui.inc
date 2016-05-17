@@ -74,6 +74,12 @@ $allowedpages = getAllowedPages($_SESSION['Username'], $_SESSION['user_radius_at
 /*
  * redirect to first allowed page if requesting a wrong url
  */
+
+/* Fix this up otherwise the privilege check will fail. See Redmine #5909. */
+if ($_SERVER['REQUEST_URI'] == "/") {
+	$_SERVER['REQUEST_URI'] = "/index.php";
+}
+
 if (!isAllowedPage($_SERVER['REQUEST_URI'])) {
 	if (count($allowedpages) > 0) {
 		$page = str_replace('*', '', $allowedpages[0]);
@@ -124,11 +130,11 @@ function display_error_form($http_code, $desc) {
 		return;
 	}
 
-	$cssfile = "/bootstrap/css/pfSense.css";
+	$cssfile = "/css/pfSense.css";
 
 	if (isset($config['system']['webgui']['webguicss'])) {
-	if (file_exists("bootstrap/css/" . $config['system']['webgui']['webguicss'])) {
-		$cssfile = "/bootstrap/css/" . $config['system']['webgui']['webguicss'];
+	if (file_exists("/usr/local/www/css/" . $config['system']['webgui']['webguicss'])) {
+		$cssfile = "/css/" . $config['system']['webgui']['webguicss'];
 	}
 }
 
@@ -228,11 +234,11 @@ if ($local_ip == false) {
 	}
 }
 
-$cssfile = "/bootstrap/css/pfSense.css";
+$cssfile = "/css/pfSense.css";
 
 if (isset($config['system']['webgui']['webguicss'])) {
-	if (file_exists("bootstrap/css/" . $config['system']['webgui']['webguicss'])) {
-		$cssfile = "/bootstrap/css/" . $config['system']['webgui']['webguicss'];
+	if (file_exists("/usr/local/www/css/" . $config['system']['webgui']['webguicss'])) {
+		$cssfile = "/css/" . $config['system']['webgui']['webguicss'];
 	}
 }
 
@@ -256,7 +262,7 @@ if (isset($config['system']['webgui']['webguicss'])) {
 <?php
 	if (is_ipaddr($http_host) && !$local_ip && !isset($config['system']['webgui']['nohttpreferercheck'])) {
 		$nifty_background = "#999";
-		print_info_box(gettext("You are accessing this router by an IP address not configured locally, which may be forwarded by NAT or other means. <br /><br />If you did not setup this forwarding, you may be the target of a man-in-the-middle attack."));
+		print_info_box(gettext("The IP address being used to access this router is not configured locally, which may be forwarded by NAT or other means. <br /><br />If this forwarding is unexpected, it should be verified that a man-in-the-middle attack is not taking place."));
 	}
 
 	$loginautocomplete = isset($config['system']['webgui']['loginautocomplete']) ? '' : 'autocomplete="off"';
@@ -264,33 +270,33 @@ if (isset($config['system']['webgui']['webguicss'])) {
 
 				<div class="panel panel-default">
 					<div class="panel-heading">
-						<h2 class="panel-title">Login to pfSense</h2>
+						<h2 class="panel-title"><?=sprintf(gettext("Login to %s"), $g['product_name'])?></h2>
 					</div>
 
 					<div class="panel-body">
 <?php if (!empty($_SESSION['Login_Error'])): ?>
 						<div class="alert alert-danger" role="alert"><?=$_SESSION['Login_Error'];?></div>
 <?php endif ?>
-						<div class="alert alert-warning" class="hidden" id="no_cookies"><?= gettext("Your browser must support cookies to login."); ?></div>
+						<div class="alert alert-warning hidden" id="no_cookies"><?= gettext("The browser must support cookies to login."); ?></div>
 
 						<form method="post" <?= $loginautocomplete ?> action="<?=$_SERVER['SCRIPT_NAME'];?>" class="form-horizontal">
 							<div class="form-group">
-								<label for="usernamefld" class="col-sm-3 control-label">Username</label>
+								<label for="usernamefld" class="col-sm-3 control-label"><?=gettext("Username")?></label>
 								<div class="col-sm-9 col-md-7">
-									<input type="text" class="form-control" name="usernamefld" id="usernamefld" placeholder="Enter your username">
+									<input type="text" class="form-control" name="usernamefld" id="usernamefld" placeholder="<?=gettext("Enter your username")?>" autocorrect="off" autocapitalize="none" spellcheck="false">
 								</div>
 							</div>
 
 							<div class="form-group">
-								<label for="passwordfld" class="col-sm-3 control-label">Password</label>
+								<label for="passwordfld" class="col-sm-3 control-label"><?=gettext("Password")?></label>
 								<div class="col-sm-9 col-md-7">
-									<input type="password" class="form-control" name="passwordfld" id="passwordfld" placeholder="Enter your password">
+									<input type="password" class="form-control" name="passwordfld" id="passwordfld" placeholder="<?=gettext("Enter your password")?>">
 								</div>
 							</div>
 
 							<div class="form-group">
 								<div class="col-sm-offset-3 col-sm-9 col-md-7">
-									<button type="submit" class="btn btn-primary" name="login">Login</button>
+									<button type="submit" class="btn btn-primary" name="login"><?=gettext("Login")?></button>
 								</div>
 							</div>
 						</form>

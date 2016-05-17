@@ -120,7 +120,7 @@ if ($_POST) {
 	if (isset($id)) {
 		if ($_POST['tag'] && $_POST['tag'] != $a_vlans[$id]['tag']) {
 			if (!empty($a_vlans[$id]['vlanif']) && convert_real_interface_to_friendly_interface_name($a_vlans[$id]['vlanif']) != NULL) {
-				$input_errors[] = gettext("Interface is assigned and you cannot change the VLAN tag while assigned.");
+				$input_errors[] = gettext("The VLAN tag cannot be changed while the interface is assigned.");
 			}
 		}
 	}
@@ -137,7 +137,7 @@ if ($_POST) {
 	if (is_array($config['qinqs']['qinqentry'])) {
 		foreach ($config['qinqs']['qinqentry'] as $qinq) {
 			if ($qinq['tag'] == $_POST['tag'] && $qinq['if'] == $_POST['if']) {
-				$input_errors[] = gettext("A QinQ VLAN exists with this tag please remove it to use this tag with.");
+				$input_errors[] = sprintf(gettext('A QinQ VLAN exists on %s with this tag. Please remove it to use this tag for a normal VLAN.'), $_POST['if']);
 			}
 		}
 	}
@@ -146,7 +146,7 @@ if ($_POST) {
 		if (isset($id) && $a_vlans[$id]) {
 			if (($a_vlans[$id]['if'] != $_POST['if']) || ($a_vlans[$id]['tag'] != $_POST['tag'])) {
 				if (!empty($a_vlans[$id]['vlanif'])) {
-					$confif = convert_real_interface_to_friendly_interface_name($vlan['vlanif']);
+					$confif = convert_real_interface_to_friendly_interface_name($a_vlans[$id]['vlanif']);
 					// Destroy previous vlan
 					pfSense_interface_destroy($a_vlans[$id]['vlanif']);
 				} else {
@@ -193,13 +193,16 @@ function build_interfaces_list() {
 	foreach ($portlist as $ifn => $ifinfo) {
 		if (is_jumbo_capable($ifn)) {
 			$list[$ifn] = $ifn . " (" . $ifinfo['mac'] . ")";
+			$iface = convert_real_interface_to_friendly_interface_name($ifn);
+			if (isset($iface) && strlen($iface) > 0)
+				$list[$ifn] .= " - $iface";
 		}
 	}
 
 	return($list);
 }
 
-$pgtitle = array(gettext("Interfaces"), gettext("VLAN"), gettext("Edit"));
+$pgtitle = array(gettext("Interfaces"), gettext("VLANs"), gettext("Edit"));
 $shortcut_section = "interfaces";
 include("head.inc");
 
@@ -208,7 +211,7 @@ if ($input_errors) {
 }
 
 $form = new Form;
-$section = new Form_Section('Interface VLAN Edit');
+$section = new Form_Section('VLAN Configuration');
 
 $section->addInput(new Form_Select(
 	'if',
@@ -239,8 +242,7 @@ $section->addInput(new Form_Input(
 	'text',
 	$pconfig['descr'],
 	['placeholder' => 'Description']
-))->setWidth(6)->setHelp('You may enter a group description here '.
-	'for your reference (not parsed).');
+))->setWidth(6)->setHelp('A group description may be entered here for administrative reference (not parsed).');
 
 $form->addGlobal(new Form_Input(
 	'vlanif',
@@ -262,4 +264,3 @@ $form->add($section);
 print $form;
 
 include("foot.inc");
-

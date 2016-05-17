@@ -164,6 +164,10 @@ if ($_POST) {
 }
 
 $pgtitle = array(gettext("System"), gettext("Advanced"), gettext("System Tunables"));
+
+if ($act == "edit") {
+	$pgtitle[] = gettext('Edit');
+}
 include("head.inc");
 
 if ($input_errors) {
@@ -175,12 +179,12 @@ if ($savemsg) {
 }
 
 if (is_subsystem_dirty('sysctl') && ($act != "edit" )) {
-	print_info_box_np(gettext("The firewall tunables have changed. You must apply the configuration for them to take affect."));
+	print_apply_box(gettext("The firewall tunables have changed.") . "<br />" . gettext("The changes must be applied for them to take effect."));
 }
 
 $tab_array = array();
 $tab_array[] = array(gettext("Admin Access"), false, "system_advanced_admin.php");
-$tab_array[] = array(gettext("Firewall / NAT"), false, "system_advanced_firewall.php");
+$tab_array[] = array(htmlspecialchars(gettext("Firewall & NAT")), false, "system_advanced_firewall.php");
 $tab_array[] = array(gettext("Networking"), false, "system_advanced_network.php");
 $tab_array[] = array(gettext("Miscellaneous"), false, "system_advanced_misc.php");
 $tab_array[] = array(gettext("System Tunables"), true, "system_advanced_sysctl.php");
@@ -201,7 +205,7 @@ if ($act != "edit"): ?>
 						<th class="col-sm-3"><?=gettext("Tunable Name"); ?></th>
 						<th><?=gettext("Description"); ?></th>
 						<th class="col-sm-1"><?=gettext("Value"); ?></th>
-						<th><a class="btn btn-xs btn-primary" href="system_advanced_sysctl.php?act=edit"><?=gettext('New'); ?></a></th>
+						<th><a class="btn btn-xs btn-success" href="system_advanced_sysctl.php?act=edit"><i class="fa fa-plus icon-embed-btn"></i><?=gettext('New'); ?></a></th>
 					</tr>
 				</thead>
 				<?php

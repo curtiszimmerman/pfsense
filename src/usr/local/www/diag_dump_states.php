@@ -64,6 +64,21 @@
 require_once("guiconfig.inc");
 require_once("interfaces.inc");
 
+function get_ip($addr) {
+
+	$parts = explode(":", $addr);
+	if (count($parts) == 2)
+		return (trim($parts[0]));
+	else {
+		/* IPv6 */
+		$parts = explode("[", $addr);
+		if (count($parts) == 2)
+			return (trim($parts[0]));
+	}
+
+	return ("");
+}
+
 /* handle AJAX operations */
 if (isset($_POST['action']) && $_POST['action'] == "remove") {
 	if (isset($_POST['srcip']) && isset($_POST['dstip']) && is_ipaddr($_POST['srcip']) && is_ipaddr($_POST['dstip'])) {
@@ -90,7 +105,7 @@ if (isset($_POST['filter']) && isset($_POST['killfilter'])) {
 	}
 }
 
-$pgtitle = array(gettext("Diagnostics"), gettext("Show States"));
+$pgtitle = array(gettext("Diagnostics"), gettext("States"), gettext("States"));
 include("head.inc");
 ?>
 
@@ -133,7 +148,22 @@ $current_statecount=`pfctl -si | grep "current entries" | awk '{ print $3 }'`;
 
 $form = new Form(false);
 
-$section = new Form_Section('State filter');
+$section = new Form_Section('State Filter', 'secfilter', COLLAPSIBLE|SEC_OPEN);
+
+$iflist = get_configured_interface_with_descr();
+$iflist['lo0'] = "lo0";
+$iflist['all'] = "all";
+if (isset($_POST['interface']))
+	$ifselect = $_POST['interface'];
+else
+	$ifselect = "all";
+
+$section->addInput(new Form_Select(
+	'interface',
+	'Interface',
+	$ifselect,
+	$iflist
+));
 
 $section->addInput(new Form_Input(
 	'filter',
@@ -143,16 +173,26 @@ $section->addInput(new Form_Input(
 	['placeholder' => 'Simple filter such as 192.168, v6, icmp or ESTABLISHED']
 ));
 
-$filterbtn = new Form_Button('filterbtn', 'Filter', null);
-$filterbtn->removeClass('btn-primary')->addClass('btn-default btn-sm');
+$filterbtn = new Form_Button(
+	'filterbtn',
+	'Filter',
+	null,
+	'fa-filter'
+);
+$filterbtn->addClass('btn-primary btn-sm');
 $section->addInput(new Form_StaticText(
 	'',
 	$filterbtn
 ));
 
 if (isset($_POST['filter']) && (is_ipaddr($_POST['filter']) || is_subnet($_POST['filter']))) {
-	$killbtn = new Form_Button('killfilter', 'Kill States');
-	$killbtn->removeClass('btn-primary')->addClass('btn-danger btn-sm');
+	$killbtn = new Form_Button(
+		'killfilter',
+		'Kill States',
+		null,
+		'fa-trash'
+	);
+	$killbtn->addClass('btn-danger btn-sm');
 	$section->addInput(new Form_StaticText(
 		'Kill filtered states',
 		$killbtn
@@ -162,69 +202,109 @@ if (isset($_POST['filter']) && (is_ipaddr($_POST['filter']) || is_subnet($_POST[
 $form->add($section);
 print $form;
 ?>
-<table class="table table-striped table-condensed table-hover sortable-theme-bootstrap" data-sortable>
-	<thead>
-		<tr>
-			<th><?=gettext("Int")?></th>
-			<th><?=gettext("Proto")?></th>
-			<th><?=gettext("Source -> Router -> Destination")?></th>
-			<th><?=gettext("State")?></th>
-			<th></th> <!-- For the optional "Remove" button -->
-		</tr>
-	</thead>
-	<tbody>
+<div class="panel panel-default">
+	<div class="panel-heading"><h2 class="panel-title"><?=gettext("States")?></h2></div>
+	<div class="panel-body">
+		<div class="table-responsive">
+			<table class="table table-striped table-condensed table-hover sortable-theme-bootstrap" data-sortable>
+				<thead>
+					<tr>
+						<th><?=gettext("Interface")?></th>
+						<th><?=gettext("Protocol")?></th>
+						<th><?=gettext("Source -> Router -> Destination")?></th>
+						<th><?=gettext("State")?></th>
+						<th data-sortable="false"><?=gettext("Packets")?></th>
+						<th data-sortable="false"><?=gettext("Bytes")?></th>
+						<th data-sortable="false"></th> <!-- For the optional "Remove" button -->
+					</tr>
+				</thead>
+				<tbody>
 <?php
-	$row = 0;
-	/* get our states */
-	$grepline = (isset($_POST['filter'])) ? "| /usr/bin/egrep " . escapeshellarg(htmlspecialchars($_POST['filter'])) : "";
-	$fd = popen("/sbin/pfctl -s state {$grepline}", "r");
-	while ($line = chop(fgets($fd))) {
-		if ($row >= 10000) {
-			break;
-		}
-
-		$line_split = preg_split("/\s+/", $line);
-
-		$iface	= array_shift($line_split);
-		$proto = array_shift($line_split);
-		$state = array_pop($line_split);
-		$info  = implode(" ", $line_split);
-
-		// We may want to make this optional, with a large state table, this could get to be expensive.
-		$iface = convert_real_interface_to_friendly_descr($iface);
-
-		/* break up info and extract $srcip and $dstip */
-		$ends = preg_split("/\<?-\>?/", $info);
-		$parts = explode(":", $ends[0]);
-		$srcip = trim($parts[0]);
-		$parts = explode(":", $ends[count($ends) - 1]);
-		$dstip = trim($parts[0]);
-?>
-		<tr>
-			<td><?= $iface ?></td>
-			<td><?= $proto ?></td>
-			<td><?= $info ?></td>
-			<td><?= $state ?></td>
-
-			<td>
-				<a class="btn fa fa-times" data-entry="<?=$srcip?>|<?=$dstip?>"
-					title="<?=sprintf(gettext('Remove all state entries from %s to %s'), $srcip, $dstip);?>"></a>
-			</td>
-		</tr>
-<?php $row++; }
-?>
-	</tbody>
-</table>
-<?php
-
-if ($row == 0) {
-	if (isset($_POST['filter']) && !empty($_POST['filter'])) {
-		$errmsg = gettext('No states were found that match the current filter');
-	} else {
-		$errmsg = gettext('No states were found');
+	$arr = array();
+	/* RuleId filter. */
+	if (isset($_REQUEST['ruleid'])) {
+		$ids = explode(",", $_REQUEST['ruleid']);
+		for ($i = 0; $i < count($ids); $i++)
+			$arr[] = array("ruleid" => intval($ids[$i]));
 	}
 
-	print('<p class="alert alert-warning">' . $errmsg . '</p>');
+	/* Interface filter. */
+	if (isset($_POST['interface']) && $_POST['interface'] != "all")
+		$arr[] = array("interface" => get_real_interface($_POST['interface']));
+
+	if (isset($_POST['filter']) && strlen($_POST['filter']) > 0)
+		$arr[] = array("filter" => $_POST['filter']);
+
+	if (count($arr) > 0)
+		$res = pfSense_get_pf_states($arr);
+	else
+		$res = pfSense_get_pf_states();
+
+	$states = 0;
+	if ($res != NULL && is_array($res))
+		$states = count($res);
+
+	/* XXX - limit to 10.000 states. */
+	if ($states > 10000)
+		$states = 10000;
+
+	for ($i = 0; $i < $states; $i++) {
+		if ($res[$i]['direction'] === "out") {
+			$info = $res[$i]['src'];
+			if ($res[$i]['src-orig'])
+				$info .= " (" . $res[$i]['src-orig'] . ")";
+			$info .= " -> ";
+			$info .= $res[$i]['dst'];
+			if ($res[$i]['dst-orig'])
+				$info .= " (" . $res[$i]['dst-orig'] . ")";
+			$srcip = get_ip($res[$i]['src']);
+			$dstip = get_ip($res[$i]['dst']);
+		} else {
+			$info = $res[$i]['dst'];
+			if ($res[$i]['dst-orig'])
+				$info .= " (" . $res[$i]['dst-orig'] . ")";
+			$info .= " &lt;- ";
+			$info .= $res[$i]['src'];
+			if ($res[$i]['src-orig'])
+				$info .= " (" . $res[$i]['src-orig'] . ")";
+			$srcip = get_ip($res[$i]['dst']);
+			$dstip = get_ip($res[$i]['src']);
+		}
+
+?>
+					<tr>
+						<td><?= convert_real_interface_to_friendly_descr($res[$i]['if']) ?></td>
+						<td><?= $res[$i]['proto'] ?></td>
+						<td><?= $info ?></td>
+						<td><?= $res[$i]['state'] ?></td>
+						<td><?= format_number($res[$i]['packets in']) ?> /
+						    <?= format_number($res[$i]['packets out']) ?></td>
+						<td><?= format_bytes($res[$i]['bytes in']) ?> /
+						    <?= format_bytes($res[$i]['bytes out']) ?></td>
+
+						<td>
+							<a class="btn fa fa-trash" data-entry="<?=$srcip?>|<?=$dstip?>"
+								title="<?=sprintf(gettext('Remove all state entries from %1$s to %2$s'), $srcip, $dstip);?>"></a>
+						</td>
+					</tr>
+<?
+	}
+?>
+				</tbody>
+			</table>
+		</div>
+	</div>
+</div>
+<?php
+
+if ($states == 0) {
+	if (isset($_POST['filter']) && !empty($_POST['filter'])) {
+		$errmsg = gettext('No states were found that match the current filter.');
+	} else {
+		$errmsg = gettext('No states were found.');
+	}
+
+	print_info_box($errmsg, 'warning', false);
 }
 
 include("foot.inc");

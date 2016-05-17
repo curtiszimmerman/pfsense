@@ -101,6 +101,7 @@ if (isset($id) && $a_pppoes[$id]) {
 	$pconfig['mode'] = $pppoecfg['mode'];
 	$pconfig['interface'] = $pppoecfg['interface'];
 	$pconfig['n_pppoe_units'] = $pppoecfg['n_pppoe_units'];
+	$pconfig['n_pppoe_maxlogin'] = $pppoecfg['n_pppoe_maxlogin'];
 	$pconfig['pppoe_subnet'] = $pppoecfg['pppoe_subnet'];
 	$pconfig['pppoe_dns1'] = $pppoecfg['dns1'];
 	$pconfig['pppoe_dns2'] = $pppoecfg['dns2'];
@@ -151,18 +152,24 @@ if ($_POST) {
 		if (($_POST['localip'] && !is_ipaddr($_POST['localip']))) {
 			$input_errors[] = gettext("A valid server address must be specified.");
 		}
-		if (($_POST['pppoe_subnet'] && !is_ipaddr($_POST['remoteip']))) {
+		if (($_POST['remoteip'] && !is_ipaddr($_POST['remoteip']))) {
 			$input_errors[] = gettext("A valid remote start address must be specified.");
 		}
 		if (($_POST['radiusserver'] && !is_ipaddr($_POST['radiusserver']))) {
 			$input_errors[] = gettext("A valid RADIUS server address must be specified.");
 		}
+		if (!is_numericint($_POST['n_pppoe_units']) || $_POST['n_pppoe_units'] > 255) {
+			$input_errors[] = gettext("Number of PPPoE users must be between 1 and 255");
+		}
+		if (!is_numericint($_POST['n_pppoe_maxlogin']) || $_POST['n_pppoe_maxlogin'] > 255) {
+			$input_errors[] = gettext("User Max Logins must be between 1 and 255");
+		}
+		if (!is_numericint($_POST['pppoe_subnet']) || $_POST['pppoe_subnet'] > 32) {
+			$input_errors[] = gettext("Subnet mask must be an interger between 0 and 32");
+		}
 
 		$_POST['remoteip'] = $pconfig['remoteip'] = gen_subnet($_POST['remoteip'], $_POST['pppoe_subnet']);
-		$subnet_start = ip2ulong($_POST['remoteip']);
-		$subnet_end = ip2ulong($_POST['remoteip']) + $_POST['pppoe_subnet'] - 1;
-		if ((ip2ulong($_POST['localip']) >= $subnet_start) &&
-		    (ip2ulong($_POST['localip']) <= $subnet_end)) {
+		if (is_inrange_v4($_POST['localip'], $_POST['remoteip'], ip_after($_POST['remoteip'], $_POST['pppoe_subnet'] - 1))) {
 			$input_errors[] = gettext("The specified server address lies in the remote subnet.");
 		}
 		if ($_POST['localip'] == get_interface_ip($_POST['interface'])) {
@@ -193,6 +200,7 @@ if ($_POST) {
 		$pppoecfg['mode'] = $_POST['mode'];
 		$pppoecfg['interface'] = $_POST['interface'];
 		$pppoecfg['n_pppoe_units'] = $_POST['n_pppoe_units'];
+		$pppoecfg['n_pppoe_maxlogin'] = $_POST['n_pppoe_maxlogin'];
 		$pppoecfg['pppoe_subnet'] = $_POST['pppoe_subnet'];
 		$pppoecfg['descr'] = $_POST['descr'];
 		if ($_POST['radiusserver'] || $_POST['radiusserver2']) {
@@ -206,7 +214,9 @@ if ($_POST) {
 			$pppoecfg['radius']['server'] = array();
 
 			$pppoecfg['radius']['server']['ip'] = $_POST['radiusserver'];
-			$pppoecfg['radius']['server']['secret'] = $_POST['radiussecret'];
+			if ($_POST['radiussecret'] != DMYPWD) {
+				$pppoecfg['radius']['server']['secret'] = $_POST['radiussecret'];
+			}
 			$pppoecfg['radius']['server']['port'] = $_POST['radiusserverport'];
 			$pppoecfg['radius']['server']['acctport'] = $_POST['radiusserveracctport'];
 		}
@@ -215,7 +225,9 @@ if ($_POST) {
 			$pppoecfg['radius']['server2'] = array();
 
 			$pppoecfg['radius']['server2']['ip'] = $_POST['radiusserver2'];
-			$pppoecfg['radius']['server2']['secret2'] = $_POST['radiussecret2'];
+			if ($_POST['radiussecret2'] != DMYPWD) {
+				$pppoecfg['radius']['server2']['secret2'] = $_POST['radiussecret2'];
+			}
 			$pppoecfg['radius']['server2']['port'] = $_POST['radiusserver2port'];
 			$pppoecfg['radius']['server2']['acctport'] = $_POST['radiusserver2acctport'];
 		}
@@ -332,32 +344,39 @@ $section->addInput(new Form_Select(
 ));
 
 $section->addInput(new Form_Select(
-	'pppoe_subnet',
-	'Subnet mask',
-	$pconfig['pppoe_subnet'],
-	array_combine(range(0, 32, 1), range(0, 32, 1))
-))->setHelp('Hint: 24 is 255.255.255.0');
+	'n_pppoe_units',
+	'Total User Count',
+	$pconfig['n_pppoe_units'],
+	array_combine(range(1, 255, 1), range(1, 255, 1))
+))->setHelp('The number of PPPoE users allowed to connect to this server simultaneously.');
 
 $section->addInput(new Form_Select(
-	'n_pppoe_units',
-	'No. of PPPoE Users',
-	$pconfig['n_pppoe_units'],
-	array_combine(range(0, 255, 1), range(0, 255, 1))
-));
+	'n_pppoe_maxlogin',
+	'User Max Logins',
+	$pconfig['n_pppoe_maxlogin'],
+	array_combine(range(1, 255, 1), range(1, 255, 1))
+))->setHelp('The number of times a single user may be logged in at the same time.');
 
 $section->addInput(new Form_IpAddress(
 	'localip',
 	'Server Address',
 	$pconfig['localip']
-))->setHelp('Enter the IP address the PPPoE server should give to clients for use as their "gateway"' . '<br />' .
-			'Typically this is set to an unused IP just outside of the client range '. '<br />' .
-			'NOTE: This should NOT be set to any IP address currently in use on this firewall');
+))->setHelp('Enter the IP address the PPPoE server should give to clients for use as their "gateway".' . '<br />' .
+			'Typically this is set to an unused IP just outside of the client range.'. '<br />' .
+			'NOTE: This should NOT be set to any IP address currently in use on this firewall.');
 
 $section->addInput(new Form_IpAddress(
 	'remoteip',
 	'Remote Address Range',
 	$pconfig['remoteip']
-))->setHelp('Specify the starting address for the client IP address subnet');
+))->setHelp('Specify the starting address for the client IP address subnet.');
+
+$section->addInput(new Form_Select(
+	'pppoe_subnet',
+	'Subnet mask',
+	$pconfig['pppoe_subnet'],
+	array_combine(range(0, 32, 1), range(0, 32, 1))
+))->setHelp('Hint: 24 is 255.255.255.0');
 
 $section->addInput(new Form_Input(
 	'descr',
@@ -377,35 +396,35 @@ $section->addInput(new Form_IpAddress(
 	'pppoe_dns2',
 	null,
 	$pconfig['pppoe_dns2']
-))->setHelp('If entered these servers will be given to all PPPoE clients, otherwise LAN DNS and one WAN DNS will go to all clients');
+))->setHelp('If entered these servers will be given to all PPPoE clients, otherwise LAN DNS and one WAN DNS will go to all clients.');
 
 $section->addInput(new Form_Checkbox(
 	'radiusenable',
 	'RADIUS',
-	'Use a RADIUS Server for authentication',
+	'Use RADIUS Authentication',
 	$pconfig['radiusenable']
-))->setHelp('All users will be authenticated using the RADIUS server specified below. The local user database ' .
-			'will not be used');
+))->setHelp('Users will be authenticated using the RADIUS server specified below. The local user database ' .
+			'will not be used.');
 
 $section->addInput(new Form_Checkbox(
 	'radacct_enable',
 	null,
-	'Enable RADIUS Accounting',
+	'Use RADIUS Accounting',
 	$pconfig['radacct_enable']
-))->setHelp('Sends accounting packets to the RADIUS server');
+))->setHelp('Sends accounting packets to the RADIUS server.');
 
 $section->addInput(new Form_Checkbox(
 	'radiussecenable',
 	null,
-	'Use backup RADIUS server',
+	'Use a Backup RADIUS Authentication Server',
 	$pconfig['radiussecenable']
-))->setHelp('If primary server fails all requests will be sent via backup server');
+))->setHelp('If primary server fails all requests will be sent via backup server.');
 
 $section->addInput(new Form_IpAddress(
 	'radius_nasip',
 	'NAS IP Address',
 	$pconfig['radius_nasip']
-))->setHelp('RADIUS server NAS IP Address');
+))->setHelp('NAS IP Address sent to the RADIUS Server');
 
 $section->addInput(new Form_Input(
 	'radius_acct_update',
@@ -416,12 +435,12 @@ $section->addInput(new Form_Input(
 
 $section->addInput(new Form_Checkbox(
 	'radiusissueips',
-	'Radius Issued IPs',
-	'Issue IP Addresses via RADIUS server',
+	'RADIUS Issued IP Addresses',
+	'Assign IP Addresses to users via RADIUS server reply attributes',
 	$pconfig['radiusissueips']
 ));
 
-$group = new Form_Group('RADIUS server Primary');
+$group = new Form_Group('Primary RADIUS Server');
 
 $group->add(new Form_IpAddress(
 	'radiusserver',
@@ -443,18 +462,18 @@ $group->add(new Form_Input(
 	$pconfig['radiusserveracctport']
 ))->setHelp('Accounting port (optional)');
 
-$group->setHelp('Standard ports are 1812 (authentication) and 1813 (accounting)');
+$group->setHelp('Standard ports are 1812 (authentication) and 1813 (accounting).');
 
 $section->add($group);
 
-$section->addInput(new Form_Input(
+$section->addPassword(new Form_Input(
 	'radiussecret',
-	'RADIUS primary shared secret',
+	'Primary RADIUS Server Shared Secret',
 	'password',
 	$pconfig['radiussecret']
 ))->setHelp('Enter the shared secret that will be used to authenticate to the RADIUS server.');
 
-$group = new Form_Group('RADIUS server Secondary');
+$group = new Form_Group('Secondary RADIUS Server');
 
 $group->add(new Form_IpAddress(
 	'radiusserver2',
@@ -476,13 +495,13 @@ $group->add(new Form_Input(
 	$pconfig['radiusserver2acctport']
 ))->setHelp('Accounting port (optional)');
 
-$group->setHelp('Standard ports are 1812 (authentication) and 1813 (accounting)');
+$group->setHelp('Standard ports are 1812 (authentication) and 1813 (accounting).');
 
 $section->add($group);
 
-$section->addInput(new Form_Input(
+$section->addPassword(new Form_Input(
 	'radiussecret2',
-	'RADIUS secondary shared secret',
+	'Secondary RADIUS Server Shared Secret',
 	'password',
 	$pconfig['radiussecret2']
 ))->setHelp('Enter the shared secret that will be used to authenticate to the backup RADIUS server.');
@@ -518,7 +537,7 @@ if ($usernames != "") {
 			null,
 			'text',
 			$user
-		))->setHelp($numrows == $counter ? 'User name':null);
+		))->setHelp($numrows == $counter ? 'Username':null);
 
 		$group->add(new Form_Input(
 			'password' . $counter,
@@ -535,8 +554,10 @@ if ($usernames != "") {
 
 		$group->add(new Form_Button(
 			'deleterow' . $counter,
-			'Delete'
-		))->removeClass('btn-primary')->addClass('btn-warning');
+			'Delete',
+			null,
+			'fa-trash'
+		))->addClass('btn-warning');
 
 		$section->add($group);
 
@@ -546,10 +567,12 @@ if ($usernames != "") {
 
 $btnaddrow = new Form_Button(
 	'addrow',
-	'Add user'
+	'Add user',
+	null,
+	'fa-plus'
 );
 
-$btnaddrow->removeClass('btn-primary')->addClass('btn-success');
+$btnaddrow->addClass('btn-success');
 
 $section->addInput(new Form_StaticText(
 	null,
@@ -579,7 +602,7 @@ $form->add($section);
 
 print($form);
 
-print_info_box(gettext('Don\'t forget to add a firewall rule to permit traffic from PPPoE clients'));
+print_info_box(gettext('Don\'t forget to add a firewall rule to permit traffic from PPPoE clients.'));
 ?>
 <script type="text/javascript">
 //<![CDATA[
@@ -590,6 +613,7 @@ events.push(function() {
 		disableInput('radacct_enable', hide);
 		disableInput('radiusserver', hide);
 		disableInput('radiussecret', hide);
+		disableInput('radiussecret_confirm', hide);
 		disableInput('radiusserverport', hide);
 		disableInput('radiusserveracctport', hide);
 		disableInput('radiusissueips', hide);
@@ -604,6 +628,7 @@ events.push(function() {
 	function hide_radius2(hide) {
 		disableInput('radiusserver2', hide);
 		disableInput('radiussecret2', hide);
+		disableInput('radiussecret2_confirm', hide);
 		disableInput('radiusserver2port', hide);
 		disableInput('radiusserver2acctport', hide);
 	}

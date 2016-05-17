@@ -56,8 +56,8 @@
 
 ##|+PRIV
 ##|*IDENT=page-openvpn-client
-##|*NAME=OpenVPN: Client
-##|*DESCR=Allow access to the 'OpenVPN: Client' page.
+##|*NAME=OpenVPN: Clients
+##|*DESCR=Allow access to the 'OpenVPN: Clients' page.
 ##|*MATCH=vpn_openvpn_client.php*
 ##|-PRIV
 
@@ -65,8 +65,7 @@ require("guiconfig.inc");
 require_once("openvpn.inc");
 require_once("pkg-utils.inc");
 
-$pgtitle = array(gettext("VPN"), gettext("OpenVPN"), gettext("Client"));
-$shortcut_section = "openvpn";
+global $openvpn_topologies;
 
 if (!is_array($config['openvpn']['openvpn-client'])) {
 	$config['openvpn']['openvpn-client'] = array();
@@ -121,7 +120,7 @@ if ($_GET['act'] == "del") {
 	}
 	unset($a_client[$id]);
 	write_config();
-	$savemsg = gettext("Client successfully deleted")."<br />";
+	$savemsg = gettext("Client successfully deleted.");
 }
 
 if ($_GET['act'] == "new") {
@@ -188,6 +187,7 @@ if ($_GET['act'] == "edit") {
 		$pconfig['use_shaper'] = $a_client[$id]['use_shaper'];
 		$pconfig['compression'] = $a_client[$id]['compression'];
 		$pconfig['passtos'] = $a_client[$id]['passtos'];
+		$pconfig['topology'] = $a_client[$id]['topology'];
 
 		// just in case the modes switch
 		$pconfig['autokey_enable'] = "yes";
@@ -217,9 +217,9 @@ if ($_POST) {
 
 	list($iv_iface, $iv_ip) = explode ("|", $pconfig['interface']);
 	if (is_ipaddrv4($iv_ip) && (stristr($pconfig['protocol'], "6") !== false)) {
-		$input_errors[] = gettext("Protocol and IP address families do not match. You cannot select an IPv6 protocol and an IPv4 IP address.");
+		$input_errors[] = gettext("Protocol and IP address families do not match. An IPv6 protocol and an IPv4 IP address cannot be selected.");
 	} elseif (is_ipaddrv6($iv_ip) && (stristr($pconfig['protocol'], "6") === false)) {
-		$input_errors[] = gettext("Protocol and IP address families do not match. You cannot select an IPv4 protocol and an IPv6 IP address.");
+		$input_errors[] = gettext("Protocol and IP address families do not match. An IPv4 protocol and an IPv6 IP address cannot be selected.");
 	} elseif ((stristr($pconfig['protocol'], "6") === false) && !get_interface_ip($iv_iface) && ($pconfig['interface'] != "any")) {
 		$input_errors[] = gettext("An IPv4 protocol was selected, but the selected interface has no IPv4 address.");
 	} elseif ((stristr($pconfig['protocol'], "6") !== false) && !get_interface_ipv6($iv_iface) && ($pconfig['interface'] != "any")) {
@@ -253,6 +253,10 @@ if ($_POST) {
 		$input_errors[] = $result;
 	}
 
+	if (!array_key_exists($pconfig['topology'], $openvpn_topologies)) {
+		$input_errors[] = gettext("The field 'Topology' contains an invalid selection");
+	}
+
 	if ($pconfig['proxy_addr']) {
 
 		if ($result = openvpn_validate_host($pconfig['proxy_addr'], 'Proxy host or address')) {
@@ -266,6 +270,10 @@ if ($_POST) {
 		if ($pconfig['proxy_authtype'] != "none") {
 			if (empty($pconfig['proxy_user']) || empty($pconfig['proxy_passwd'])) {
 				$input_errors[] = gettext("User name and password are required for proxy with authentication.");
+			}
+
+			if ($pconfig['proxy_passwd'] != $pconfig['proxy_passwd_confirm']) {
+				$input_errors[] = gettext("Password and confirmation must match.");
 			}
 		}
 	}
@@ -328,12 +336,20 @@ if ($_POST) {
 		$input_errors[] = gettext("If no Client Certificate is selected, a username and/or password must be entered.");
 	}
 
+	if ($pconfig['auth_pass'] != $pconfig['auth_pass_confirm']) {
+		$input_errors[] = gettext("Password and confirmation must match.");
+	}
+
 	if (!$input_errors) {
 
 		$client = array();
 
 		foreach ($simplefields as $stat) {
-			update_if_changed($stat, $client[$stat], $_POST[$stat]);
+			if (($stat == 'auth_pass') && ($_POST[$stat] == DMYPWD)) {
+				$client[$stat] = $a_client[$id]['auth_pass'];
+			} else {
+				update_if_changed($stat, $client[$stat], $_POST[$stat]);
+			}
 		}
 
 		if ($vpnid) {
@@ -356,9 +372,12 @@ if ($_POST) {
 		$client['proxy_port'] = $pconfig['proxy_port'];
 		$client['proxy_authtype'] = $pconfig['proxy_authtype'];
 		$client['proxy_user'] = $pconfig['proxy_user'];
-		$client['proxy_passwd'] = $pconfig['proxy_passwd'];
+		if ($pconfig['proxy_passwd'] != DMYPWD) {
+			$client['proxy_passwd'] = $pconfig['proxy_passwd'];
+		}
 		$client['description'] = $pconfig['description'];
 		$client['mode'] = $pconfig['mode'];
+		$client['topology'] = $pconfig['topology'];
 		$client['custom_options'] = str_replace("\r\n", "\n", $pconfig['custom_options']);
 
 		if ($tls_mode) {
@@ -404,6 +423,13 @@ if ($_POST) {
 	}
 }
 
+$pgtitle = array(gettext("VPN"), gettext("OpenVPN"), gettext("Clients"));
+
+if ($act=="new" || $act=="edit") {
+	$pgtitle[] = gettext('Edit');
+}
+$shortcut_section = "openvpn";
+
 include("head.inc");
 
 if (!$savemsg) {
@@ -419,8 +445,8 @@ if ($savemsg) {
 }
 
 $tab_array = array();
-$tab_array[] = array(gettext("Server"), false, "vpn_openvpn_server.php");
-$tab_array[] = array(gettext("Client"), true, "vpn_openvpn_client.php");
+$tab_array[] = array(gettext("Servers"), false, "vpn_openvpn_server.php");
+$tab_array[] = array(gettext("Clients"), true, "vpn_openvpn_client.php");
 $tab_array[] = array(gettext("Client Specific Overrides"), false, "vpn_openvpn_csc.php");
 $tab_array[] = array(gettext("Wizards"), false, "wizard.php?xml=openvpn_wizard.xml");
 add_package_tabs("OpenVPN", $tab_array);
@@ -434,9 +460,9 @@ if ($act=="new" || $act=="edit"):
 	$section->addInput(new Form_Checkbox(
 		'disable',
 		'Disabled',
-		'Disable this server',
+		'Disable this client',
 		$pconfig['disable']
-	))->setHelp('Set this option to disable this client without removing it from the list');
+	))->setHelp('Set this option to disable this client without removing it from the list.');
 
 	$section->addInput(new Form_Select(
 		'mode',
@@ -470,8 +496,9 @@ if ($act=="new" || $act=="edit"):
 		'local_port',
 		'Local port',
 		'number',
-		$pconfig['local_port']
-	))->setHelp('Set this option if you would like to bind to a specific port. Leave this blank or enter 0 for a random dynamic port.');
+		$pconfig['local_port'],
+		['min' => '0']
+	))->setHelp('Set this option to bind to a specific port. Leave this blank or enter 0 for a random dynamic port.');
 
 	$section->addInput(new Form_Input(
 		'server_addr',
@@ -498,7 +525,7 @@ if ($act=="new" || $act=="edit"):
 		'proxy_authtype',
 		'Proxy Auth. - Extra options',
 		$pconfig['proxy_authtype'],
-		array('none' => 'none', 'basic' => 'basic', 'ntlm' => 'ntlm')
+		array('none' => gettext('none'), 'basic' => gettext('basic'), 'ntlm' => gettext('ntlm'))
 		));
 
 	$section->addInput(new Form_Input(
@@ -508,7 +535,7 @@ if ($act=="new" || $act=="edit"):
 		$pconfig['proxy_user']
 	));
 
-	$section->addInput(new Form_Input(
+	$section->addPassword(new Form_Input(
 		'proxy_passwd',
 		'Password',
 		'password',
@@ -528,10 +555,10 @@ if ($act=="new" || $act=="edit"):
 		'Description',
 		'text',
 		$pconfig['description']
-	))->setHelp('You may enter a description here for your reference (not parsed).');
+	))->setHelp('A description may be entered here for administrative reference (not parsed).');
 
 	$form->add($section);
-	$section = new Form_Section('User Authentication settings');
+	$section = new Form_Section('User Authentication Settings');
 	$section->addClass('authentication');
 
 	$section->addInput(new Form_Input(
@@ -541,7 +568,7 @@ if ($act=="new" || $act=="edit"):
 		$pconfig['auth_user']
 	))->setHelp('Leave empty when no user name is needed');
 
-	$section->addInput(new Form_Input(
+	$section->addPassword(new Form_Input(
 		'auth_pass',
 		'Password',
 		'password',
@@ -550,7 +577,7 @@ if ($act=="new" || $act=="edit"):
 
 	$form->add($section);
 
-	$section = new Form_Section('Cryptographic settings');
+	$section = new Form_Section('Cryptographic Settings');
 
 	$section->addInput(new Form_Checkbox(
 		'tlsauth_enable',
@@ -572,7 +599,7 @@ if ($act=="new" || $act=="edit"):
 		'tls',
 		'Key',
 		$pconfig['tls']
-	))->setHelp('Paste your shared key here');
+	))->setHelp('Paste the shared key here');
 
 	if (count($a_ca)) {
 		$list = array();
@@ -589,7 +616,7 @@ if ($act=="new" || $act=="edit"):
 	} else {
 		$section->addInput(new Form_StaticText(
 			'Peer Certificate Authority',
-			sprintf('No Certificate Authorities defined. You may create one here: %s', '<a href="system_camanager.php">System &gt; Cert Manager</a>')
+			sprintf('No Certificate Authorities defined. One may be created here: %s', '<a href="system_camanager.php">System &gt; Cert. Manager</a>')
 		));
 	}
 
@@ -603,7 +630,7 @@ if ($act=="new" || $act=="edit"):
 	} else {
 		$section->addInput(new Form_StaticText(
 			'Peer Certificate Revocation list',
-			sprintf('No Certificate Revocation Lists defined. You may create one here: %s', '<a href="system_crlmanager.php">System &gt; Cert Manager &gt; Certificate Revocation</a>')
+			sprintf('No Certificate Revocation Lists defined. One may be created here: %s', '<a href="system_crlmanager.php">System &gt; Cert. Manager &gt; Certificate Revocation</a>')
 		));
 	}
 
@@ -618,7 +645,7 @@ if ($act=="new" || $act=="edit"):
 		'shared_key',
 		'Shared Key',
 		$pconfig['shared_key']
-	))->setHelp('Paste your shared key here');
+	))->setHelp('Paste the shared key here');
 
 	$cl = openvpn_build_cert_list(true);
 
@@ -652,15 +679,15 @@ if ($act=="new" || $act=="edit"):
 
 	$form->add($section);
 
-	$section = new Form_Section('Tunnel settings');
+	$section = new Form_Section('Tunnel Settings');
 
 	$section->addInput(new Form_Input(
 		'tunnel_network',
 		'IPv4 Tunnel Network',
 		'text',
 		$pconfig['tunnel_network']
-	))->setHelp('This is the IPv4 virtual network used for private communications between this client and the sercer ' .
-				'expressed using CIDR (eg. 10.0.8.0/24). The first network address will be assigned to ' .
+	))->setHelp('This is the IPv4 virtual network used for private communications between this client and the server ' .
+				'expressed using CIDR (e.g. 10.0.8.0/24). The second network address will be assigned to ' .
 				'the client virtual interface.');
 
 	$section->addInput(new Form_Input(
@@ -669,8 +696,8 @@ if ($act=="new" || $act=="edit"):
 		'text',
 		$pconfig['tunnel_networkv6']
 	))->setHelp('This is the IPv6 virtual network used for private ' .
-				'communications between this client and the server	expressed using CIDR (eg. fe80::/64). ' .
-				'The first network address will be assigned to the server virtual interface.');
+				'communications between this client and the server expressed using CIDR (e.g. fe80::/64). ' .
+				'The second network address will be assigned to the client virtual interface.');
 
 	$section->addInput(new Form_Input(
 		'remote_network',
@@ -679,7 +706,7 @@ if ($act=="new" || $act=="edit"):
 		$pconfig['remote_network']
 	))->setHelp('IPv4 networks that will be routed through the tunnel, so that a site-to-site VPN can be established without manually ' .
 				'changing the routing tables. Expressed as a comma-separated list of one or more CIDR ranges. ' .
-				'If this is a site-to-site VPN, enter the remote LAN/s here. You may leave this blank if you don\'t want a site-to-site VPN.');
+				'If this is a site-to-site VPN, enter the remote LAN/s here. May be left blank for non site-to-site VPN.');
 
 	$section->addInput(new Form_Input(
 		'remote_networkv6',
@@ -688,9 +715,9 @@ if ($act=="new" || $act=="edit"):
 		$pconfig['remote_networkv6']
 	))->setHelp('These are the IPv6 networks that will be routed through the tunnel, so that a site-to-site VPN can be established without manually ' .
 				'changing the routing tables. Expressed as a comma-separated list of one or more IP/PREFIX. ' .
-				'If this is a site-to-site VPN, enter the remote LAN/s here. You may leave this blank if you don\'t want a site-to-site VPN.');
+				'If this is a site-to-site VPN, enter the remote LAN/s here. May be left blank for non site-to-site VPN.');
 
-$section->addInput(new Form_Input(
+	$section->addInput(new Form_Input(
 		'use_shaper',
 		'Limit outgoing bandwidth',
 		'number',
@@ -704,6 +731,13 @@ $section->addInput(new Form_Input(
 		$pconfig['compression'],
 		$openvpn_compression_modes
 		))->setHelp('Compress tunnel packets using the LZO algorithm. Adaptive compression will dynamically disable compression for a period of time if OpenVPN detects that the data in the packets is not being compressed efficiently.');
+
+	$section->addInput(new Form_Select(
+		'topology',
+		'Topology',
+		$pconfig['topology'],
+		$openvpn_topologies
+	))->setHelp('Specifies the method used to configure a virtual adapter IP address.');
 
 	$section->addInput(new Form_Checkbox(
 		'passtos',
@@ -731,7 +765,7 @@ $section->addInput(new Form_Input(
 		'Don\'t add/remove routes',
 		'Don\'t add or remove routes automatically',
 		$pconfig['route_no_exec']
-	))->setHelp('Pass routes to --route-upscript using environmental variables');
+	))->setHelp('Pass routes to --route-upscript using environmental variables.');
 
 	$form->add($section);
 
@@ -742,19 +776,18 @@ $section->addInput(new Form_Input(
 		'custom_options',
 		'Custom options',
 		$pconfig['custom_options']
-	))->setHelp('Enter any additional options you would like to add to the OpenVPN server configuration here, separated by semicolon' . '<br />' .
-				'EXAMPLE: push "route 10.0.0.0 255.255.255.0"');
+	))->setHelp('Enter any additional options to add to the OpenVPN client configuration here, separated by semicolon.');
 
 	$section->addInput(new Form_Select(
 		'verbosity_level',
 		'Verbosity level',
 		$pconfig['verbosity_level'],
 		$openvpn_verbosity_level
-		))->setHelp('Each level shows all info from the previous levels. Level 3 is recommended if you want a good summary of what\'s happening without being swamped by output' . '<br /><br />' .
+		))->setHelp('Each level shows all info from the previous levels. Level 3 is recommended for a good summary of what\'s happening without being swamped by output.' . '<br /><br />' .
 					'None: Only fatal errors' . '<br />' .
-					'Default: Normal usage range' . '<br />' .
-					'5: Output R and W characters to the console for each packet read and write, uppercase is used for TCP/UDP packets and lowercase is used for TUN/TAP packets' .'<br />' .
-					'6: Debug info range');
+					'Default through 4: Normal usage range' . '<br />' .
+					'5: Output R and W characters to the console for each packet read and write. Uppercase is used for TCP/UDP packets and lowercase is used for TUN/TAP packets.' .'<br />' .
+					'6-11: Debug info range');
 
 	$section->addInput(new Form_Input(
 		'act',
@@ -785,7 +818,7 @@ else:
 					<th><?=gettext("Protocol")?></th>
 					<th><?=gettext("Server")?></th>
 					<th><?=gettext("Description")?></th>
-					<th><!-- Buttons --></th>
+					<th><?=gettext("Actions")?></th>
 				</tr>
 			</thead>
 
@@ -848,6 +881,7 @@ events.push(function() {
 				hideCheckbox('autokey_enable', true);
 				hideInput('shared_key', true);
 				hideLabel('Peer Certificate Revocation list', true);
+				hideInput('topology', false);
 				break;
 			case "p2p_shared_key":
 				hideCheckbox('tlsauth_enable', true);
@@ -857,15 +891,19 @@ events.push(function() {
 				hideCheckbox('autokey_enable', false);
 				hideInput('shared_key', false);
 				hideLabel('Peer Certificate Revocation list', false);
+				hideInput('topology', true);
 				break;
 		}
 
 		tlsauth_change();
 		autokey_change();
+		dev_mode_change();
+
 	}
 
 	function dev_mode_change() {
 		hideCheckbox('no_tun_ipv6', ($('#dev_mode').val() == 'tap'));
+		hideInput('topology',  ($('#dev_mode').val() == 'tap') || $('#mode').val() == "p2p_shared_key");
 	}
 
 	// Process "Automatically generate a shared key" checkbox

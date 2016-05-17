@@ -84,7 +84,7 @@ if ($_POST['filter']) {
 }
 
 
-$pgtitle = array(gettext("Diagnostics"), gettext("Show Source Tracking"));
+$pgtitle = array(gettext("Diagnostics"), gettext("States"), gettext("Source Tracking"));
 include("head.inc");
 
 $tab_array = array();
@@ -122,7 +122,7 @@ events.push(function() {
 
 <?php
 
-$form = new Form;
+$form = new Form(false);
 $section = new Form_Section('Filters');
 
 $section->addInput(new Form_Input(
@@ -133,11 +133,19 @@ $section->addInput(new Form_Input(
 ));
 
 $form->add($section);
+
+$form->addGlobal(new Form_Button(
+	'Submit',
+	'Filter',
+	null,
+	'fa-filter'
+))->addClass('btn-primary');
+
 print $form;
 
 ?>
 <div class="panel panel-default">
-	<div class="panel-heading"><h2 class="panel-title">Current source tracking entries</h2></div>
+	<div class="panel-heading"><h2 class="panel-title"><?=gettext("Current Source Tracking Entries")?></h2></div>
 	<div class="panel-body">
 		<table class="table table-striped">
 			<thead>
@@ -176,7 +184,7 @@ if (count($sources) > 0) {
 
 					<td>
 						<a class="btn btn-xs btn-danger" data-entry="<?=$srcip?>|<?=$dstip?>"
-							title="<?=sprintf(gettext('Remove all source tracking entries from %s to %s'), $srcip, $dstip);?>">Remove</a>
+							title="<?=sprintf(gettext('Remove all source tracking entries from %1$s to %2$s'), $srcip, $dstip);?>"><?=gettext("Remove")?></a>
 					</td>
 				</tr>
 <?php
@@ -190,7 +198,7 @@ if (count($sources) > 0) {
 </div>
 <?php
 if ($row == 0) {
-	print('<p class="alert alert-warning">' . gettext('No source tracking entries were found.') . '</p>');
+	print_info_box(gettext('No source tracking entries were found.'), 'warning', false);
 }
 
 include("foot.inc");

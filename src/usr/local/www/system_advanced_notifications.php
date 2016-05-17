@@ -126,7 +126,14 @@ if ($_POST) {
 
 		// Growl
 		$config['notifications']['growl']['ipaddress'] = $_POST['ipaddress'];
-		$config['notifications']['growl']['password'] = $_POST['password'];
+		if ($_POST['password'] != DMYPWD) {
+			if ($_POST['password'] == $_POST['password_confirm']) {
+				$config['notifications']['growl']['password'] = $_POST['password'];
+			} else {
+				$input_errors[] = gettext("Growl passwords must match");
+			}
+		}
+
 		$config['notifications']['growl']['name'] = $_POST['name'];
 		$config['notifications']['growl']['notification_name'] = $_POST['notification_name'];
 
@@ -153,7 +160,15 @@ if ($_POST) {
 
 		$config['notifications']['smtp']['notifyemailaddress'] = $_POST['smtpnotifyemailaddress'];
 		$config['notifications']['smtp']['username'] = $_POST['smtpusername'];
-		$config['notifications']['smtp']['password'] = $_POST['smtppassword'];
+
+		if ($_POST['smtppassword'] != DMYPWD) {
+			if ($_POST['smtppassword'] == $_POST['smtppassword_confirm']) {
+				$config['notifications']['smtp']['password'] = $_POST['smtppassword'];
+			} else {
+				$input_errors[] = gettext("SMTP passwords must match");
+			}
+		}
+
 		$config['notifications']['smtp']['authentication_mechanism'] = $_POST['smtpauthmech'];
 		$config['notifications']['smtp']['fromaddress'] = $_POST['smtpfromaddress'];
 
@@ -170,17 +185,18 @@ if ($_POST) {
 			unset($config['system']['disablebeep']);
 		}
 
-		write_config();
+		if (!$input_errors) {
+			write_config();
 
-		pfSenseHeader("system_advanced_notifications.php");
-		return;
+			pfSenseHeader("system_advanced_notifications.php");
+			return;
+		}
 
 	}
 
 	if (isset($_POST['test-growl'])) {
 		// Send test message via growl
-		if ($config['notifications']['growl']['ipaddress'] &&
-		    $config['notifications']['growl']['password'] = $_POST['password']) {
+		if (isset($config['notifications']['growl']['ipaddress'])) {
 			unlink_if_exists($g['vardb_path'] . "/growlnotices_lastmsg.txt");
 			register_via_growl();
 			notify_via_growl(sprintf(gettext("This is a test message from %s.  It is safe to ignore this message."), $g['product_name']), true);
@@ -192,7 +208,7 @@ if ($_POST) {
 		if (file_exists("/var/db/notices_lastmsg.txt")) {
 			unlink("/var/db/notices_lastmsg.txt");
 		}
-		$savemsg = notify_via_smtp(sprintf(gettext("This is a test message from %s.	 It is safe to ignore this message."), $g['product_name']), true);
+		$savemsg = notify_via_smtp(sprintf(gettext("This is a test message from %s. It is safe to ignore this message."), $g['product_name']), true);
 	}
 }
 
@@ -209,7 +225,7 @@ if ($savemsg) {
 
 $tab_array = array();
 $tab_array[] = array(gettext("Admin Access"), false, "system_advanced_admin.php");
-$tab_array[] = array(gettext("Firewall / NAT"), false, "system_advanced_firewall.php");
+$tab_array[] = array(htmlspecialchars(gettext("Firewall & NAT")), false, "system_advanced_firewall.php");
 $tab_array[] = array(gettext("Networking"), false, "system_advanced_network.php");
 $tab_array[] = array(gettext("Miscellaneous"), false, "system_advanced_misc.php");
 $tab_array[] = array(gettext("System Tunables"), false, "system_advanced_sysctl.php");
@@ -243,28 +259,27 @@ $section->addInput(new Form_Input(
 	$pconfig['notification_name'],
 	['placeholder' => $g["product_name"].' growl alert']
 
-))->setHelp('Enter a name for the Growl notifications');
+))->setHelp('Enter a name for the Growl notifications.');
 
 $section->addInput(new Form_Input(
 	'ipaddress',
 	'IP Address',
 	'text',
 	$pconfig['ipaddress']
-))->setHelp('This is the IP address that you would like to send growl '.
-	'notifications to.');
+))->setHelp('This is the IP address to send growl notifications to.');
 
-$section->addInput(new Form_Input(
+$section->addPassword(new Form_Input(
 	'password',
 	'Password',
 	'text',
 	$pconfig['password']
 ))->setHelp('Enter the password of the remote growl notification device.');
 
-$section->addInput(new Form_Input(
+$section->addInput(new Form_Button(
 	'test-growl',
-	'Test Growl',
-	'submit',
-	'Test Growl settings'
+	'Test Growl Settings',
+	null,
+	'fa-rss'
 ))->addClass('btn-info')->setHelp('A test notification will be sent even if the service is '.
 	'marked as disabled.');
 
@@ -294,7 +309,7 @@ $section->addInput(new Form_Input(
 	'number',
 	$pconfig['smtpport']
 ))->setHelp('This is the port of the SMTP E-Mail server, typically 25, 587 '.
-	'(submission) or 465 (smtps)');
+	'(submission) or 465 (smtps).');
 
 $group = new Form_Group('Secure SMTP Connection');
 $group->add(new Form_Checkbox(
@@ -325,8 +340,7 @@ $section->addInput(new Form_Input(
 	'Notification E-Mail address',
 	'text',
 	$pconfig['smtpnotifyemailaddress']
-))->setHelp('Enter the e-mail address that you would like email '.
-	'notifications sent to.');
+))->setHelp('Enter the e-mail address to send email notifications to.');
 
 // This name prevents the browser from auto-filling the field. We change it on submit
 $section->addInput(new Form_Input(
@@ -337,12 +351,12 @@ $section->addInput(new Form_Input(
 	['autocomplete' => 'off']
 ))->setHelp('Enter the e-mail address username for SMTP authentication.');
 
-$section->addInput(new Form_Input(
+$section->addPassword(new Form_Input(
 	'smtppassword',
 	'Notification E-Mail auth password',
 	'password',
 	$pconfig['smtppassword']
-))->setHelp('Enter the e-mail address password for SMTP authentication.');
+))->setHelp('Enter the e-mail account password for SMTP authentication.');
 
 $section->addInput(new Form_Select(
 	'smtpauthmech',
@@ -351,11 +365,11 @@ $section->addInput(new Form_Select(
 	$smtp_authentication_mechanisms
 ))->setHelp('Select the authentication mechanism used by the SMTP server. Most work with PLAIN, some servers like Exchange or Office365 might require LOGIN. ');
 
-$section->addInput(new Form_Input(
+$section->addInput(new Form_Button(
 	'test-smtp',
-	'Test SMTP',
-	'submit',
-	'Test SMTP settings'
+	'Test SMTP Settings',
+	null,
+	'fa-send'
 ))->addClass('btn-info')->setHelp('A test notification will be sent even if the service is '.
 	'marked as disabled.  The last SAVED values will be used, not necessarily the values entered here.');
 

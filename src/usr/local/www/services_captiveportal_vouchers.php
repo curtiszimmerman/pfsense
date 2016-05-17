@@ -77,11 +77,7 @@ $cpzone = $_GET['zone'];
 if (isset($_POST['zone'])) {
 	$cpzone = $_POST['zone'];
 }
-
-if (empty($cpzone)) {
-	header("Location: services_captiveportal_zones.php");
-	exit;
-}
+$cpzone = strtolower($cpzone);
 
 if ($_REQUEST['generatekey']) {
 	exec("/usr/bin/openssl genrsa 64 > /tmp/key64.private");
@@ -90,6 +86,11 @@ if ($_REQUEST['generatekey']) {
 	$publickey = str_replace("\n", "\\n", file_get_contents("/tmp/key64.public"));
 	exec("rm /tmp/key64.private /tmp/key64.public");
 	print json_encode(['public' => $publickey, 'private' => $privatekey]);
+	exit;
+}
+
+if (empty($cpzone)) {
+	header("Location: services_captiveportal_zones.php");
 	exit;
 }
 
@@ -103,12 +104,12 @@ if (!is_array($config['voucher'])) {
 }
 
 if (empty($a_cp[$cpzone])) {
-	log_error("Submission on captiveportal page with unknown zone parameter: " . htmlspecialchars($cpzone));
+	log_error(sprintf(gettext("Submission on captiveportal page with unknown zone parameter: %s"), htmlspecialchars($cpzone)));
 	header("Location: services_captiveportal_zones.php");
 	exit;
 }
 
-$pgtitle = array(gettext("Services"), gettext("Captive Portal"), "Zone " . $a_cp[$cpzone]['zone'], gettext("Vouchers"));
+$pgtitle = array(gettext("Services"), gettext("Captive Portal"), $a_cp[$cpzone]['zone'], gettext("Vouchers"));
 $shortcut_section = "captiveportal-vouchers";
 
 if (!is_array($config['voucher'][$cpzone]['roll'])) {
@@ -251,14 +252,14 @@ if ($_POST) {
 
 	if (!$_POST['vouchersyncusername']) {
 		// Check for form errors
-		if ($_POST['charset'] && (strlen($_POST['charset'] < 2))) {
+		if ($_POST['charset'] && (strlen($_POST['charset']) < 2)) {
 			$input_errors[] = gettext("Need at least 2 characters to create vouchers.");
 		}
 		if ($_POST['charset'] && (strpos($_POST['charset'], "\"") > 0)) {
 			$input_errors[] = gettext("Double quotes aren't allowed.");
 		}
 		if ($_POST['charset'] && (strpos($_POST['charset'], ",") > 0)) {
-			$input_errors[] = "',' " . gettext("aren't allowed.");
+			$input_errors[] = gettext("',' aren't allowed.");
 		}
 		if ($_POST['rollbits'] && (!is_numeric($_POST['rollbits']) || ($_POST['rollbits'] < 1) || ($_POST['rollbits'] > 31))) {
 			$input_errors[] = gettext("# of Bits to store Roll Id needs to be between 1..31.");
@@ -276,7 +277,10 @@ if ($_POST) {
 			$input_errors[] = gettext("This doesn't look like an RSA Private key.");
 		}
 		if ($_POST['vouchersyncdbip'] && (is_ipaddr_configured($_POST['vouchersyncdbip']))) {
-			$input_errors[] = gettext("You cannot sync the voucher database to this host (itself).");
+			$input_errors[] = gettext("The voucher database cannot be sync'd to this host (itself).");
+		}
+		if ($_POST['vouchersyncpass'] != $_POST['vouchersyncpass_confirm']) {
+			$input_errors[] = gettext("Password and confirmed password must match.");
 		}
 	}
 
@@ -313,7 +317,11 @@ if ($_POST) {
 			$newvoucher['vouchersyncdbip'] = $_POST['vouchersyncdbip'];
 			$newvoucher['vouchersyncport'] = $_POST['vouchersyncport'];
 			$newvoucher['vouchersyncusername'] = $_POST['vouchersyncusername'];
-			$newvoucher['vouchersyncpass'] = $_POST['vouchersyncpass'];
+			if ($_POST['vouchersyncpass'] != DMYPWD ) {
+				$newvoucher['vouchersyncpass'] = $_POST['vouchersyncpass'];
+			} else {
+				$newvoucher['vouchersyncpass'] = $config['voucher'][$cpzone]['vouchersyncpass'];
+			}
 			if ($newvoucher['vouchersyncpass'] && $newvoucher['vouchersyncusername'] &&
 			    $newvoucher['vouchersyncport'] && $newvoucher['vouchersyncdbip']) {
 				// Synchronize the voucher DB from the master node
@@ -343,31 +351,31 @@ EOF;
 					XML_RPC_encode($execcmd)
 				);
 				$port = $newvoucher['vouchersyncport'];
-				log_error("voucher XMLRPC sync data {$url}:{$port}.");
+				log_error(sprintf(gettext("voucher XMLRPC sync data %s:%d"), $url, $port));
 				$msg = new XML_RPC_Message('pfsense.exec_php', $params);
 				$cli = new XML_RPC_Client('/xmlrpc.php', $url, $port);
 				$cli->setCredentials($newvoucher['vouchersyncusername'], $newvoucher['vouchersyncpass']);
 				$resp = $cli->send($msg, "250");
 				if (!is_object($resp)) {
-					$error = "A communications error occurred while attempting CaptivePortalVoucherSync XMLRPC sync with {$url}:{$port} (pfsense.exec_php).";
+					$error = sprintf(gettext("A communications error occurred while attempting CaptivePortalVoucherSync XMLRPC sync with %s:%d (pfsense.exec_php)."), $url, $port);
 					log_error($error);
-					file_notice("CaptivePortalVoucherSync", $error, "Communications error occurred", "");
+					file_notice("CaptivePortalVoucherSync", $error, gettext("Communications error occurred"), "");
 					$input_errors[] = $error;
 				} elseif ($resp->faultCode()) {
 					$cli->setDebug(1);
 					$resp = $cli->send($msg, "250");
-					$error = "An error code was received while attempting CaptivePortalVoucherSync XMLRPC sync with {$url}:{$port} - Code " . $resp->faultCode() . ": " . $resp->faultString();
+					$error = sprintf(gettext("An error code was received while attempting CaptivePortalVoucherSync XMLRPC sync with %s:%d - Code %d: %s"), $url, $port, $resp->faultCode(), $resp->faultString());
 					log_error($error);
-					file_notice("CaptivePortalVoucherSync", $error, "Error code received", "");
+					file_notice("CaptivePortalVoucherSync", $error, gettext("Error code received"), "");
 					$input_errors[] = $error;
 				} else {
-					log_error("The Captive Portal voucher database has been synchronized with {$url}:{$port} (pfsense.exec_php).");
+					log_error(sprintf(gettext("The Captive Portal voucher database has been synchronized with %s:%d (pfsense.exec_php)."), $url, $port));
 				}
 				if (!$input_errors) {
 					$toreturn = XML_RPC_Decode($resp->value());
 					if (!is_array($toreturn)) {
 						if ($toreturn == "Authentication failed") {
-							$input_errors[] = "Could not synchronize the voucher database: Authentication Failed.";
+							$input_errors[] = gettext("Could not synchronize the voucher database: Authentication Failed.");
 						}
 					} else {
 						// If we received back the voucher roll and other information then store it.
@@ -401,7 +409,7 @@ EOF;
 						if ($toreturn['voucher']['descrmsgexpired']) {
 							$newvoucher['descrmsgexpired'] = $toreturn['voucher']['descrmsgexpired'];
 						}
-						$savemsg = gettext("Voucher database has been synchronized from {$url}:{$port}");
+						$savemsg = sprintf(gettext('Voucher database has been synchronized from %1$s:%2$s'), $url, $port);
 
 						$config['voucher'][$cpzone] = $newvoucher;
 						write_config();
@@ -417,7 +425,6 @@ EOF;
 		}
 	}
 }
-$closehead = false;
 include("head.inc");
 
 if ($input_errors) {
@@ -425,12 +432,12 @@ if ($input_errors) {
 }
 
 if ($savemsg) {
-	print_info_box($savemsg. 'success');
+	print_info_box($savemsg, 'success');
 }
 
 $tab_array = array();
 $tab_array[] = array(gettext("Configuration"), false, "services_captiveportal.php?zone={$cpzone}");
-$tab_array[] = array(gettext("MAC"), false, "services_captiveportal_mac.php?zone={$cpzone}");
+$tab_array[] = array(gettext("MACs"), false, "services_captiveportal_mac.php?zone={$cpzone}");
 $tab_array[] = array(gettext("Allowed IP Addresses"), false, "services_captiveportal_ip.php?zone={$cpzone}");
 $tab_array[] = array(gettext("Allowed Hostnames"), false, "services_captiveportal_hostname.php?zone={$cpzone}");
 $tab_array[] = array(gettext("Vouchers"), true, "services_captiveportal_vouchers.php?zone={$cpzone}");
@@ -440,17 +447,17 @@ display_top_tabs($tab_array, true);
 // We draw a simple table first, then present the controls to work with it
 ?>
 <div class="panel panel-default">
-	<div class="panel-heading"><h2 class="panel-title">Voucher Rolls</h2></div>
+	<div class="panel-heading"><h2 class="panel-title"><?=gettext("Voucher Rolls");?></h2></div>
 	<div class="panel-body">
 		<div class="table-responsive">
 			<table class="table table-striped table-hover table-condensed">
 				<thead>
 					<tr>
-						<th><?=gettext("Roll")?> #</th>
+						<th><?=gettext("Roll #")?></th>
 						<th><?=gettext("Minutes/Ticket")?></th>
-						<th># <?=gettext("of Tickets")?></th>
+						<th><?=gettext("# of Tickets")?></th>
 						<th><?=gettext("Comment")?></th>
-						<th><?=gettext("Action")?></th>
+						<th><?=gettext("Actions")?></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -501,7 +508,7 @@ endif;
 
 $form = new Form();
 
-$section = new Form_Section('Create, generate and activate Rolls with Vouchers');
+$section = new Form_Section('Create, Generate and Activate Rolls with Vouchers');
 
 $section->addInput(new Form_Checkbox(
 	'enable',
@@ -512,7 +519,7 @@ $section->addInput(new Form_Checkbox(
 
 $form->add($section);
 
-$section = new Form_Section('Create, generate and activate Rolls with Vouchers');
+$section = new Form_Section('Create, Generate and Activate Rolls with Vouchers');
 $section->addClass('rolledit');
 
 $section->addInput(new Form_Textarea(
@@ -582,7 +589,7 @@ $section->addInput(new Form_Input(
 
 $form->add($section);
 
-$section = new Form_Section('Voucher database synchronization');
+$section = new Form_Section('Voucher Database Synchronization');
 $section->addClass('rolledit');
 
 $section->addInput(new Form_IpAddress(
@@ -606,7 +613,7 @@ $section->addInput(new Form_Input(
 	$pconfig['vouchersyncusername']
 ))->setHelp('This is the username of the master voucher nodes webConfigurator.');
 
-$section->addInput(new Form_Input(
+$section->addPassword(new Form_Input(
 	'vouchersyncpass',
 	'Voucher sync password',
 	'password',
@@ -633,7 +640,7 @@ print($form);
 <div class="rolledit">
 <?php
 	print_info_box(gettext('Changing any Voucher parameter (apart from managing the list of Rolls) on this page will render existing vouchers useless if they were generated with different settings. ' .
-							'Specifying the Voucher Database Synchronization options will not record any other value from the other options. They will be retrieved/synced from the master.'), info);
+							'Specifying the Voucher Database Synchronization options will not record any other value from the other options. They will be retrieved/synced from the master.'), 'info');
 ?>
 </div>
 
@@ -668,7 +675,7 @@ events.push(function() {
 	// Set initial state
 	setShowHide($('#enable').is(":checked"));
 
-	var generateButton = $('<a class="btn btn-xs btn-default">Generate new keys</a>');
+	var generateButton = $('<a class="btn btn-xs btn-warning"><i class="fa fa-refresh icon-embed-btn"></i><?=gettext("Generate new keys");?></a>');
 	generateButton.on('click', function() {
 		$.ajax({
 			type: 'get',

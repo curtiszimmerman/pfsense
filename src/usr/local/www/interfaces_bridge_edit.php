@@ -66,6 +66,29 @@ if (!is_array($config['bridges']['bridged'])) {
 	$config['bridges']['bridged'] = array();
 }
 
+function is_aoadv_used($pconfig) {
+	if (($pconfig['static'] !="") ||
+	    ($pconfig['private'] != "") ||
+	    ($pconfig['stp'] != "") ||
+	    ($pconfig['span'] != "") ||
+	    ($pconfig['edge'] != "") ||
+	    ($pconfig['autoedge'] != "") ||
+	    ($pconfig['ptp'] != "") ||
+	    ($pconfig['autoptp'] != "") ||
+	    ($pconfig['maxaddr'] != "") ||
+	    ($pconfig['timeout'] != "") ||
+	    ($pconfig['maxage'] != "") ||
+	    ($pconfig['fwdelay'] != "") ||
+	    ($pconfig['hellotime'] != "") ||
+	    ($pconfig['priority'] != "") ||
+	    (($pconfig['proto'] != "") && ($pconfig['proto'] != "rstp")) ||
+	    ($pconfig['holdcnt'] != "")) {
+		return true;
+	}
+
+	return false;
+}
+
 $a_bridges = &$config['bridges']['bridged'];
 
 $ifacelist = get_configured_interface_with_descr();
@@ -90,15 +113,6 @@ if (isset($id) && $a_bridges[$id]) {
 	$pconfig['members'] = $a_bridges[$id]['members'];
 	$pconfig['maxaddr'] = $a_bridges[$id]['maxaddr'];
 	$pconfig['timeout'] = $a_bridges[$id]['timeout'];
-	if ($a_bridges[$id]['static']) {
-		$pconfig['static'] = $a_bridges[$id]['static'];
-	}
-	if ($a_bridges[$id]['private']) {
-		$pconfig['private'] = $a_bridges[$id]['private'];
-	}
-	if (isset($a_bridges[$id]['stp'])) {
-		$pconfig['stp'] = $a_bridges[$id]['stp'];
-	}
 	$pconfig['maxage'] = $a_bridges[$id]['maxage'];
 	$pconfig['fwdelay'] = $a_bridges[$id]['fwdelay'];
 	$pconfig['hellotime'] = $a_bridges[$id]['hellotime'];
@@ -132,7 +146,18 @@ if (isset($id) && $a_bridges[$id]) {
 		$pconfig['ifpathcost'] = $ifpathcost;
 	}
 
-	$pconfig['span'] = $a_bridges[$id]['span'];
+	if (isset($a_bridges[$id]['static'])) {
+		$pconfig['static'] = $a_bridges[$id]['static'];
+	}
+	if (isset($a_bridges[$id]['private'])) {
+		$pconfig['private'] = $a_bridges[$id]['private'];
+	}
+	if (isset($a_bridges[$id]['stp'])) {
+		$pconfig['stp'] = $a_bridges[$id]['stp'];
+	}
+	if (isset($a_bridges[$id]['span'])) {
+		$pconfig['span'] = $a_bridges[$id]['span'];
+	}
 	if (isset($a_bridges[$id]['edge'])) {
 		$pconfig['edge'] = $a_bridges[$id]['edge'];
 	}
@@ -180,7 +205,7 @@ if ($_POST) {
 	}
 	foreach ($ifacelist as $ifn => $ifdescr) {
 		if ($_POST[$ifn] <> "" && !is_numericint($_POST[$ifn])) {
-			$input_errors[] = "{$ifdescr} " . gettext("interface priority for STP needs to be an integer between 0 and 240.");
+			$input_errors[] = sprintf(gettext("%s interface priority for STP needs to be an integer between 0 and 240."), $ifdescr);
 		}
 	}
 
@@ -188,26 +213,88 @@ if ($_POST) {
 
 	foreach ($ifacelist as $ifn => $ifdescr) {
 		if ($_POST["{$ifn}{$i}"] <> "" && !is_numeric($_POST["{$ifn}{$i}"])) {
-			$input_errors[] = "{$ifdescr} " . gettext("interface path cost for STP needs to be an integer between 1 and 200000000.");
+			$input_errors[] = sprintf(gettext("%s interface path cost for STP needs to be an integer between 1 and 200000000."), $ifdescr);
 		}
 		$i++;
 	}
 
 	if (!is_array($_POST['members']) || count($_POST['members']) < 1) {
-		$input_errors[] = gettext("You must select at least one member interface for a bridge.");
+		$input_errors[] = gettext("At least one member interface must be selected for a bridge.");
 	}
 
+	if (is_array($_POST['static'])) {
+		foreach ($_POST['static'] as $ifstatic) {
+			if (is_array($_POST['members']) && !in_array($ifstatic, $_POST['members'])) {
+				$input_errors[] = gettext("Sticky interface ($ifstatic) is not part of the bridge. Remove the sticky interface to continue.");
+			}
+		}
+		$pconfig['static'] = implode(',', $_POST['static']);
+	}
+	if (is_array($_POST['private'])) {
+		foreach ($_POST['private'] as $ifprivate) {
+			if (is_array($_POST['members']) && !in_array($ifprivate, $_POST['members'])) {
+				$input_errors[] = gettext("Private interface ($ifprivate) is not part of the bridge. Remove the private interface to continue.");
+			}
+		}
+		$pconfig['private'] = implode(',', $_POST['private']);
+	}
+	if (is_array($_POST['stp'])) {
+		foreach ($_POST['stp'] as $ifstp) {
+			if (is_array($_POST['members']) && !in_array($ifstp, $_POST['members'])) {
+				$input_errors[] = gettext("STP interface ($ifstp) is not part of the bridge. Remove the STP interface to continue.");
+			}
+		}
+		$pconfig['stp'] = implode(',', $_POST['stp']);
+	}
+	if (is_array($_POST['span'])) {
+		$pconfig['span'] = implode(',', $_POST['span']);
+	}
+	if (is_array($_POST['edge'])) {
+		foreach ($_POST['edge'] as $ifedge) {
+			if (is_array($_POST['members']) && !in_array($ifedge, $_POST['members'])) {
+				$input_errors[] = gettext("Edge interface ($ifedge) is not part of the bridge. Remove the edge interface to continue.");
+			}
+		}
+		$pconfig['edge'] = implode(',', $_POST['edge']);
+	}
+	if (is_array($_POST['autoedge'])) {
+		foreach ($_POST['autoedge'] as $ifautoedge) {
+			if (is_array($_POST['members']) && !in_array($ifautoedge, $_POST['members'])) {
+				$input_errors[] = gettext("Auto Edge interface ($ifautoedge) is not part of the bridge. Remove the auto edge interface to continue.");
+			}
+		}
+		$pconfig['autoedge'] = implode(',', $_POST['autoedge']);
+	}
+	if (is_array($_POST['ptp'])) {
+		foreach ($_POST['ptp'] as $ifptp) {
+			if (is_array($_POST['members']) && !in_array($ifptp, $_POST['members'])) {
+				$input_errors[] = gettext("PTP interface ($ifptp) is not part of the bridge. Remove the PTP interface to continue.");
+			}
+		}
+		$pconfig['ptp'] = implode(',', $_POST['ptp']);
+	}
+	if (is_array($_POST['autoptp'])) {
+		foreach ($_POST['autoptp'] as $ifautoptp) {
+			if (is_array($_POST['members']) && !in_array($ifautoptp, $_POST['members'])) {
+				$input_errors[] = gettext("Auto PTP interface ($ifautoptp) is not part of the bridge. Remove the auto PTP interface to continue.");
+			}
+		}
+		$pconfig['autoptp'] = implode(',', $_POST['autoptp']);
+	}
 	if (is_array($_POST['members'])) {
 		foreach ($_POST['members'] as $ifmembers) {
 			if (empty($config['interfaces'][$ifmembers])) {
 				$input_errors[] = gettext("A member interface passed does not exist in configuration");
 			}
+			if (substr($config['interfaces'][$ifmembers]['if'], 0, 6) == "bridge") {
+				$input_errors[] = gettext("A bridge interface cannot be a member of a bridge.");
+			}
 			if (is_array($config['interfaces'][$ifmembers]['wireless']) &&
 			    $config['interfaces'][$ifmembers]['wireless']['mode'] != "hostap") {
 				$input_errors[] = gettext("Bridging a wireless interface is only possible in hostap mode.");
 			}
-			if ($_POST['span'] != "none" && $_POST['span'] == $ifmembers) {
-				$input_errors[] = gettext("Span interface cannot be part of the bridge. Remove the span interface from bridge members to continue.");
+			if (is_array($_POST['span']) && in_array($ifmembers, $_POST['span'])) {
+				$input_errors[] = gettext("Span interface ($ifmembers) cannot be part of the bridge. Remove the span interface from bridge members to continue.");
 			}
 			foreach ($a_bridges as $a_bridge) {
 				if ($_POST['bridgeif'] === $a_bridge['bridgeif']) {
@@ -216,7 +303,7 @@ if ($_POST) {
 				$a_members = explode(',', $a_bridge['members']);
 				foreach ($a_members as $a_member) {
 					if ($ifmembers === $a_member) {
-						$input_errors[] = $ifmembers . gettext(" is part of another bridge. Remove the interface from bridge members to continue.");
+						$input_errors[] = sprintf(gettext("%s is part of another bridge. Remove the interface from bridge members to continue."), $ifmembers);
 					}
 				}
 			}
@@ -231,15 +318,6 @@ if ($_POST) {
 		$bridge['descr'] = $_POST['descr'];
 		$bridge['maxaddr'] = $_POST['maxaddr'];
 		$bridge['timeout'] = $_POST['timeout'];
-		if ($_POST['static']) {
-			$bridge['static'] = implode(',', $_POST['static']);
-		}
-		if ($_POST['private']) {
-			$bridge['private'] = implode(',', $_POST['private']);
-		}
-		if (isset($_POST['stp'])) {
-			$bridge['stp'] = implode(',', $_POST['stp']);
-		}
 		$bridge['maxage'] = $_POST['maxage'];
 		$bridge['fwdelay'] = $_POST['fwdelay'];
 		$bridge['hellotime'] = $_POST['hellotime'];
@@ -269,10 +347,17 @@ if ($_POST) {
 		$bridge['ifpriority'] = $ifpriority;
 		$bridge['ifpathcost'] = $ifpathcost;
 
-		if ($_POST['span'] != "none") {
-			$bridge['span'] = $_POST['span'];
-		} else {
-			unset($bridge['span']);
+		if (isset($_POST['static'])) {
+			$bridge['static'] = implode(',', $_POST['static']);
+		}
+		if (isset($_POST['private'])) {
+			$bridge['private'] = implode(',', $_POST['private']);
+		}
+		if (isset($_POST['stp'])) {
+			$bridge['stp'] = implode(',', $_POST['stp']);
+		}
+		if (isset($_POST['span'])) {
+			$bridge['span'] = implode(',', $_POST['span']);
 		}
 		if (isset($_POST['edge'])) {
 			$bridge['edge'] = implode(',', $_POST['edge']);
@@ -286,7 +371,6 @@ if ($_POST) {
 		if (isset($_POST['autoptp'])) {
 			$bridge['autoptp'] = implode(',', $_POST['autoptp']);
 		}
-
 
 		$bridge['bridgeif'] = $_POST['bridgeif'];
 		interface_bridge_configure($bridge);
@@ -312,53 +396,26 @@ if ($_POST) {
 	}
 }
 
-function build_spanport_list() {
-	global $ifacelist;
-
-	$splist = array('none' => 'None');
-
-	foreach ($ifacelist as $ifn => $ifdescr) {
-		$splist[$ifn] = $ifdescr;
-	}
-
-	return($splist);
-}
-
-function build_member_list() {
-	global $pconfig, $ifacelist;
-
-	$memberlist = array('list' => array(),
-						'selected' => array());
-
-	$members_array = explode(',', $pconfig['members']);
-	foreach ($ifacelist as $ifn => $ifinfo) {
-		$memberlist['list'][$ifn] = $ifinfo;
-
-		if (in_array($ifn, $members_array)) {
-			array_push($memberlist['selected'], $ifn);
-		}
-	}
-	unset($members_array);
-	return($memberlist);
-}
-
+// port list with the exception of assigned bridge interfaces to prevent invalid configs
 function build_port_list($selecton) {
-	global $pconfig, $ifacelist;
+	global $config, $ifacelist;
 
 	$portlist = array('list' => array(), 'selected' => array());
 
 	foreach ($ifacelist as $ifn => $ifdescr) {
-		$portlist['list'][$ifn] = $ifdescr;
+		if (substr($config['interfaces'][$ifn]['if'], 0, 6) != "bridge") {
+			$portlist['list'][$ifn] = $ifdescr;
 
-		if (stristr($selecton, $ifn)) {
-			array_push($portlist['selected'], $ifn);
+			if (in_array($ifn, explode(',', $selecton))) {
+				array_push($portlist['selected'], $ifn);
+			}
 		}
 	}
 
 	return($portlist);
 }
 
-$pgtitle = array(gettext("Interfaces"), gettext("Bridge"), gettext("Edit"));
+$pgtitle = array(gettext("Interfaces"), gettext("Bridges"), gettext("Edit"));
 $shortcut_section = "interfaces";
 include("head.inc");
 
@@ -370,7 +427,7 @@ $form = new Form();
 
 $section = new Form_Section('Bridge Configuration');
 
-$memberslist = build_member_list();
+$memberslist = build_port_list($pconfig['members']);
 
 $section->addInput(new Form_Select(
 	'members',
@@ -378,7 +435,7 @@ $section->addInput(new Form_Select(
 	$memberslist['selected'],
 	$memberslist['list'],
 	true // Allow multiples
-))->setHelp('Interfaces participating in the bridge');
+))->setHelp('Interfaces participating in the bridge.');
 
 $section->addInput(new Form_Input(
 	'descr',
@@ -387,51 +444,57 @@ $section->addInput(new Form_Input(
 	$pconfig['descr']
 ));
 
-$section->addInput(new Form_Checkbox(
-	'showadvanced',
-	'Advanced',
-	'Show advanced options',
-	$pconfig['showadvanced']
-))->toggles('.toggle-advanced');
+// Advanced Additional options
+$btnadv = new Form_Button(
+	'btnadvopts',
+	'Display Advanced',
+	null,
+	'fa-cog'
+);
+
+$btnadv->setAttribute('type','button')->addClass('btn-info btn-sm');
+
+$section->addInput(new Form_StaticText(
+	'Advanced Options',
+	$btnadv
+));
 
 $form->add($section);
 
 $section = new Form_Section('Advanced Configuration');
 
-// Set initial toggle state manually for now
-if ($pconfig['showadvanced']) {
-	$section->addClass('toggle-advanced in');
-} else {
-	$section->addClass('toggle-advanced collapse');
-}
+$section->addClass('adnlopts');
 
 $section->addInput(new Form_Input(
 	'maxaddr',
 	'Cache Size',
 	'text',
 	$pconfig['maxaddr']
-))->setHelp('Set the size of the bridge address cache. The default is 100 entries');
+))->setHelp('Set the size of the bridge address cache. The default is 2000 entries.');
 
 $section->addInput(new Form_Input(
 	'timeout',
 	'Cache expire time',
 	'text',
 	$pconfig['timeout']
-))->setHelp('Set the timeout of address cache entries to this number of seconds. If seconds is zero, then address cache entries will not be expired. The default is 240 seconds');
+))->setHelp('Set the timeout of address cache entries to this number of seconds. If seconds is zero, then address cache entries will not be expired. The default is 1200 seconds.');
+
+$spanlist = build_port_list($pconfig['span']);
 
 $section->addInput(new Form_Select(
 	'span',
 	'Span Port',
-	$pconfig['span'],
-	build_spanport_list()
-))->setHelp('Add the interface named by interface as a span port on the bridge. Span ports transmit a copy of every frame received by the bridge.' .
+	$spanlist['selected'],
+	$spanlist['list'],
+	true
+))->setHelp('Add the interface named by interface as a span port on the bridge. Span ports transmit a copy of every frame received by the bridge. ' .
 			'This is most useful for snooping a bridged network passively on another host connected to one of the span ports of the bridge. <br />' .
 			'%sThe span interface cannot be part of the bridge member interfaces.%s', ['<strong>', '</strong>']);
 
 $edgelist = build_port_list($pconfig['edge']);
 
 $section->addInput(new Form_Select(
-	'edge[]',
+	'edge',
 	'Edge Ports',
 	$edgelist['selected'],
 	$edgelist['list'],
@@ -441,7 +504,7 @@ $section->addInput(new Form_Select(
 $edgelist = build_port_list($pconfig['autoedge']);
 
 $section->addInput(new Form_Select(
-	'autoedge[]',
+	'autoedge',
 	'Auto Edge Ports',
 	$edgelist['selected'],
 	$edgelist['list'],
@@ -462,7 +525,7 @@ $section->addInput(new Form_Select(
 $edgelist = build_port_list($pconfig['autoptp']);
 
 $section->addInput(new Form_Select(
-	'autoptp[]',
+	'autoptp',
 	'Auto PTP Ports',
 	$edgelist['selected'],
 	$edgelist['list'],
@@ -473,7 +536,7 @@ $section->addInput(new Form_Select(
 $edgelist = build_port_list($pconfig['static']);
 
 $section->addInput(new Form_Select(
-	'static[]',
+	'static',
 	'Sticky Ports',
 	$edgelist['selected'],
 	$edgelist['list'],
@@ -484,7 +547,7 @@ $section->addInput(new Form_Select(
 $edgelist = build_port_list($pconfig['private']);
 
 $section->addInput(new Form_Select(
-	'private[]',
+	'private',
 	'Private Ports',
 	$edgelist['selected'],
 	$edgelist['list'],
@@ -503,11 +566,7 @@ $section->addInput(new Form_Checkbox(
 // Show the spanning tree section
 $form->add($section);
 $section = new Form_Section('RSTP/STP');
-if ($pconfig['showadvanced']) {
-	$section->addClass('toggle-advanced in');
-} else {
-	$section->addClass('toggle-advanced collapse');
-}
+$section->addClass('adnlopts');
 
 $section->addInput(new Form_Select(
 	'proto',
@@ -520,12 +579,12 @@ $section->addInput(new Form_Select(
 $edgelist = build_port_list($pconfig['stp']);
 
 $section->addInput(new Form_Select(
-	'stp[]',
+	'stp',
 	'STP Interfaces',
 	$edgelist['selected'],
 	$edgelist['list'],
 	true
-))->setHelp('Enable Spanning Tree Protocol on interface. The if_bridge(4) driver has support for the IEEE 802.1D Spanning Tree Protocol (STP).' .
+))->setHelp('Enable Spanning Tree Protocol on interface. The if_bridge(4) driver has support for the IEEE 802.1D Spanning Tree Protocol (STP). ' .
 			'STP is used to detect and remove loops in a network topology.');
 
 $section->addInput(new Form_Input(
@@ -550,13 +609,13 @@ $section->addInput(new Form_Input(
 	'number',
 	$pconfig['hellotime'],
 	['placeholder' => 2, 'min' => 1, 'max' => 2, 'step' => '0.1']
-))->setHelp('Set the time in seconds between broadcasting of Spanning Tree Protocol configuration messages. The hello time may only be changed when operating in legacy STP mode.' .
+))->setHelp('Set the time in seconds between broadcasting of Spanning Tree Protocol configuration messages. The hello time may only be changed when operating in legacy STP mode. ' .
 			'The default is 2 seconds. The minimum is 1 second and the maximum is 2 seconds.');
 
 $section->addInput(new Form_Input(
 	'priority',
 	'Priority',
-	'text',
+	'number',
 	$pconfig['priority'],
 	['placeholder' => 32768, 'min' => 0, 'max' => 61440]
 ))->setHelp('Set the bridge priority for Spanning Tree. The default is 32768. The minimum is 0 and the maximum is 61440. ');
@@ -574,7 +633,7 @@ foreach ($ifacelist as $ifn => $ifdescr) {
 		$ifn,
 		$ifdescr . ' Priority',
 		'number',
-		$pconfig[$ifn],
+		$pconfig['ifpriority'][$ifn],
 		['placeholder' => 128, 'min' => 0, 'max' => 240, 'step' => 16]
 	))->setHelp('Set the Spanning Tree priority of interface to value. The default is 128. The minimum is 0 and the maximum is 240. Increments of 16.');
 }
@@ -582,10 +641,10 @@ foreach ($ifacelist as $ifn => $ifdescr) {
 $i = 0;
 foreach ($ifacelist as $ifn => $ifdescr) {
 	$section->addInput(new Form_Input(
-		$ifn . $i,
+		$ifn . 0,
 		$ifdescr . ' Path cost',
 		'number',
-		$ifpathcost[$ifn],
+		$pconfig['ifpathcost'][$ifn],
 		[ 'placeholder' => 0, 'min' => 1, 'max' => 200000000]
 	))->setHelp('Set the Spanning Tree path cost of interface to value. The default is calculated from the link speed. '.
 		'To change a previously selected path cost back to automatic, set the cost to 0. The minimum is 1 and the maximum is 200000000.');
@@ -610,5 +669,43 @@ if (isset($id) && $a_bridges[$id]) {
 
 $form->add($section);
 print($form);
+?>
+<script type="text/javascript">
+//<![CDATA[
+events.push(function() {
 
-include("foot.inc");
+	// Show advanced additional opts options ======================================================
+	var showadvopts = false;
+
+	function show_advopts(ispageload) {
+		var text;
+		// On page load decide the initial state based on the data.
+		if (ispageload) {
+			showadvopts = <?php if (is_aoadv_used($pconfig)) {echo 'true';} else {echo 'false';} ?>;
+		} else {
+			// It was a click, swap the state.
+			showadvopts = !showadvopts;
+		}
+
+		hideClass('adnlopts', !showadvopts);
+
+		if (showadvopts) {
+			text = "<?=gettext('Hide Advanced');?>";
+		} else {
+			text = "<?=gettext('Display Advanced');?>";
+		}
+		$('#btnadvopts').html('<i class="fa fa-cog"></i> ' + text);
+	}
+
+	$('#btnadvopts').click(function(event) {
+		show_advopts();
+	});
+
+	// ---------- On initial page load ------------------------------------------------------------
+
+	show_advopts(true);
+});
+//]]>
+</script>
+
+<?php include("foot.inc");

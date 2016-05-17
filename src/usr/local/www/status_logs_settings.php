@@ -89,7 +89,7 @@ $pconfig['logdefaultblock'] = !isset($config['syslog']['nologdefaultblock']);
 $pconfig['logdefaultpass'] = isset($config['syslog']['nologdefaultpass']);
 $pconfig['logbogons'] = !isset($config['syslog']['nologbogons']);
 $pconfig['logprivatenets'] = !isset($config['syslog']['nologprivatenets']);
-$pconfig['loglighttpd'] = !isset($config['syslog']['nologlighttpd']);
+$pconfig['lognginx'] = !isset($config['syslog']['nolognginx']);
 $pconfig['rawfilter'] = isset($config['syslog']['rawfilter']);
 $pconfig['filterdescriptions'] = $config['syslog']['filterdescriptions'];
 $pconfig['disablelocallogging'] = isset($config['syslog']['disablelocallogging']);
@@ -163,12 +163,12 @@ if ($_POST['resetlogs'] == gettext("Reset Log Files")) {
 		$oldnologdefaultpass = isset($config['syslog']['nologdefaultpass']);
 		$oldnologbogons = isset($config['syslog']['nologbogons']);
 		$oldnologprivatenets = isset($config['syslog']['nologprivatenets']);
-		$oldnologlighttpd = isset($config['syslog']['nologlighttpd']);
+		$oldnolognginx = isset($config['syslog']['nolognginx']);
 		$config['syslog']['nologdefaultblock'] = $_POST['logdefaultblock'] ? false : true;
 		$config['syslog']['nologdefaultpass'] = $_POST['logdefaultpass'] ? true : false;
 		$config['syslog']['nologbogons'] = $_POST['logbogons'] ? false : true;
 		$config['syslog']['nologprivatenets'] = $_POST['logprivatenets'] ? false : true;
-		$config['syslog']['nologlighttpd'] = $_POST['loglighttpd'] ? false : true;
+		$config['syslog']['nolognginx'] = $_POST['lognginx'] ? false : true;
 		$config['syslog']['rawfilter'] = $_POST['rawfilter'] ? true : false;
 		if (is_numeric($_POST['filterdescriptions']) && $_POST['filterdescriptions'] > 0) {
 			$config['syslog']['filterdescriptions'] = $_POST['filterdescriptions'];
@@ -194,7 +194,7 @@ if ($_POST['resetlogs'] == gettext("Reset Log Files")) {
 
 		$savemsg = get_std_save_message($retval);
 
-		if ($oldnologlighttpd !== isset($config['syslog']['nologlighttpd'])) {
+		if ($oldnolognginx !== isset($config['syslog']['nolognginx'])) {
 			ob_flush();
 			flush();
 			log_error(gettext("webConfigurator configuration has changed. Restarting webConfigurator."));
@@ -206,31 +206,34 @@ if ($_POST['resetlogs'] == gettext("Reset Log Files")) {
 	}
 }
 
-$pgtitle = array(gettext("Status"), gettext("System logs"), gettext("Settings"));
+$pgtitle = array(gettext("Status"), gettext("System Logs"), gettext("Settings"));
 include("head.inc");
 
 $logfilesizeHelp =	gettext("Logs are held in constant-size circular log files. This field controls how large each log file is, and thus how many entries may exist inside the log. By default this is approximately 500KB per log file, and there are nearly 20 such log files.") .
 					'<br /><br />' .
-					gettext("NOTE: Log sizes are changed the next time a log file is cleared or deleted. To immediately increase the size of the log files, you must first save the options to set the size, then clear all logs using the \"Reset Log Files\" option farther down this page. ") .
+					gettext("NOTE: Log sizes are changed the next time a log file is cleared or deleted. To immediately increase the size of the log files, first save the options to set the size, then clear all logs using the \"Reset Log Files\" option farther down this page. ") .
 					gettext("Be aware that increasing this value increases every log file size, so disk usage will increase significantly.") . '<br /><br />' .
 					gettext("Disk space currently used by log files is: ") . exec("/usr/bin/du -sh /var/log | /usr/bin/awk '{print $1;}'") .
 					gettext(" Remaining disk space for log files: ") . exec("/bin/df -h /var/log | /usr/bin/awk '{print $4;}'");
 
-$remoteloghelp =	gettext("This option will allow the logging daemon to bind to a single IP address, rather than all IP addresses.") .
-					gettext("If you pick a single IP, remote syslog servers must all be of that IP type. If you wish to mix IPv4 and IPv6 remote syslog servers, you must bind to all interfaces.") .
+$remoteloghelp =	gettext("This option will allow the logging daemon to bind to a single IP address, rather than all IP addresses.") . " " .
+					gettext("If a single IP is picked, remote syslog servers must all be of that IP type. To mix IPv4 and IPv6 remote syslog servers, bind to all interfaces.") .
 					"<br /><br />" .
 					gettext("NOTE: If an IP address cannot be located on the chosen interface, the daemon will bind to all addresses.");
+
 if ($input_errors) {
 	print_input_errors($input_errors);
-} else if ($savemsg) {
-	print_info_box($savemsg);
+}
+
+if ($savemsg) {
+	print_info_box($savemsg, 'success');
 }
 
 $tab_array = array();
 $tab_array[] = array(gettext("System"), false, "status_logs.php");
 $tab_array[] = array(gettext("Firewall"), false, "status_logs_filter.php");
 $tab_array[] = array(gettext("DHCP"), false, "status_logs.php?logfile=dhcpd");
-$tab_array[] = array(gettext("Portal Auth"), false, "status_logs.php?logfile=portalauth");
+$tab_array[] = array(gettext("Captive Portal Auth"), false, "status_logs.php?logfile=portalauth");
 $tab_array[] = array(gettext("IPsec"), false, "status_logs.php?logfile=ipsec");
 $tab_array[] = array(gettext("PPP"), false, "status_logs.php?logfile=ppp");
 $tab_array[] = array(gettext("VPN"), false, "status_logs_vpn.php");
@@ -240,10 +243,7 @@ $tab_array[] = array(gettext("NTP"), false, "status_logs.php?logfile=ntpd");
 $tab_array[] = array(gettext("Settings"), true, "status_logs_settings.php");
 display_top_tabs($tab_array);
 
-$form = new Form(new Form_Button(
-	'Submit',
-	gettext("Save")
-));
+$form = new Form();
 
 $section = new Form_Section('General Logging Options');
 
@@ -299,30 +299,30 @@ $section->addInput(new Form_Checkbox(
 ));
 
 $section->addInput(new Form_Checkbox(
-	'loglighttpd',
+	'lognginx',
 	'Web Server Log',
 	'Log errors from the web server process',
-	$pconfig['loglighttpd']
-))->setHelp('If this is checked, errors from the lighttpd web server process for the GUI or Captive Portal will appear in the main system log');
+	$pconfig['lognginx']
+))->setHelp('If this is checked, errors from the web server process for the GUI or Captive Portal will appear in the main system log.');
 
 $section->addInput(new Form_Checkbox(
 	'rawfilter',
 	'Raw Logs',
 	'Show raw filter logs',
 	$pconfig['rawfilter']
-))->setHelp(gettext('If this is checked, filter logs are shown as generated by the packet filter, without any formatting. This will reveal more detailed information, but it is more difficult to read'));
+))->setHelp(gettext('If this is checked, filter logs are shown as generated by the packet filter, without any formatting. This will reveal more detailed information, but it is more difficult to read.'));
 
 $section->addInput(new Form_Select(
 	'filterdescriptions',
 	'Where to show rule descriptions',
 	!isset($pconfig['filterdescriptions']) ? '0':$pconfig['filterdescriptions'],
 	array(
-		'0' => 'Dont load descriptions',
-		'1' => 'Display as column',
-		'2' => 'Display as second row'
+		'0' => gettext('Dont load descriptions'),
+		'1' => gettext('Display as column'),
+		'2' => gettext('Display as second row')
 	)
-))->setHelp('Show the applied rule description below or in the firewall log rows' . '<br />' .
-			'Displaying rule descriptions for all lines in the log might affect performance with large rule sets');
+))->setHelp('Show the applied rule description below or in the firewall log rows.' . '<br />' .
+			'Displaying rule descriptions for all lines in the log might affect performance with large rule sets.');
 
 $section->addInput(new Form_Checkbox(
 	'disablelocallogging',
@@ -333,8 +333,10 @@ $section->addInput(new Form_Checkbox(
 
 $section->addInput(new Form_Button(
 	'resetlogs',
-	'Reset Log Files'
-))->addClass('btn-danger btn-xs')->setHelp('Clears all local log files and reinitializes them as empty logs. This also restarts the DHCP daemon. Use the Save button first if you have made any setting changes.');
+	'Reset Log Files',
+	null,
+	'fa-trash'
+))->addClass('btn-danger btn-sm')->setHelp('Clears all local log files and reinitializes them as empty logs. This also restarts the DHCP daemon. Use the Save button first if any setting changes have been made.');
 
 $form->add($section);
 $section = new Form_Section('Remote Logging Options');

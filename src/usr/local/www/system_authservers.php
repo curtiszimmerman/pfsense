@@ -64,12 +64,75 @@
 require("guiconfig.inc");
 require_once("auth.inc");
 
-$pgtitle = array(gettext("System"), gettext("User Manager"), gettext("Authentication Servers"));
-$shortcut_section = "authentication";
+// Have we been called to populate the "Select a container" modal?
+if ($_REQUEST['ajax']) {
+
+	$ous = array();
+	$authcfg = array();
+
+	$authcfg['ldap_port'] = $_REQUEST['port'];
+	$authcfg['ldap_basedn'] = $_REQUEST['basedn'];
+	$authcfg['host'] = $_REQUEST['host'];
+	$authcfg['ldap_scope'] = $_REQUEST['scope'];
+	$authcfg['ldap_binddn'] = $_REQUEST['binddn'];
+	$authcfg['ldap_bindpw'] = $_REQUEST['bindpw'];
+	$authcfg['ldap_urltype'] = $_REQUEST['urltype'];
+	$authcfg['ldap_protver'] = $_REQUEST['proto'];
+	$authcfg['ldap_authcn'] = explode(";", $_REQUEST['authcn']);
+	$authcfg['ldap_caref'] = $_REQUEST['cert'];
+
+	$ous = ldap_get_user_ous(true, $authcfg);
+
+	if (empty($ous)) {
+		print('<span class="text-danger">Could not connect to the LDAP server. Please check the LDAP configuration.</span>');
+	} else {
+		$modal = new Modal("Select LDAP containers for authentication", "containers", true);
+		$group = new Form_MultiCheckboxGroup('Containers');
+
+		if (is_array($ous)) {
+			$idx = 0;
+
+			foreach ($ous as $ou) {
+				$group->add(new Form_MultiCheckbox(
+					'ou' . $idx,
+					'',
+					$ou,
+					in_array($ou, $authcfg['ldap_authcn']),
+					$ou
+				));
+
+				$idx++;
+			}
+		}
+
+		$modal->add($group);
+
+		// Create a "Save button"
+
+		$btnsv = new Form_Button(
+			'svcontbtn',
+			'Save',
+			null,
+			'fa-save'
+		);
+
+		$btnsv->removeClass("btn-default)")->addClass("btn-primary");
+
+		$modal->addInput(new Form_StaticText(
+			'',
+			$btnsv
+		));
+
+		print($modal);
+	}
+
+	exit;
+}
 
 if (is_numericint($_GET['id'])) {
 	$id = $_GET['id'];
 }
+
 if (isset($_POST['id']) && is_numericint($_POST['id'])) {
 	$id = $_POST['id'];
 }
@@ -111,7 +174,7 @@ if ($act == "del") {
 	/* Remove server from temp list used later on this page. */
 	unset($a_server[$_GET['id']]);
 
-	$savemsg = gettext("Authentication Server") . " " . htmlspecialchars($serverdeleted) . " " . gettext("deleted") . "<br />";
+	$savemsg = sprintf(gettext("Authentication Server %s deleted."), htmlspecialchars($serverdeleted));
 	write_config($savemsg);
 }
 
@@ -377,58 +440,70 @@ if($_POST && $input_errors) {
 	$pconfig['ldap_template'] = $_POST['ldap_tmpltype'];
 }
 
+$pgtitle = array(gettext("System"), gettext("User Manager"), gettext("Authentication Servers"));
+
+if ($act == "new" || $act == "edit" || $input_errors) {
+	$pgtitle[] = gettext('Edit');
+}
+$shortcut_section = "authentication";
 include("head.inc");
 
-if ($input_errors)
+if ($input_errors) {
 	print_input_errors($input_errors);
+}
 
-if ($savemsg)
+if ($savemsg) {
 	print_info_box($savemsg, 'success');
+}
 
 $tab_array = array();
 $tab_array[] = array(gettext("Users"), false, "system_usermanager.php");
 $tab_array[] = array(gettext("Groups"), false, "system_groupmanager.php");
 $tab_array[] = array(gettext("Settings"), false, "system_usermanager_settings.php");
-$tab_array[] = array(gettext("Servers"), true, "system_authservers.php");
+$tab_array[] = array(gettext("Authentication Servers"), true, "system_authservers.php");
 display_top_tabs($tab_array);
 
-if (!($act == "new" || $act == "edit" || $input_errors))
-{
-	?>
-	<div class="table-responsive">
-		<table class="table table-striped table-hover table-condensed sortable-theme-bootstrap" data-sortable>
-			<thead>
-				<tr>
-					<th><?=gettext("Server Name")?></th>
-					<th><?=gettext("Type")?></th>
-					<th><?=gettext("Host Name")?></th>
-					<th><?=gettext("Actions")?></th>
-				</tr>
-			</thead>
-			<tbody>
-		<?php foreach($a_server as $i => $server): ?>
-				<tr>
-					<td><?=htmlspecialchars($server['name'])?></td>
-					<td><?=htmlspecialchars($auth_server_types[$server['type']])?></td>
-					<td><?=htmlspecialchars($server['host'])?></td>
-					<td>
-					<?php if ($i < (count($a_server) - 1)): ?>
-						<a class="fa fa-pencil" title="<?=gettext("Edit server"); ?>" href="system_authservers.php?act=edit&amp;id=<?=$i?>"></a>
-						<a class="fa fa-trash"  title="<?=gettext("Delete server")?>" href="system_authservers.php?act=del&amp;id=<?=$i?>"></a>
-					<?php endif?>
-					</td>
-				</tr>
-		<?php endforeach; ?>
-			</tbody>
-		</table>
+if (!($act == "new" || $act == "edit" || $input_errors)) {
+?>
+<div class="panel panel-default">
+	<div class="panel-heading"><h2 class="panel-title"><?=gettext('Authentication Servers')?></h2></div>
+	<div class="panel-body">
+		<div class="table-responsive">
+			<table class="table table-striped table-hover table-condensed sortable-theme-bootstrap" data-sortable>
+				<thead>
+					<tr>
+						<th><?=gettext("Server Name")?></th>
+						<th><?=gettext("Type")?></th>
+						<th><?=gettext("Host Name")?></th>
+						<th><?=gettext("Actions")?></th>
+					</tr>
+				</thead>
+				<tbody>
+			<?php foreach($a_server as $i => $server): ?>
+					<tr>
+						<td><?=htmlspecialchars($server['name'])?></td>
+						<td><?=htmlspecialchars($auth_server_types[$server['type']])?></td>
+						<td><?=htmlspecialchars($server['host'])?></td>
+						<td>
+						<?php if ($i < (count($a_server) - 1)): ?>
+							<a class="fa fa-pencil" title="<?=gettext("Edit server"); ?>" href="system_authservers.php?act=edit&amp;id=<?=$i?>"></a>
+							<a class="fa fa-trash"  title="<?=gettext("Delete server")?>" href="system_authservers.php?act=del&amp;id=<?=$i?>"></a>
+						<?php endif?>
+						</td>
+					</tr>
+			<?php endforeach; ?>
+				</tbody>
+			</table>
+		</div>
 	</div>
+</div>
 
-	<nav class="action-buttons">
-		<a href="?act=new" class="btn btn-success btn-sm">
-			<i class="fa fa-plus icon-embed-btn"></i>
-			<?=gettext("Add")?>
-		</a>
-	</nav>
+<nav class="action-buttons">
+	<a href="?act=new" class="btn btn-success btn-sm">
+		<i class="fa fa-plus icon-embed-btn"></i>
+		<?=gettext("Add")?>
+	</a>
+</nav>
 <?php
 	include("foot.inc");
 	exit;
@@ -444,7 +519,7 @@ $form->addGlobal(new Form_Input(
 	$id
 ));
 
-$section = new Form_Section('Server settings');
+$section = new Form_Section('Server Settings');
 
 $section->addInput($input = new Form_Input(
 	'name',
@@ -495,7 +570,7 @@ if (empty($a_ca))
 {
 	$section->addInput(new Form_StaticText(
 		'Peer Certificate Authority',
-		'No Certificate Authorities defined.<br/>Create one under <a href="system_camanager.php">System &gt; Cert Manager</a>.'
+		'No Certificate Authorities defined.<br/>Create one under <a href="system_camanager.php">System &gt; Cert. Manager</a>.'
 	));
 }
 else
@@ -557,13 +632,15 @@ $group->add(new Form_Input(
 	'text',
 	$pconfig['ldap_authcn']
 ))->setHelp('Note: Semi-Colon separated. This will be prepended to the search '.
-	'base dn above or you can specify full container path containing a dc= '.
+	'base dn above or the full container path can be specified containing a dc= '.
 	'component.<br/>Example: CN=Users;DC=example,DC=com or OU=Staff;OU=Freelancers');
 
 $group->add(new Form_Button(
 	'Select',
-	'Select a container'
-))->removeClass('btn-primary')->addClass('btn-default');
+	'Select a container',
+	null,
+	'fa-search'
+))->setAttribute('type','button')->addClass('btn-info');
 
 $section->add($group);
 
@@ -683,7 +760,7 @@ $section->addInput(new Form_Checkbox(
 $form->add($section);
 
 // ==== RADIUS section ========================================================
-$section = new Form_Section('Radius Server Settings');
+$section = new Form_Section('RADIUS Server Settings');
 $section->addClass('toggle-radius collapse');
 
 $section->addInput(new Form_Input(
@@ -728,7 +805,7 @@ $section->addInput(new Form_Input(
 	$pconfig['radius_timeout']
 ))->setHelp('This value controls how long, in seconds, that the RADIUS '.
 	'server may take to respond to an authentication request. If left blank, the '.
-	'default value is 5 seconds. NOTE: If you are using an interactive two-factor '.
+	'default value is 5 seconds. NOTE: If using an interactive two-factor '.
 	'authentication system, increase this timeout to account for how long it will '.
 	'take the user to receive and enter a token.');
 
@@ -743,11 +820,19 @@ if (isset($id) && $a_server[$id])
 }
 
 $form->add($section);
+
+// Create a largely empty modal to show the available containers. We will populate it via AJAX later
+$modal = new Modal("LDAP containers", "containers", true);
+
+$form->add($modal);
+
 print $form;
 ?>
 <script type="text/javascript">
 //<![CDATA[
-events.push(function(){
+events.push(function() {
+
+	// Create an AJAX request (to this page) to get the container list and controls
 	function select_clicked() {
 		if (document.getElementById("ldap_port").value == '' ||
 			document.getElementById("ldap_host").value == '' ||
@@ -765,26 +850,73 @@ events.push(function(){
 				return;
 			}
 		}
-		var url = 'system_usermanager_settings_ldapacpicker.php?';
-		url += 'port=' + document.getElementById("ldap_port").value;
-		url += '&host=' + document.getElementById("ldap_host").value;
-		url += '&scope=' + document.getElementById("ldap_scope").value;
-		url += '&basedn=' + document.getElementById("ldap_basedn").value;
-		url += '&binddn=' + document.getElementById("ldap_binddn").value;
-		url += '&bindpw=' + document.getElementById("ldap_bindpw").value;
-		url += '&urltype=' + document.getElementById("ldap_urltype").value;
-		url += '&proto=' + document.getElementById("ldap_protver").value;
-		url += '&authcn=' + document.getElementById("ldapauthcontainers").value;
-		<?php if (count($a_ca) > 0): ?>
-			url += '&cert=' + document.getElementById("ldap_caref").value;
-		<?php else: ?>
-			url += '&cert=';
-		<?php endif; ?>
 
-		var oWin = window.open(url, "pfSensePop", "width=620,height=400,top=150,left=150");
-		if (oWin == null || typeof(oWin) == "undefined") {
-			alert("<?=gettext('Popup blocker detected.	Action aborted.');?>");
-		}
+		var ajaxRequest;
+		var authserver = $('#authmode').val();
+		var cert;
+
+<?php if (count($a_ca) > 0): ?>
+			cert = $('#ldap_caref').val();
+<?php else: ?>
+			cert = '';
+<?php endif; ?>
+/*
+		$('#containers').modal('show');
+		$('#serverlist').parent('div').prev('label').remove();
+		$('#serverlist').parent('div').removeClass("col-sm-10");
+		$('#serverlist').parent('div').addClass("col-sm-12");
+*/
+		ajaxRequest = $.ajax(
+			{
+				url: "/system_authservers.php",
+				type: "post",
+				data: {
+					ajax: 	"ajax",
+					port: 	$('#ldap_port').val(),
+					host: 	$('#ldap_host').val(),
+					scope: 	$('#ldap_scope').val(),
+					basedn: $('#ldap_basedn').val(),
+					binddn: $('#ldap_binddn').val(),
+					bindpw: $('#ldap_bindpw').val(),
+					urltype:$('#ldap_urltype').val(),
+					proto:  $('#ldap_protver').val(),
+					authcn: $('#ldapauthcontainers').val(),
+					cert:   cert
+				}
+			}
+		);
+
+		// Deal with the results of the above ajax call
+		ajaxRequest.done(function (response, textStatus, jqXHR) {
+			$('#containers').replaceWith(response);
+
+			$('#containers').modal('show');
+
+			// The button handler needs to be here because until the modal has been populated
+			// the controls we need to attach handlers to do not exist
+			$('#svcontbtn').prop("type", "button");
+			$('#svcontbtn').removeAttr("href");
+
+			$('#svcontbtn').click(function () {
+				var ous = $('[id^=ou]').length;
+				var i;
+
+				$('#ldapauthcontainers').val("");
+
+				for (i = 0; i < ous; i++) {
+					if ($('#ou' + i).prop("checked")) {
+						if ($('#ldapauthcontainers').val() != "") {
+							$('#ldapauthcontainers').val($('#ldapauthcontainers').val() +";");
+						}
+
+						$('#ldapauthcontainers').val($('#ldapauthcontainers').val() + $('#ou' + i).val());
+					}
+				}
+
+				$('#containers').modal('hide');
+			});
+		});
+
 	}
 
 	function set_ldap_port() {
@@ -827,7 +959,6 @@ events.push(function(){
 <?php endif; ?>
 
 	hideClass('ldapanon', $('#ldap_anon').prop('checked'));
-	$("#Select").prop('type','button');
 	hideClass('extended', !$('#ldap_extended_enabled').prop('checked'));
 
 	if($('#ldap_port').val() == "")

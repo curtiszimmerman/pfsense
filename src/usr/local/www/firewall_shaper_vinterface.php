@@ -55,8 +55,8 @@
 
 ##|+PRIV
 ##|*IDENT=page-firewall-trafficshaper-limiter
-##|*NAME=Firewall: Traffic Shaper: Limiter
-##|*DESCR=Allow access to the 'Firewall: Traffic Shaper: Limiter' page.
+##|*NAME=Firewall: Traffic Shaper: Limiters
+##|*DESCR=Allow access to the 'Firewall: Traffic Shaper: Limiters' page.
 ##|*MATCH=firewall_shaper_vinterface.php*
 ##|-PRIV
 
@@ -70,7 +70,7 @@ if ($_GET['reset'] != "") {
 	exit;
 }
 
-$pgtitle = array(gettext("Firewall"), gettext("Traffic Shaper"), gettext("Limiter"));
+$pgtitle = array(gettext("Firewall"), gettext("Traffic Shaper"), gettext("Limiters"));
 $shortcut_section = "trafficshaper-limiters";
 $dfltmsg = false;
 
@@ -140,7 +140,7 @@ if ($_GET) {
 					header("Location: firewall_shaper_vinterface.php");
 					exit;
 				}
-				$output_form .= $queue->build_form();
+				$sform= $queue->build_form();
 			} else {
 				$input_errors[] = sprintf(gettext("No queue with name %s was found!"), $qname);
 				$output_form .= $dn_default_shaper_msg;
@@ -170,27 +170,27 @@ if ($_GET) {
 			if (write_config()) {
 				$retval = 0;
 				$retval = filter_configure();
-				$savemsg = get_std_save_message($retval);
 
-			if (stristr($retval, "error") != true) {
-				$savemsg = get_std_save_message($retval);
+				if (stristr($retval, "error") != true) {
+					$savemsg = get_std_save_message($retval);
+					$class = 'success';
+				} else {
+					$savemsg = $retval;
+					$class = 'danger';
+				}
+
 			} else {
-				$savemsg = $retval;
+				$savemsg = gettext("Unable to write config.xml (Access Denied?).");
+				$class = 'danger';
 			}
 
-		} else {
-			$savemsg = gettext("Unable to write config.xml (Access Denied?)");
-		}
-
-		$dfltmsg = true;
+			$dfltmsg = true;
 
 		break;
 	case "add":
 		if ($dnpipe) {
 			$q = new dnqueue_class();
 			$q->SetPipe($pipe);
-			$output_form .= "<input type=\"hidden\" name=\"parentqueue\" id=\"parentqueue\"";
-			$output_form .= " value=\"".$pipe."\" />";
 		} else if ($addnewpipe) {
 			$q = new dnpipe_class();
 			$q->SetQname($pipe);
@@ -200,10 +200,19 @@ if ($_GET) {
 
 		if ($q) {
 			$sform = $q->build_form();
+			if ($dnpipe) {
+				$sform->addGlobal(new Form_Input(
+					'parentqueue',
+					null,
+					'hidden',
+					$pipe
+				));
+			}
 			$newjavascript = $q->build_javascript();
 			unset($q);
 			$newqueue = true;
 		}
+
 		break;
 	case "show":
 		if ($queue) {
@@ -248,7 +257,7 @@ if ($_POST) {
 
 	if ($addnewpipe) {
 		if (!empty($dummynet_pipe_list[$qname])) {
-			$input_errors[] = gettext("You cannot name a child queue with the same name as a parent limiter");
+			$input_errors[] = gettext("A child queue cannot be named the same as a parent limiter.");
 		} else {
 			$dnpipe =& new dnpipe_class();
 
@@ -274,7 +283,7 @@ if ($_POST) {
 		}
 	} else if ($parentqueue) { /* Add a new queue */
 		if (!empty($dummynet_pipe_list[$qname])) {
-			$input_errors[] = gettext("You cannot name a child queue with the same name as a parent limiter");
+			$input_errors[] = gettext("A child queue cannot be named the same as a parent limiter.");
 		} else if ($dnpipe) {
 			$tmppath =& $dnpipe->GetLink();
 			array_push($tmppath, $qname);
@@ -298,12 +307,13 @@ if ($_POST) {
 
 		$retval = 0;
 		$retval = filter_configure();
-		$savemsg = get_std_save_message($retval);
 
 		if (stristr($retval, "error") != true) {
 			$savemsg = get_std_save_message($retval);
+			$class = 'success';
 		} else {
 			$savemsg = $retval;
+			$class = 'danger';
 		}
 
 		/* XXX: TODO Make dummynet pretty graphs */
@@ -365,10 +375,9 @@ $tree .= "</ul>";
 
 $output = "<table summary=\"output form\">";
 $output .= $output_form;
-$closehead = false;
 include("head.inc");
 ?>
-<script type="text/javascript" src="./tree/tree.js"></script>
+<script type="text/javascript" src="./vendor/tree/tree.js"></script>
 
 <script type="text/javascript">
 //<![CDATA[
@@ -395,21 +404,20 @@ if ($input_errors) {
 }
 
 if ($savemsg) {
-	print_info_box($savemsg, 'success');
+	print_info_box($savemsg, $class);
 }
 
 if (is_subsystem_dirty('shaper')) {
-	print_info_box_np(gettext("The traffic shaper configuration has been changed. You must apply the changes in order for them to take effect."));
+	print_apply_box(gettext("The traffic shaper configuration has been changed.") . "<br />" . gettext("The changes must be applied for them to take effect."));
 }
 
 $tab_array = array();
 $tab_array[] = array(gettext("By Interface"), false, "firewall_shaper.php");
 $tab_array[] = array(gettext("By Queue"), false, "firewall_shaper_queues.php");
-$tab_array[] = array(gettext("Limiter"), true, "firewall_shaper_vinterface.php");
+$tab_array[] = array(gettext("Limiters"), true, "firewall_shaper_vinterface.php");
 $tab_array[] = array(gettext("Wizards"), false, "firewall_shaper_wizards.php");
 display_top_tabs($tab_array);
 ?>
-
 <div class="table-responsive">
 	<table class="table">
 		<tbody>
@@ -417,46 +425,52 @@ display_top_tabs($tab_array);
 				<td class="col-md-1">
 					<?=$tree?>
 					<a href="firewall_shaper_vinterface.php?pipe=new&amp;action=add" class="btn btn-sm btn-success">
+						<i class="fa fa-plus icon-embed-btn"></i>
 						<?=gettext('New Limiter')?>
 					</a>
 				</td>
 				<td>
 <?php
 
-if ($dfltmsg) {
-	print_info_box($dn_default_shaper_msg);
-} else {
+if (!$dfltmsg) {
 	// Add global buttons
 	if (!$dontshow || $newqueue) {
-		if ($can_add || $addnewaltq) {
+		if ($can_add && ($action != "add")) {
 			if ($queue) {
-				$url = 'href="firewall_shaper_vinterface.php?pipe=' . $pipe . '&queue=' . $queue->GetQname() . '&action=add';
+				$url = 'firewall_shaper_vinterface.php?pipe=' . $pipe . '&queue=' . $queue->GetQname() . '&action=add';
 			} else {
-				$url = 'firewall_shaper.php?pipe='. $pipe . '&action=add';
+				$url = 'firewall_shaper_vinterface.php?pipe='. $pipe . '&action=add';
 			}
 
 			$sform->addGlobal(new Form_Button(
 				'add',
 				'Add new Queue',
-				$url
-			))->removeClass('btn-default')->addClass('btn-success');
+				$url,
+				'fa-plus'
+			))->addClass('btn-success');
 		}
 
-		if ($queue) {
-			$url = 'firewall_shaper_vinterface.php?pipe='. $pipe . '&queue=' . $queue->GetQname() . '&action=delete';
-		} else {
-			$url = 'firewall_shaper_vinterface.php?pipe='. $pipe . '&action=delete';
-		}
+		if ($action != "add") {
+			if ($queue) {
+				$url = 'firewall_shaper_vinterface.php?pipe='. $pipe . '&queue=' . $queue->GetQname() . '&action=delete';
+			} else {
+				$url = 'firewall_shaper_vinterface.php?pipe='. $pipe . '&action=delete';
+			}
 
-		$sform->addGlobal(new Form_Button(
-			'delete',
-			$queue ? 'Delete this queue':'Delete',
-			$url
-		))->removeClass('btn-default')->addClass('btn-danger');
+			$sform->addGlobal(new Form_Button(
+				'delete',
+				($queue && ($qname != $pipe)) ? 'Delete this queue':'Delete Limiter',
+				$url,
+				'fa-trash'
+			))->addClass('btn-danger');
+		}
 	}
 
 	// Print the form
-	print($sform);
+	if ($sform) {
+		$sform->setAction("firewall_shaper_vinterface.php");
+		print($sform);
+	}
 
 }
 ?>
@@ -465,7 +479,17 @@ if ($dfltmsg) {
 		</tbody>
 	</table>
 </div>
-
+<?php
+if ($dfltmsg) {
+?>
+<div>
+	<div class="infoblock">
+		<?php print_info_box($dn_default_shaper_msg, 'info', false); ?>
+	</div>
+</div>
+<?php
+}
+?>
 <script type="text/javascript">
 //<![CDATA[
 events.push(function() {
@@ -476,8 +500,8 @@ events.push(function() {
     }
 
 	function change_masks() {
-		disableInput('maskbits', ($('#scheduler').val() == 'none'));
-		disableInput('maskbitsv6', ($('#scheduler').val() == 'none'));
+		disableInput('maskbits', ($('#mask').val() == 'none'));
+		disableInput('maskbitsv6', ($('#mask').val() == 'none'));
 	}
 
 	// ---------- On initial page load ------------------------------------------------------------
@@ -486,7 +510,7 @@ events.push(function() {
 
 	// ---------- Click checkbox handlers ---------------------------------------------------------
 
-    $('#scheduler').on('change', function() {
+    $('#mask').on('change', function() {
         change_masks();
     });
 });

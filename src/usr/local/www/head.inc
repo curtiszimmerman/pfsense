@@ -61,16 +61,16 @@ header('Content-Type: text/html; charset=utf-8');
 $pagetitle = gentitle($pgtitle);
 
 if (isset($config['system']['webgui']['pagenamefirst'])) {
-	$tabtitle = $pagetitle . " - " . $config['system']['hostname'] . "." . $config['system']['domain'];
+	$tabtitle = $pagetitle . " - " . htmlspecialchars($config['system']['hostname'] . "." . $config['system']['domain']);
 } else {
-	$tabtitle = $config['system']['hostname'] . "." . $config['system']['domain'] . " - " . $pagetitle;
+	$tabtitle = htmlspecialchars($config['system']['hostname'] . "." . $config['system']['domain']) . " - " . $pagetitle;
 }
 
-$cssfile = "/bootstrap/css/pfSense.css";
+$cssfile = "/css/pfSense.css";
 
 if (isset($config['system']['webgui']['webguicss'])) {
-	if (file_exists("/usr/local/www/bootstrap/css/" . $config['system']['webgui']['webguicss'])) {
-		$cssfile = "/bootstrap/css/" . $config['system']['webgui']['webguicss'];
+	if (file_exists("/usr/local/www/css/" . $config['system']['webgui']['webguicss'])) {
+		$cssfile = "/css/" . $config['system']['webgui']['webguicss'];
 	}
 }
 
@@ -85,8 +85,8 @@ if (!isset($config['system']['webgui']['dashboardcolumns'])) {
 <head>
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<link rel="stylesheet" href="<?=$cssfile?>" />
-	<link rel="stylesheet" href="/font-awesome/css/font-awesome.min.css">
-	<link rel="stylesheet" href="/sortable/sortable-theme-bootstrap.css">
+	<link rel="stylesheet" href="/vendor/font-awesome/css/font-awesome.min.css">
+	<link rel="stylesheet" href="/vendor/sortable/sortable-theme-bootstrap.css">
 	<title><?=$tabtitle?></title>
 	<script type="text/javascript">
 	//<![CDATA[
@@ -125,55 +125,98 @@ if (($pagename == "pkg.php") || ($pagename == "pkg_edit.php") || ($pagename == "
 			$pagename = $xmlfile[1];
 		}
 	}
+} else if ($pagename == "status_logs.php") {
+	$param_split = explode('&', $uri_split[2]);
+	foreach ($param_split as $param) {
+		if (substr($param, 0, 8) == "logfile=") {
+			$logtype = explode('=', $param);
+			$pagename .= '-' . $logtype[1];
+		}
+	}
 }
 
 // Build the full help URL.
 $helpurl .= "{$g['help_base_url']}?page={$pagename}";
 
+/*
+ * Read files from $g['ext_menu_path']/*.xml and fill an array with menu info
+ */
+function read_ext_menu_path_data() {
+	global $g;
+
+	$result = array();
+
+	if (!is_dir($g['ext_menu_path'])) {
+		return $result;
+	}
+
+	foreach (glob("{$g['ext_menu_path']}/*.xml") as $menu_xml) {
+		$xml_data = parse_xml_config_pkg($menu_xml, "packagegui");
+		if (empty($xml_data['menu'])) {
+			continue;
+		}
+		foreach ($xml_data['menu'] as $menu) {
+			$result[] = $menu;
+		}
+	}
+
+	return $result;
+}
+
 // Create a menu entry of any installed packages in the specified category
 // (Now reads the menu information from $config['installedpackages']['menu'] only)
 function return_ext_menu($section) {
-	global $config;
+	global $config, $ext_menu_path_data;
 
 	$htmltext = "";
 	$extarray = array();
+	$ext_menu_entries = array();
 
 	if ((!empty($config['installedpackages']['package'])) && (!empty($config['installedpackages']['menu']))) {
 		foreach ($config['installedpackages']['menu'] as $menu) {
 //			print('Name: ' . $menu['name'] . ', Pkg category: ' . $menu['category'] . ', Section: ' . $section . '<br />');
-			if ($menu['section'] != $section) {
-				continue;
+			if ($menu['section'] == $section) {
+				$ext_menu_entries[] = $menu;
 			}
+		}
+	}
 
-			if ($menu['url'] != "") {
-				$test_url = $menu['url'];
-				$addresswithport = getenv("HTTP_HOST");
-				$colonpos = strpos($addresswithport, ":");
+	foreach ($ext_menu_path_data as $menu) {
+		if ($menu['section'] == $section) {
+			$ext_menu_entries[] = $menu;
+		}
+	}
 
-				if ($colonpos !== false) {
-					//my url is actually just the IP address of the pfsense box
-					$myurl = substr($addresswithport, 0, $colonpos);
-				} else {
-					$myurl = $addresswithport;
-				}
-				$description = str_replace('$myurl', $myurl, $menu['url']);
+	foreach ($ext_menu_entries as $menu) {
+		if ($menu['url'] != "") {
+			$test_url = $menu['url'];
+			$addresswithport = getenv("HTTP_HOST");
+			$colonpos = strpos($addresswithport, ":");
+
+			if ($colonpos !== false) {
+				//my url is actually just the IP address of the pfsense box
+				$myurl = substr($addresswithport, 0, $colonpos);
 			} else {
-				$description = '/pkg.php?xml=' . $menu['configfile'];
-				$test_url=$description;
+				$myurl = $addresswithport;
 			}
+			$description = str_replace('$myurl', $myurl, $menu['url']);
+		} else {
+			$description = '/pkg.php?xml=' . $menu['configfile'];
+			$test_url=$description;
+		}
 
-			if (isAllowedPage($test_url)) {
-				$extarray[] = array($menu['name'], $description);
-			}
+		if (isAllowedPage($test_url)) {
+			$extarray[] = array($menu['name'], $description);
 		}
 	}
 
 	return $extarray;
 }
 
-function output_menu($arrayitem, $target = null) {
+function output_menu($arrayitem, $target = null, $section = "") {
 	foreach ($arrayitem as $item) {
-		if (isAllowedPage($item[1]) || $item[1] == "/index.php?logout") {
+		/* If the user has access to help pages, also show the full help menu. See #5909 */
+		if (isAllowedPage($item[1]) || $item[1] == "/index.php?logout" || (($section == "Help") && isAllowedPage("help.php"))) {
 			$attr = sprintf("href=\"%s\"", htmlentities($item[1]));
 			if ($target) {
 				$attr .= sprintf(" target=\"%s\"", htmlentities($target));
@@ -191,6 +234,8 @@ function output_menu($arrayitem, $target = null) {
 	}
 }
 
+$ext_menu_path_data = read_ext_menu_path_data();
+
 // System
 $system_menu = array();
 $system_menu[] = array(gettext("Logout"), "/index.php?logout");
@@ -199,11 +244,11 @@ $system_menu[] = array(gettext("Update"), "/pkg_mgr_install.php?id=firmware");
 $system_menu[] = array(gettext("General Setup"), "/system.php");
 $system_menu[] = array(gettext("High Avail. Sync"), "/system_hasync.php");
 if ($g['platform'] == $g['product_name'] or $g['platform'] == "nanobsd") {
-	$system_menu[] = array(gettext("Packages"), "/pkg_mgr_installed.php");
+	$system_menu[] = array(gettext("Package Manager"), "/pkg_mgr_installed.php");
 }
 $system_menu[] = array(gettext("Setup Wizard"), "/wizard.php?xml=setup_wizard.xml");
 $system_menu[] = array(gettext("Routing"), "/system_gateways.php");
-$system_menu[] = array(gettext("Cert Manager"), "/system_camanager.php");
+$system_menu[] = array(gettext("Cert. Manager"), "/system_camanager.php");
 if (!isAllowedPage("system_usermanager.php*")) {
 	$system_menu[] = array(gettext("User Manager"), "/system_usermanager_passwordmg.php");
 } else {
@@ -245,7 +290,7 @@ $services_menu[] = array(gettext("DHCPv6 Relay"), "/services_dhcpv6_relay.php");
 
 if ($g['services_dhcp_server_enable']) {
 	$services_menu[] = array(gettext("DHCP Server"), "/services_dhcp.php");
-	$services_menu[] = array(gettext("DHCPv6 Server/RA"), "/services_dhcpv6.php");
+	$services_menu[] = array(htmlspecialchars(gettext("DHCPv6 Server & RA")), "/services_dhcpv6.php");
 }
 
 $services_menu[] = array(gettext("Dynamic DNS"), "/services_dyndns.php");
@@ -262,7 +307,7 @@ if (count($config['interfaces']) > 1) {
 	$services_menu[] = array(gettext("UPnP &amp; NAT-PMP"), "/pkg_edit.php?xml=miniupnpd.xml");
 }
 
-$services_menu[] = array(gettext("Wake on LAN"), "/services_wol.php");
+$services_menu[] = array(gettext("Wake-on-LAN"), "/services_wol.php");
 $services_menu = msort(array_merge($services_menu, return_ext_menu("Services")), 0);
 
 // VPN
@@ -293,7 +338,6 @@ if ($g['platform'] == $g['product_name']) {
 }
 
 $status_menu[] = array(gettext("Queues"), "/status_queues.php");
-$status_menu[] = array(gettext("RRD Graphs"), "/status_rrd_graph.php");
 $status_menu[] = array(gettext("Services"), "/status_services.php");
 $status_menu[] = array(gettext("System Logs"), "/status_logs.php");
 $status_menu[] = array(gettext("Traffic Graph"), "/status_graph.php?if=wan");
@@ -320,10 +364,10 @@ $status_menu = msort(array_merge($status_menu, return_ext_menu("Status")), 0);
 $diagnostics_menu = array();
 $diagnostics_menu[] = array(gettext("ARP Table"), "/diag_arp.php");
 $diagnostics_menu[] = array(gettext("Authentication"), "/diag_authentication.php");
-$diagnostics_menu[] = array(gettext("Backup/Restore"), "/diag_backup.php");
-$diagnostics_menu[] = array(gettext("Command Prompt"), "/exec.php");
+$diagnostics_menu[] = array(htmlspecialchars(gettext("Backup & Restore")), "/diag_backup.php");
+$diagnostics_menu[] = array(gettext("Command Prompt"), "/diag_command.php");
 $diagnostics_menu[] = array(gettext("DNS Lookup"), "/diag_dns.php");
-$diagnostics_menu[] = array(gettext("Edit File"), "/edit.php");
+$diagnostics_menu[] = array(gettext("Edit File"), "/diag_edit.php");
 $diagnostics_menu[] = array(gettext("Factory Defaults"), "/diag_defaults.php");
 
 if (file_exists("/var/run/gmirror_active")) {
@@ -340,7 +384,7 @@ $diagnostics_menu[] = array(gettext("pfInfo"), "/diag_pf_info.php");
 $diagnostics_menu[] = array(gettext("pfTop"), "/diag_pftop.php");
 $diagnostics_menu[] = array(gettext("Reboot"), "/diag_reboot.php");
 $diagnostics_menu[] = array(gettext("Routes"), "/diag_routes.php");
-$diagnostics_menu[] = array(gettext("SMART Status"), "/diag_smart.php");
+$diagnostics_menu[] = array(gettext("S.M.A.R.T. Status"), "/diag_smart.php");
 $diagnostics_menu[] = array(gettext("Sockets"), "/diag_sockets.php");
 $diagnostics_menu[] = array(gettext("States"), "/diag_dump_states.php");
 $diagnostics_menu[] = array(gettext("States Summary"), "/diag_states_summary.php");
@@ -374,7 +418,6 @@ if (!$g['disablehelpmenu']) {
 	$help_menu[] = array(gettext("Developers Wiki"), "https://www.pfsense.org/j.php?jumpto=devwiki");
 	$help_menu[] = array(gettext("Paid Support"), "https://www.pfsense.org/j.php?jumpto=portal");
 	$help_menu[] = array(gettext("pfSense Book"), "https://www.pfsense.org/j.php?jumpto=book");
-	$help_menu[] = array(gettext("Search Portal"), "https://www.pfsense.org/j.php?jumpto=searchportal");
 	$help_menu[] = array(gettext("FreeBSD Handbook"), "https://www.pfsense.org/j.php?jumpto=fbsdhandbook");
 	$help_menu = msort(array_merge($help_menu, return_ext_menu("Help")), 0);
 }
@@ -401,7 +444,7 @@ if (($pagename === "index.php") && ($numColumns > 2)) {
 				<span class="icon-bar"></span>
 				<span class="icon-bar"></span>
 			</button>
-			<a class="navbar-brand" href="/"><img src="/logo.png" alt="pfSense" /></a>
+			<a class="navbar-brand" href="/"><img src="/logo.png" alt="pfSense" title="<?=$config['system']['hostname'] . '.' . $config['system']['domain']?>"/></a>
 		</div>
 		<div class="collapse navbar-collapse" id="pf-navbar">
 			<ul class="nav navbar-nav">
@@ -424,9 +467,11 @@ if (($pagename === "index.php") && ($numColumns > 2)) {
 						<?=gettext($item['name'])?>
 						<span class="caret"></span>
 					</a>
-					<ul class="dropdown-menu" role="menu"><?=output_menu($item['menu'], $item['href'])?></ul>
+					<ul class="dropdown-menu" role="menu"><?=output_menu($item['menu'], $item['href'], $item['name'])?></ul>
 				</li>
 			<?php endforeach?>
+			</ul>
+			<ul class="nav navbar-nav navbar-right">
 				<?php if (are_notices_pending()):?>
 					<?php $notices = get_notices()?>
 					<li class="dropdown">
@@ -461,9 +506,62 @@ if (($pagename === "index.php") && ($numColumns > 2)) {
 	}
 ?>
 		<ul class="context-links">
-<?php
 
-if (!$hide_service_status && !empty($shortcuts[$shortcut_section]['service'])) {
+	<?php if (isset($widgets)): ?>
+		<li>
+			<a href="#" title="<?=gettext("Save dashboard layout")?>" id="btnstore" class="invisible">
+				<i class="fa fa-save icon-pointer"></i>
+			</a>
+		</li>
+	<?php endif?>
+
+	<?php if ($dashboard_available_widgets_hidden): ?>
+		<li>
+			<a onclick="$('#widget-available').toggle(360);" title="<?=gettext("Available widgets")?>">
+				<i class="fa fa-plus icon-pointer"></i>
+			</a>
+		</li>
+	<?php endif?>
+
+	<?php if ($system_logs_filter_form_hidden): ?>
+		<li>
+			<a onclick="$('#filter-form').toggle(360)" title="<?=gettext("Log filter")?>">
+				<i class="fa fa-filter icon-pointer"></i>
+			</a>
+		</li>
+	<?php endif ?>
+
+	<?php if ($system_logs_manage_log_form_hidden):
+			/* If the user does not have access to status logs settings page, then exclude the manage log panel icon from the title bar. */
+			if (isAllowedPage("status_logs_settings.php")) {
+	?>
+		<li>
+			<a onclick="$('#manage-log-form').toggle(360)" title="<?=gettext("Manage log")?>">
+				<i class="fa fa-wrench icon-pointer"></i>
+			</a>
+		</li>
+	<?php	}
+		endif
+	?>
+
+	<?php if ($monitoring_settings_form_hidden): ?>
+		<li>
+			<a onclick="$('#monitoring-settings-form').toggle(360);" title="<?=gettext("Settings")?>">
+				<i class="fa fa-wrench icon-pointer"></i>
+			</a>
+		</li>
+	<?php endif?>
+
+	<?php if ($status_monitoring): ?>
+		<li>
+			<a class="update-graph" title="<?=gettext("Refresh Graph")?>">
+				<i class="fa fa-repeat icon-pointer"></i>
+			</a>
+		</li>
+	<?php endif?>
+
+<?php
+if (!$hide_service_status && !empty($shortcuts[$shortcut_section]['service']) && isAllowedPage('status_services.php')) {
 	$ssvc = array();
 	switch ($shortcut_section) {
 		case "openvpn":
@@ -477,18 +575,26 @@ if (!$hide_service_status && !empty($shortcuts[$shortcut_section]['service'])) {
 	}
 	if (!empty($ssvc)) {
 		// echo '<li>'. get_service_status_icon($ssvc, false). '</li>'; TODO: Add missing function
-		echo '<li>'. get_service_control_GET_links($ssvc, false). '</li>';
+		echo '<li>'. get_service_control_links($ssvc, false). '</li>';
 	}
 }
 
-echo '<li>'. get_shortcut_main_link($shortcut_section, false). '</li>';
-echo '<li>'. get_shortcut_status_link($shortcut_section, false). '</li>';
-echo '<li>'. get_shortcut_log_link($shortcut_section, false). '</li>';
+if (('' != ($link = get_shortcut_main_link($shortcut_section, false))) && (isAllowedPage($shortcuts[$shortcut_section]['main']))) {
+	echo '<li>' . $link . '</li>';
+}
+
+if (('' != ($link = get_shortcut_status_link($shortcut_section, false))) && (isAllowedPage($shortcuts[$shortcut_section]['status']))) {
+	echo '<li>' . $link . '</li>';
+}
+
+if (('' != ($link = get_shortcut_log_link($shortcut_section, false))) && (isAllowedPage($shortcuts[$shortcut_section]['log']))) {
+	echo '<li>' . $link . '</li>';
+}
 
 ?>
 	<?php if (!$g['disablehelpicon']): ?>
 		<li>
-			<a href="<?=$helpurl?>" title="<?=gettext("Help for items on this page")?>" class="help-icon">
+			<a href="<?=$helpurl?>" target="_blank" title="<?=gettext("Help for items on this page")?>">
 				<i class="fa fa-question-circle"></i>
 			</a>
 		</li>
@@ -497,25 +603,23 @@ echo '<li>'. get_shortcut_log_link($shortcut_section, false). '</li>';
 	</header>
 <?php
 /* if upgrade in progress, alert user */
-if (is_subsystem_dirty('packagelock') || file_exists('/conf/needs_package_sync' && platform_booting())) {
+if (is_subsystem_dirty('packagelock') || (file_exists('/conf/needs_package_sync') && platform_booting())) {
 	if (file_exists('/conf/needs_package_sync') && platform_booting()) {
-		$info_text = sprintf(gettext("%s is booting then packages will be reinstalled in the background.<p>Do not make changes in the GUI until this is complete."), $g['product_name']);
+		$warning_text = sprintf(gettext("<p>%s is booting, then packages will be reinstalled in the background.</p><p>Do not make changes in the GUI until this is complete.</p>"), $g['product_name']);
 	} else {
 		$pgtitle = array(gettext("System"), gettext("Package Manager"));
-		$info_text = gettext("Packages are currently being reinstalled in the background.<p>Do not make changes in the GUI until this is complete.");
-		$info_text .= gettext("<p>If the above message is still displayed after a couple of hours, use the 'Clear Package Lock' button on the <a href='diag_backup.php' title='Backup/Restore'>Backup/Restore page</a> and reinstall packages manually.");
+		$warning_text = gettext("<p>Packages are currently being reinstalled in the background.</p><p>Do not make changes in the GUI until this is complete.</p>");
+		$warning_text .= sprintf(gettext('<p>If the above message is still displayed after a couple of hours, use the \'Clear Package Lock\' button on the <a href="diag_backup.php" title="%1$s &gt; %2$s">%1$s &gt; %2$s</a> page and reinstall packages manually.</p>'), gettext('Diagnostics'), htmlspecialchars(gettext('Backup & Restore')));
 	}
 
-	print_info_box($info_text);
+	print_info_box($warning_text);
 }
-
-$pgtitle_output = true;
 
 /*	If this page is being remotely managed then do not allow the loading of the contents. */
 if ($config['remote_managed_pages']['item']) {
 	foreach ($config['remote_managed_pages']['item'] as $rmp) {
 		if ($rmp == $_SERVER['SCRIPT_NAME']) {
-			print_info_box_np("This page is currently being managed by a remote machine.");
+			print_info_box(gettext("This page is currently being managed by a remote machine."));
 			include("foot.inc");
 			exit;
 		}
@@ -534,7 +638,7 @@ if (are_notices_pending()):?>
 					<span aria-hidden="true">&times;</span>
 				</button>
 
-				<h3 class="modal-title" id="myModalLabel">Notices</h3>
+				<h3 class="modal-title" id="myModalLabel"><?=gettext("Notices")?></h3>
 			</div>
 
 			<div class="modal-body">
@@ -561,10 +665,10 @@ if (are_notices_pending()):?>
 					<li>
 						<b>
 <?php if (!empty($notice['url'])):?>
-							<a href="<?=$notice['url']?>"><?=$notice['id']?></a> -
+							<a href="<?=htmlspecialchars($notice['url'])?>"><?=htmlspecialchars($notice['id'])?></a> -
 <?php endif;?>
 						</b>
-						<?=$notice['notice']?>
+						<?=htmlspecialchars($notice['notice'])?>
 						<i>@ <?=date('Y-m-d H:i:s', $notice['time'])?></i>
 					</li>
 <?php	endforeach;?>
@@ -573,8 +677,8 @@ if (are_notices_pending()):?>
 			</div>
 
 			<div class="modal-footer">
-				<button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
-				<button type="button" id="clearallnotices" class="btn btn-primary"><?=gettext("Mark all as read")?></button>
+				<button type="button" class="btn btn-info" data-dismiss="modal"><i class="fa fa-times icon-embed-btn"></i><?=gettext("Close")?></button>
+				<button type="button" id="clearallnotices" class="btn btn-primary"><i class="fa fa-trash-o icon-embed-btn"></i><?=gettext("Mark All as Read")?></button>
 			</div>
 		</div>
 	</div>

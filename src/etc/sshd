@@ -46,9 +46,7 @@
 	$sshConfigDir = "/etc/ssh";
 
 	$keys = array(
-		array('type' => 'rsa1',    'suffix' => ''),
 		array('type' => 'rsa',     'suffix' => 'rsa_'),
-		array('type' => 'dsa',     'suffix' => 'dsa_'),
 		array('type' => 'ecdsa',   'suffix' => 'ecdsa_'),
 		array('type' => 'ed25519', 'suffix' => 'ed25519_')
 	);
@@ -107,6 +105,9 @@
 	$sshconf .= "ClientAliveInterval 30\n";
 	$sshconf .= "UseDNS no\n";
 	$sshconf .= "X11Forwarding no\n";
+	foreach ($keys as $key) {
+		$sshconf .= "HostKey {$sshConfigDir}/ssh_host_{$key['suffix']}key\n";
+	}
 	if (isset($config['system']['ssh']['sshdkeyonly'])) {
 		$sshconf .= "# Login via Key only\n";
 		$sshconf .= "PasswordAuthentication no\n";

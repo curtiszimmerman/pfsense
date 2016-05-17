@@ -146,7 +146,8 @@ if ($savemsg) {
 }
 
 $tab_array = array();
-$tab_array[] = array(gettext("NTP"), false, "services_ntpd.php");
+$tab_array[] = array(gettext("Settings"), false, "services_ntpd.php");
+$tab_array[] = array(gettext("ACLs"), false, "services_ntpd_acls.php");
 $tab_array[] = array(gettext("Serial GPS"), false, "services_ntpd_gps.php");
 $tab_array[] = array(gettext("PPS"), true, "services_ntpd_pps.php");
 display_top_tabs($tab_array);
@@ -161,59 +162,59 @@ $section->addInput(new Form_StaticText(
 	'A serial GPS may also be used, but the serial GPS driver would usually be the better option. ' .
 	'A PPS signal only provides a reference to the change of a second, so at least one other source to number the seconds is required.' . '<br /><br />' .
 	'At least 3 additional time sources should be configured under ' .
-	'<a href="services_ntpd.php">' . 'Services > NTP' . '</a>' . ' to reliably supply the time of each PPS pulse.'
+	'<a href="services_ntpd.php">' . 'Services > NTP > Settings' . '</a>' . ' to reliably supply the time of each PPS pulse.'
 ));
 
 $serialports = glob("/dev/cua?[0-9]{,.[0-9]}", GLOB_BRACE);
 
 if (!empty($serialports)) {
-    $splist = array();
+	$splist = array();
 
-    foreach ($serialports as $port) {
-    	$shortport = substr($port, 5);
-    	$splist[$shortport] = $shortport;
-    }
+	foreach ($serialports as $port) {
+		$shortport = substr($port, 5);
+		$splist[$shortport] = $shortport;
+	}
 
-    $section->addInput(new Form_Select(
-    	'ppsport',
-    	'Serial port',
-    	$pconfig['port'],
-    		$splist
-    ))->setHelp('All serial ports are listed, be sure to pick the port with the PPS source attached. ');
+	$section->addInput(new Form_Select(
+		'ppsport',
+		'Serial Port',
+		$pconfig['port'],
+			$splist
+	))->setHelp('All serial ports are listed, be sure to pick the port with the PPS source attached. ');
 }
 
 $section->addInput(new Form_Input(
 	'ppsfudge1',
-	'Fudge time',
+	'Fudge Time',
 	'text',
 	$pconfig['fudge1']
-))->setHelp('Fudge time is used to specify the PPS signal offset from the actual second such as the transmission delay between the transmitter and the receiver. (default: 0.0).');
+))->setHelp('Fudge time is used to specify the PPS signal offset from the actual second such as the transmission delay between the transmitter and the receiver (default: 0.0).');
 
 $section->addInput(new Form_Input(
 	'ppsstratum',
 	'Stratum',
 	'text',
 	$pconfig['stratum']
-))->setHelp('This may be used to change the PPS Clock stratum (default: 0). This may be useful if, for some reason, you want ntpd to prefer a different clock and just monitor this source.');
+))->setHelp('This may be used to change the PPS Clock stratum (default: 0). This may be useful to, for some reason, have ntpd prefer a different clock and just monitor this source.');
 
 $section->addInput(new Form_Checkbox(
 	'ppsflag2',
 	'Flags',
-	'Enable falling edge PPS signal processing (default: rising edge).',
+	'Enable falling edge PPS signal processing (default: unchecked, rising edge).',
 	$pconfig['flag2']
 ));
 
 $section->addInput(new Form_Checkbox(
 	'ppsflag3',
 	null,
-	'Enable kernel PPS clock discipline (default: disabled).',
+	'Enable kernel PPS clock discipline (default: unchecked).',
 	$pconfig['flag3']
 ));
 
 $section->addInput(new Form_Checkbox(
 	'ppsflag4',
 	null,
-	'Record a timestamp once for each second, useful for constructing Allan deviation plots (default: disabled).',
+	'Record a timestamp once for each second, useful for constructing Allan deviation plots (default: unchecked).',
 	$pconfig['flag4']
 ));
 

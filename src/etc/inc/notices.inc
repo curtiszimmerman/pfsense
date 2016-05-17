@@ -1,15 +1,12 @@
 <?php
-/****h* pfSense/notices
-	NAME
-		notices.inc - pfSense notice utilities
-	DESCRIPTION
-		This include contains the pfSense notice facilities.
-	HISTORY
-		$Id$
+/*
+	notices.inc
 
-	Copyright (C) 2009 Scott Ullrich (sullrich@gmail.com)
+	part of pfSense (https://www.pfsense.org)
 	Copyright (C) 2005 Colin Smith (ethethlay@gmail.com)
+	Copyright (c) 2005-2016 Electric Sheep Fencing, LLC.
 	All rights reserved.
+
 	Redistribution and use in source and binary forms, with or without
 	modification, are permitted provided that the following conditions are met:
 
@@ -17,19 +14,42 @@
 	   this list of conditions and the following disclaimer.
 
 	2. Redistributions in binary form must reproduce the above copyright
-	   notice, this list of conditions and the following disclaimer in the
-	   documentation and/or other materials provided with the distribution.
+	   notice, this list of conditions and the following disclaimer in
+	   the documentation and/or other materials provided with the
+	   distribution.
 
-	THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
-	INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
-	AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
-	AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
-	OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-	SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-	INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-	CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-	RISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-	POSSIBILITY OF SUCH DAMAGE.
+	3. All advertising materials mentioning features or use of this software
+	   must display the following acknowledgment:
+	   "This product includes software developed by the pfSense Project
+	   for use in the pfSense® software distribution. (http://www.pfsense.org/).
+
+	4. The names "pfSense" and "pfSense Project" must not be used to
+	   endorse or promote products derived from this software without
+	   prior written permission. For written permission, please contact
+	   coreteam@pfsense.org.
+
+	5. Products derived from this software may not be called "pfSense"
+	   nor may "pfSense" appear in their names without prior written
+	   permission of the Electric Sheep Fencing, LLC.
+
+	6. Redistributions of any form whatsoever must retain the following
+	   acknowledgment:
+
+	"This product includes software developed by the pfSense Project
+	for use in the pfSense software distribution (http://www.pfsense.org/).
+
+	THIS SOFTWARE IS PROVIDED BY THE pfSense PROJECT ``AS IS'' AND ANY
+	EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+	IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+	PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE pfSense PROJECT OR
+	ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+	SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+	NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+	LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+	HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+	STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+	ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
+	OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 require_once("globals.inc");
@@ -51,11 +71,12 @@ $smtp_authentication_mechanisms = array(
  * NAME
  *   file_notice
  * INPUTS
- *	 $id, $notice, $category, $url, $priority
+ *	 $id, $notice, $category, $url, $priority, $local_only
  * RESULT
  *   Files a notice and kicks off the various alerts, smtp, growl, system log, LED's, etc.
+ *   If $local_only is true then the notice is not sent to external places (smtp, growl)
  ******/
-function file_notice($id, $notice, $category = "General", $url = "", $priority = 1) {
+function file_notice($id, $notice, $category = "General", $url = "", $priority = 1, $local_only = false) {
 	/*
 	 * $category - Category that this notice should be displayed under. This can be arbitrary,
 	 * 	       but a page must be set to receive this messages for it to be displayed.
@@ -69,11 +90,11 @@ function file_notice($id, $notice, $category = "General", $url = "", $priority =
 	}
 	$queuekey = time();
 	$toqueue = array(
-				'id'		=> $id,
-				'notice'	=> $notice,
-				'url'		=> $url,
-				'category'	=> $category,
-				'priority'	=> $priority,
+				'id'		=> htmlentities($id),
+				'notice'	=> htmlentities($notice),
+				'url'		=> htmlentities($url),
+				'category'	=> htmlentities($category),
+				'priority'	=> htmlentities($priority),
 			);
 	while (isset($queue[$queuekey])) {
 		$queuekey++;
@@ -81,12 +102,12 @@ function file_notice($id, $notice, $category = "General", $url = "", $priority =
 	$queue[$queuekey] = $toqueue;
 	$queueout = fopen($notice_path, "w");
 	if (!$queueout) {
-		log_error(printf(gettext("Could not open %s for writing"), $notice_path));
+		log_error(sprintf(gettext("Could not open %s for writing"), $notice_path));
 		return;
 	}
 	fwrite($queueout, serialize($queue));
 	fclose($queueout);
-	log_error("New alert found: $notice");
+	log_error(sprintf(gettext("New alert found: %s"), $notice));
 	/* soekris */
 	if (file_exists("/dev/led/error")) {
 		exec("/bin/echo 1 > /dev/led/error");
@@ -94,8 +115,10 @@ function file_notice($id, $notice, $category = "General", $url = "", $priority =
 	/* wrap & alix */
 	led_normalize();
 	led_morse(1, 'sos');
-	notify_via_growl($notice);
-	notify_via_smtp($notice);
+	if (!$local_only) {
+		notify_via_growl($notice);
+		notify_via_smtp($notice);
+	}
 	return $queuekey;
 }
 
@@ -259,7 +282,7 @@ function print_notice_box($category = "all") {
 	if (!$notices) {
 		return;
 	}
-	print_info_box_np(print_notices($notices, $category));
+	print_info_box(print_notices($notices, $category));
 	return;
 }
 
@@ -297,8 +320,8 @@ function notify_via_smtp($message, $force = false) {
 		return;
 	}
 
-	/* Do NOT send the same message twice */
-	if (file_exists("/var/db/notices_lastmsg.txt")) {
+	/* Do NOT send the same message twice, except if $force is true */
+	if (!$force && file_exists("/var/db/notices_lastmsg.txt")) {
 		$lastmsg = trim(file_get_contents("/var/db/notices_lastmsg.txt"));
 		if ($lastmsg == $message) {
 			return;
@@ -341,7 +364,7 @@ function send_smtp_message($message, $subject = "(no subject)", $force = false) 
 
 	$smtp->direct_delivery = 0;
 	$smtp->ssl = (isset($config['notifications']['smtp']['ssl'])) ? 1 : 0;
-	$smtp->tls = (isset($config['notifications']['smtp']['tls'])) ? 1 : 0;
+	$smtp->start_tls = (isset($config['notifications']['smtp']['tls'])) ? 1 : 0;
 	$smtp->debug = 0;
 	$smtp->html_debug = 0;
 	$smtp->localhost = $config['system']['hostname'] . "." . $config['system']['domain'];
@@ -408,9 +431,14 @@ function notify_via_growl($message, $force=false) {
 	$growl_name = $config['notifications']['growl']['name'];
 	$growl_notification = $config['notifications']['growl']['notification_name'];
 
-	if (!empty($growl_ip) && (is_ipaddr($growl_ip) || dns_get_record($growl_ip, DNS_A) || dns_get_record($growl_ip, DNS_AAAA))) {
-		$growl = new Growl($growl_ip, $growl_password, $growl_name);
-		$growl->notify("{$growl_notification}", gettext(sprintf("%s (%s) - Notification", $g['product_name'], $hostname)), "{$message}");
+	if (!empty($growl_ip)) {
+		if (is_ipaddr($growl_ip) || dns_check_record($growl_ip, A) || dns_check_record($growl_ip, AAAA)) {
+			$growl = new Growl($growl_ip, $growl_password, $growl_name);
+			$growl->notify("{$growl_notification}", gettext(sprintf("%s (%s) - Notification", $g['product_name'], $hostname)), "{$message}");
+		} else {
+			// file_notice to local only to prevent file_notice from calling back to growl in a loop
+			file_notice("growl", gettext("Growl IP Address is invalid. Check the setting in System Advanced Notifications."), "General", "", 1, true);
+		}
 	}
 
 	/* Store last message sent to avoid spamming */
@@ -435,10 +463,15 @@ function register_via_growl() {
 	$growl_name = $config['notifications']['growl']['name'];
 	$growl_notification = $config['notifications']['growl']['notification_name'];
 
-	if ($growl_ip) {
-		$growl = new Growl($growl_ip, $growl_password, $growl_name);
-		$growl->addNotification($growl_notification);
-		$growl->register();
+	if (!empty($growl_ip)) {
+		if (is_ipaddr($growl_ip) || dns_check_record($growl_ip, A) || dns_check_record($growl_ip, AAAA)) {
+			$growl = new Growl($growl_ip, $growl_password, $growl_name);
+			$growl->addNotification($growl_notification);
+			$growl->register();
+		} else {
+			// file_notice to local only to prevent file_notice from calling back to growl in a loop
+			file_notice("growl", gettext("Growl IP Address is invalid. Check the setting in System Advanced Notifications."), "General", "", 1, true);
+		}
 	}
 }
 

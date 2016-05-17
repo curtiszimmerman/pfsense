@@ -126,11 +126,11 @@ if ($_POST) {
 		if (!isset($a_gateways[$_POST['gateway']])) {
 			$input_errors[] = gettext("A valid gateway must be specified.");
 		} else if (isset($a_gateways[$_POST['gateway']]['disabled']) && !$_POST['disabled']) {
-			$input_errors[] = gettext("The gateway is disabled but the route is not. You must disable the route in order to choose a disabled gateway.");
+			$input_errors[] = gettext("The gateway is disabled but the route is not. The route must be disabled in order to choose a disabled gateway.");
 		} else {
 			// Note that the 3rd parameter "disabled" must be passed as explicitly true or false.
 			if (!validate_address_family($_POST['network'], $_POST['gateway'], $_POST['disabled'] ? true : false)) {
-				$input_errors[] = gettext("The gateway '{$a_gateways[$_POST['gateway']]['gateway']}' is a different Address Family than network '{$_POST['network']}'.");
+				$input_errors[] = sprintf(gettext('The gateway "%1$s" is a different Address Family than network "%2$s".'), $a_gateways[$_POST['gateway']]['gateway'], $_POST['network']);
 			}
 		}
 	}
@@ -254,7 +254,7 @@ if ($_POST) {
 	}
 }
 
-$pgtitle = array(gettext("System"), gettext("Static Routes"), gettext("Edit route"));
+$pgtitle = array(gettext("System"), gettext("Routing"), gettext("Static Routes"), gettext("Edit"));
 $shortcut_section = "routing";
 include("head.inc");
 
@@ -273,13 +273,13 @@ if (isset($id) && $a_routes[$id]) {
 	));
 }
 
-$section = new Form_Section('Edit route entry');
+$section = new Form_Section('Edit Route Entry');
 
 $section->addInput(new Form_IpAddress(
 	'network',
 	'Destination network',
 	$pconfig['network']
-))->addMask('network_subnet', $pconfig['network_subnet'])->setPattern('[.a-zA-Z0-9_]+')->setHelp('Destination network for this static route');
+))->addMask('network_subnet', $pconfig['network_subnet'])->setPattern('[.a-zA-Z0-9_:]+')->setHelp('Destination network for this static route');
 
 $allGateways = array_combine(
 	array_map(function($g){ return $g['name']; }, $a_gateways),
@@ -306,7 +306,7 @@ $section->addInput(new Form_Input(
 	'Description',
 	'text',
 	htmlspecialchars($pconfig['descr'])
-))->setHelp('You may enter a description here for your reference (not parsed).');
+))->setHelp('A description may be entered here for administrative reference (not parsed).');
 
 $form->add($section);
 

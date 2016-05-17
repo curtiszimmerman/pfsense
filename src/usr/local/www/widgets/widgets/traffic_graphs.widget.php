@@ -86,7 +86,7 @@ if (ipsec_enabled()) {
 }
 
 if ($_POST) {
-	if (isset($_POST["refreshinterval"]) && is_numeric($_POST["refreshinterval"])) {
+	if (isset($_POST["refreshinterval"]) && is_numericint($_POST["refreshinterval"])) {
 		$a_config["refreshinterval"] = $_POST["refreshinterval"];
 	}
 
@@ -102,7 +102,7 @@ if ($_POST) {
 		}
 	}
 
-	write_config("Updated traffic graph settings via dashboard.");
+	write_config(gettext("Updated traffic graph settings via dashboard."));
 	header("Location: /");
 	exit(0);
 }
@@ -117,7 +117,7 @@ if ($first_time) {
 	$shown[$keys[0]] = true;
 }
 
-if (isset($a_config["refreshinterval"])) {
+if (isset($a_config["refreshinterval"]) && is_numericint($a_config["refreshinterval"])) {
 	$refreshinterval = $a_config["refreshinterval"];
 } else {
 	$refreshinterval = 10;
@@ -162,32 +162,32 @@ foreach ($ifdescrs as $ifname => $ifdescr):
 
 <form action="/widgets/widgets/traffic_graphs.widget.php" method="post" class="form-horizontal">
 	<div class="form-group">
-		<label for="scale_type_up" class="col-sm-3 control-label">Show graphs</label>
+		<label for="scale_type_up" class="col-sm-3 control-label"><?=gettext('Show graphs')?></label>
 		<div class="col-sm-6 checkbox">
 <?php foreach ($ifdescrs as $ifname => $ifdescr): ?>
 			<label>
 				<input type="checkbox" name="shown[<?= $ifname?>]" value="<?=$ifname?>" <?= ($shown[$ifname]) ? "checked":""?> />
-				<?=$ifname?>
+				<?=$ifdescr?>
 			</label>
 <?php endforeach; ?>
 		</div>
 	</div>
 	<div class="form-group">
-		<label for="scale_type_up" class="col-sm-3 control-label">Default Autoscale</label>
+		<label for="scale_type_up" class="col-sm-3 control-label"><?=gettext('Default Autoscale')?></label>
 		<div class="col-sm-6 checkbox">
 			<label>
-				<input name="scale_type" type="radio" id="scale_type_up" value="up" <?=($config["widgets"]["trafficgraphs"]["scale_type"]=="follow" ? '' : 'checked')?> />
-				up
+				<input name="scale_type" type="radio" id="scale_type_up" value="up" <?=($config["widgets"]["trafficgraphs"]["scale_type"]=="up" ? '' : 'checked')?> />
+				<?=gettext('Up')?>
 			</label>
 			<label>
-				<input name="scale_type" type="radio" id="scale_type_follow" value="up" <?=($config["widgets"]["trafficgraphs"]["scale_type"]=="follow" ? 'checked' : '')?> />
-				follow
+				<input name="scale_type" type="radio" id="scale_type_follow" value="follow" <?=($config["widgets"]["trafficgraphs"]["scale_type"]=="follow" ? 'checked' : '')?> />
+				<?=gettext('Follow')?>
 			</label>
 		</div>
 	</div>
 
 	<div class="form-group">
-		<label for="refreshinterval" class="col-sm-3 control-label">Refresh Interval</label>
+		<label for="refreshinterval" class="col-sm-3 control-label"><?=gettext('Refresh Interval')?></label>
 		<div class="col-sm-6">
 			<input type="number" id="refreshinterval" name="refreshinterval" value="<?=$refreshinterval?>" min="1" max="30" class="form-control" />
 		</div>
@@ -195,7 +195,7 @@ foreach ($ifdescrs as $ifname => $ifdescr):
 
 	<div class="form-group">
 		<div class="col-sm-offset-3 col-sm-6">
-			<button type="submit" class="btn btn-default">Save</button>
+			<button type="submit" class="btn btn-primary"><i class="fa fa-save icon-embed-btn"></i><?=gettext('Save')?></button>
 		</div>
 	</div>
 </form>

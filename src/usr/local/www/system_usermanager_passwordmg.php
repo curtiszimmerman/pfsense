@@ -92,7 +92,7 @@ if (isset($_POST['save'])) {
 
 		write_config();
 
-		$savemsg = gettext("Password successfully changed") . "<br />";
+		$savemsg = gettext("Password successfully changed.");
 	}
 }
 
@@ -117,11 +117,11 @@ if ($input_errors) {
 }
 
 if ($savemsg) {
-	print_info_box($savemsg);
+	print_info_box($savemsg, 'success');
 }
 
 if ($islocal == false) {
-	echo gettext("Sorry, you cannot change the password for a non-local user.");
+	echo gettext("The password cannot be changed for a non-local user.");
 	include("foot.inc");
 	exit;
 }

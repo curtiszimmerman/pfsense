@@ -61,6 +61,7 @@ require_once("guiconfig.inc");
 require_once("pfsense-utils.inc");
 require_once("functions.inc");
 require_once("/usr/local/www/widgets/include/smart_status.inc");
+$specplatform = system_identify_specific_platform();
 ?>
 
 <table class="table table-striped table-hover">
@@ -69,14 +70,16 @@ require_once("/usr/local/www/widgets/include/smart_status.inc");
 			<th></th>
 			<th><?=gettext("Drive")?></th>
 			<th><?=gettext("Ident")?></th>
-			<th><?=gettext("SMART Status")?></th>
+			<th><?=gettext("S.M.A.R.T. Status")?></th>
 		</tr>
 	</thead>
 	<tbody>
 <?php
 $devs = array();
 ## Get all adX, daX, and adaX (IDE, SCSI, and AHCI) devices currently installed
-$devs = get_smart_drive_list();
+if ($specplatform['name'] != "Hyper-V") {
+	$devs = get_smart_drive_list();
+}
 
 if (count($devs) > 0)  {
 	foreach ($devs as $dev)  { ## for each found drive do
@@ -90,7 +93,7 @@ if (count($devs) > 0)  {
 				$icon = "fa-check";
 				break;
 			case "":
-				$dev_state = "Unknown";
+				$dev_state = gettext("Unknown");
 				$color = "text-info";
 				$icon = "fa-times-circle";
 				break;

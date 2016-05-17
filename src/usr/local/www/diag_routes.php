@@ -94,12 +94,12 @@ if (isset($_REQUEST['isAjax'])) {
 	exit;
 }
 
-$pgtitle = array(gettext("Diagnostics"), gettext("Routing tables"));
+$pgtitle = array(gettext("Diagnostics"), gettext("Routes"));
 $shortcut_section = "routing";
 
 include('head.inc');
 
-$form = new Form('Update');
+$form = new Form(false);
 $form->addGlobal(new Form_Input(
 	'isAjax',
 	null,
@@ -114,7 +114,7 @@ $section->addInput(new Form_Checkbox(
 	'Enable',
 	$resolve
 ))->setHelp('Enabling name resolution may cause the query to take longer.'.
-	' You can stop it at any time by clicking the Stop button in your browser.');
+	' It can be stopped at any time by clicking the Stop button in the browser.');
 
 $validLimits = array('10', '50', '100', '200', '500', '1000', 'all');
 $section->addInput(new Form_Select(
@@ -129,9 +129,17 @@ $section->addInput(new Form_Input(
 	'Filter',
 	'text',
 	$host
-))->setHelp('Use a regular expression to filter IP address or hostnames');
+))->setHelp('Use a regular expression to filter IP address or hostnames.');
 
 $form->add($section);
+
+$form->addGlobal(new Form_Button(
+	'Submit',
+	'Update',
+	null,
+	'fa-refresh'
+))->addClass('btn-primary');
+
 print $form;
 ?>
 <script type="text/javascript">
@@ -212,7 +220,7 @@ events.push(function() {
 </script>
 
 <div class="panel panel-default">
-	<div class="panel-heading"><h2 class="panel-title">IPv4 Routes</h2></div>
+	<div class="panel-heading"><h2 class="panel-title"><?=gettext("IPv4 Routes")?></h2></div>
 	<div class="panel panel-body">
 		<table class="table table-striped table-hover table-condensed sortable-theme-bootstrap" id="IPv4">
 		<thead>
@@ -230,7 +238,7 @@ events.push(function() {
 </div>
 
 <div class="panel panel-default">
-	<div class="panel-heading"><h2 class="panel-title">IPv6 Routes</h2></div>
+	<div class="panel-heading"><h2 class="panel-title"><?=gettext("IPv6 Routes")?></h2></div>
 	<div class="panel panel-body">
 		<table class="table table-striped table-hover table-condensed sortable-theme-bootstrap" id="IPv6">
 		<thead>

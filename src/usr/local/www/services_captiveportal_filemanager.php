@@ -85,6 +85,7 @@ $cpzone = $_GET['zone'];
 if (isset($_POST['zone'])) {
 	$cpzone = $_POST['zone'];
 }
+$cpzone = strtolower($cpzone);
 
 if (empty($cpzone)) {
 	header("Location: services_captiveportal_zones.php");
@@ -96,7 +97,7 @@ if (!is_array($config['captiveportal'])) {
 }
 $a_cp =& $config['captiveportal'];
 
-$pgtitle = array(gettext("Services"), gettext("Captive Portal"), "Zone " . $a_cp[$cpzone]['zone'], gettext("File Manager"));
+$pgtitle = array(gettext("Services"), gettext("Captive Portal"), $a_cp[$cpzone]['zone'], gettext("File Manager"));
 $shortcut_section = "captiveportal";
 
 if (!is_array($a_cp[$cpzone]['element'])) {
@@ -115,7 +116,7 @@ if ($_POST) {
 
 	if (is_uploaded_file($_FILES['new']['tmp_name'])) {
 
-		if (!stristr($_FILES['new']['name'], "captiveportal-")) {
+		if ((!stristr($_FILES['new']['name'], "captiveportal-")) && ($_FILES['new']['name'] != 'favicon.ico')) {
 			$name = "captiveportal-" . $_FILES['new']['name'];
 		} else {
 			$name = $_FILES['new']['name'];
@@ -132,8 +133,8 @@ if ($_POST) {
 
 		// check total file size
 		if (($total_size + $size) > $g['captiveportal_element_sizelimit']) {
-			$input_errors[] = gettext("The total size of all files uploaded may not exceed ") .
-				format_bytes($g['captiveportal_element_sizelimit']) . ".";
+			$input_errors[] = sprintf(gettext("The total size of all files uploaded may not exceed %s."),
+				format_bytes($g['captiveportal_element_sizelimit']));
 		}
 
 		if (!$input_errors) {
@@ -170,7 +171,7 @@ if ($input_errors) {
 
 $tab_array = array();
 $tab_array[] = array(gettext("Configuration"), false, "services_captiveportal.php?zone={$cpzone}");
-$tab_array[] = array(gettext("MAC"), false, "services_captiveportal_mac.php?zone={$cpzone}");
+$tab_array[] = array(gettext("MACs"), false, "services_captiveportal_mac.php?zone={$cpzone}");
 $tab_array[] = array(gettext("Allowed IP Addresses"), false, "services_captiveportal_ip.php?zone={$cpzone}");
 $tab_array[] = array(gettext("Allowed Hostnames"), false, "services_captiveportal_hostname.php?zone={$cpzone}");
 $tab_array[] = array(gettext("Vouchers"), false, "services_captiveportal_vouchers.php?zone={$cpzone}");
@@ -179,14 +180,11 @@ display_top_tabs($tab_array, true);
 
 if ($_GET['act'] == 'add') {
 
-	$form = new Form(new Form_Button(
-		'Submit',
-		'Upload'
-	));
+	$form = new Form(false);
 
 	$form->setMultipartEncoding();
 
-	$section = new Form_Section('Upload a new file');
+	$section = new Form_Section('Upload a New File');
 
 	$section->addInput(new Form_Input(
 		'zone',
@@ -201,8 +199,15 @@ if ($_GET['act'] == 'add') {
 		'file'
 	));
 
-
 	$form->add($section);
+
+	$form->addGlobal(new Form_Button(
+		'Submit',
+		'Upload',
+		null,
+		'fa-upload'
+	))->addClass('btn-primary');
+
 	print($form);
 }
 
@@ -217,9 +222,7 @@ if (is_array($a_cp[$cpzone]['element'])):
 						<tr>
 							<th><?=gettext("Name"); ?></th>
 							<th><?=gettext("Size"); ?></th>
-							<th>
-								<!-- Buttons -->
-							</th>
+							<th><?=gettext("Actions"); ?></th>
 						</tr>
 					</thead>
 					<tbody>
@@ -242,7 +245,7 @@ if (is_array($a_cp[$cpzone]['element'])):
 ?>
 						<tr>
 							<th>
-								Total
+								<?=gettext("Total");?>
 							</th>
 							<th>
 								<?=format_bytes($total_size);?>
@@ -271,17 +274,18 @@ endif;
 // The notes displayed on the page are large, the page content comparitively small. A "Note" button
 // is provided so that you only see the notes if you ask for them
 ?>
-<div id="infoblock" class="panel panel-default">
-	<div class="panel-heading"><h2 class="panel-title">Notes</h2></div>
+<div class="infoblock panel panel-default">
+	<div class="panel-heading"><h2 class="panel-title"><?=gettext("Notes");?></h2></div>
 	<div class="panel-body">
-	<?=gettext("Any files that you upload here with the filename prefix of captiveportal- will " .
+	<?=gettext("Any files that are uploaded here with the filename prefix of captiveportal- will " .
 	"be made available in the root directory of the captive portal HTTP(S) server. " .
-	"You may reference them directly from your portal page HTML code using relative paths. " .
-	"Example: you've uploaded an image with the name 'captiveportal-test.jpg' using the " .
-	"file manager. Then you can include it in your portal page like this:")?><br /><br />
+	"An icon file named favicon.ico may also be uploaded and will remain without prefix. " .
+	"They may be referenced directly from the portal page HTML code using relative paths. " .
+	"Example: An image uploaded with the name 'captiveportal-test.jpg' using the " .
+	"file manager can then be included in the portal page like this:")?><br /><br />
 	<pre>&lt;img src=&quot;captiveportal-test.jpg&quot; width=... height=...&gt;</pre><br />
-	<?=gettext("In addition, you can also upload .php files for execution.	You can pass the filename " .
-	"to your custom page from the initial page by using text similar to:")?><br /><br />
+	<?=gettext("In addition, .php files can also be uploaded for execution.	The filename can be passed " .
+	"to the custom page from the initial page by using text similar to:")?><br /><br />
 	<pre>&lt;a href="/captiveportal-aup.php?zone=$PORTAL_ZONE$&amp;redirurl=$PORTAL_REDIRURL$"&gt;<?=gettext("Acceptable usage policy"); ?>&lt;/a&gt;</pre><br />
 	<?=sprintf(gettext("The total size limit for all files is %s."), format_bytes($g['captiveportal_element_sizelimit']))?>
 	</div>

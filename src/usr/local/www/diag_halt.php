@@ -75,19 +75,17 @@ if ($_POST['save'] == 'No') {
 	exit;
 }
 
-$pgtitle = array(gettext("Diagnostics"), gettext("Halt system"));
+$pgtitle = array(gettext("Diagnostics"), gettext("Halt System"));
 include('head.inc');
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 ?>
 	<meta http-equiv="refresh" content="70;url=/">
-	<div class="alert alert-success" role="alert">
-		<?=gettext("The system is halting now. This may take one minute or so.")?>
-	</div>
-
 <?php
+	print_info_box(gettext("The system is halting now. This may take one minute or so."), 'success', false);
+
 	if (DEBUG) {
-	   print("Not actually halting (DEBUG is set true)<br>");
+	   printf(gettext("Not actually halting (DEBUG is set true)%s"), "<br />");
 	} else {
 		print('<pre>');
 		system_halt();
@@ -98,14 +96,20 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
 <div class="panel panel-default">
 	<div class="panel-heading">
-		<h2 class="panel-title">Are you sure you want to halt the system?</h2>
+		<h2 class="panel-title"><?=gettext('System Halt Confirmation')?></h2>
 	</div>
 	<div class="panel-body">
 		<div class="content">
-			<p>Click "Halt" to halt the system immediately, or "No" to go to the system dashboard. (There will be a brief delay before the dashboard appears.)</p>
+			<p><?=gettext('Click "Halt" to halt the system immediately, or "Cancel" to go to the system dashboard. (There will be a brief delay before the dashboard appears.)')?></p>
 			<form action="diag_halt.php" method="post">
-				<input type="submit" class="btn btn-danger pull-center" name="save" value="Halt">
-				<a href="/" class="btn btn-default">No</a>
+				<button type="submit" class="btn btn-danger pull-center" name="save" value="<?=gettext("Halt")?>" title="<?=gettext("Halt the system and power off")?>">
+					<i class="fa fa-stop-circle"></i>
+					<?=gettext("Halt")?>
+				</button>
+				<a href="/" class="btn btn-info">
+					<i class="fa fa-undo"></i>
+					<?=gettext("Cancel")?>
+				</a>
 			</form>
 		</div>
 	</div>

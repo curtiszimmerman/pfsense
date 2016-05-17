@@ -64,7 +64,7 @@
 require("guiconfig.inc");
 require_once("functions.inc");
 
-$pgtitle = array(gettext("Interfaces"), gettext("Groups"), gettext("Edit"));
+$pgtitle = array(gettext("Interfaces"), gettext("Interface Groups"), gettext("Edit"));
 $shortcut_section = "interfaces";
 
 if (!is_array($config['ifgroups']['ifgroupentry'])) {
@@ -100,37 +100,19 @@ if ($_POST) {
 			}
 		}
 	}
+
 	if (preg_match("/([^a-zA-Z])+/", $_POST['ifname'], $match)) {
 		$input_errors[] = gettext("Only letters A-Z are allowed as the group name.");
 	}
 
-	foreach ($iflist as $gif => $gdescr) {
+	foreach ($interface_list as $gif => $gdescr) {
 		if ($gdescr == $_POST['ifname'] || $gif == $_POST['ifname']) {
 			$input_errors[] = "The specified group name is already used by an interface. Please choose another name.";
 		}
 	}
-	$members = "";
-	$isfirst = 0;
-	/* item is a normal ifgroupentry type */
-	for ($x = 0; $x < 9999; $x++) {
-		if ($_POST["members{$x}"] <> "") {
-			if ($isfirst > 0) {
-				$members .= " ";
-			}
-			$members .= $_POST["members{$x}"];
-			$isfirst++;
-		}
-	}
 
 	if (isset($_POST['members'])) {
-		foreach ($_POST['members'] as $member) {
-			if ($isfirst > 0) {
-				$members .= " ";
-			}
-
-			$members .= $member[0];
-			$isfirst++;
-		}
+		$members = implode(" ", $_POST['members']);
 	} else {
 		$members = "";
 	}
@@ -225,7 +207,7 @@ if ($input_errors) {
 <div id="inputerrors"></div>
 <?php
 $tab_array = array();
-$tab_array[0]  = array(gettext("Interface assignments"), false, "interfaces_assign.php");
+$tab_array[0]  = array(gettext("Interface Assignments"), false, "interfaces_assign.php");
 $tab_array[1]  = array(gettext("Interface Groups"), true, "interfaces_groups.php");
 $tab_array[2]  = array(gettext("Wireless"), false, "interfaces_wireless.php");
 $tab_array[3]  = array(gettext("VLANs"), false, "interfaces_vlan.php");
@@ -238,7 +220,7 @@ $tab_array[10] = array(gettext("LAGG"), false, "interfaces_lagg.php");
 display_top_tabs($tab_array);
 
 $form = new Form;
-$section = new Form_Section('Interface Group Edit');
+$section = new Form_Section('Interface Group Configuration');
 
 $section->addInput(new Form_Input(
 	'ifname',
@@ -247,7 +229,7 @@ $section->addInput(new Form_Input(
 	$pconfig['ifname'],
 	['placeholder' => 'Group Name']
 ))->setWidth(6)->setHelp('No numbers or spaces are allowed. '.
-	'Only characters in a-zA-Z');
+	'Only characters: a-zA-Z');
 
 $section->addInput(new Form_Input(
 	'descr',
@@ -255,11 +237,11 @@ $section->addInput(new Form_Input(
 	'text',
 	$pconfig['descr'],
 	['placeholder' => 'Group Description']
-))->setWidth(6)->setHelp('You may enter a group decsription '.
-	'here for your reference (not parsed)');
+))->setWidth(6)->setHelp('A group description may be entered '.
+	'here for administrative reference (not parsed).');
 
 $section->addInput(new Form_Select(
-	'members[]',
+	'members',
 	'Group Members',
 	explode(' ', $pconfig['members']),
 	$interface_list,

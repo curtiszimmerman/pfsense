@@ -72,14 +72,11 @@ $cert_methods = array(
 
 $cert_keylens = array("512", "1024", "2048", "4096");
 $cert_types = array(
-	"ca" => "Certificate Authority",
 	"server" => "Server Certificate",
 	"user" => "User Certificate");
 
 $altname_types = array("DNS", "IP", "email", "URI");
 $openssl_digest_algs = array("sha1", "sha224", "sha256", "sha384", "sha512");
-
-$pgtitle = array(gettext("System"), gettext("Certificate Manager"), gettext("Certificates"));
 
 if (is_numericint($_GET['userid'])) {
 	$userid = $_GET['userid'];
@@ -137,7 +134,7 @@ if ($act == "del") {
 
 	unset($a_cert[$id]);
 	write_config();
-	$savemsg = sprintf(gettext("Certificate %s successfully deleted"), htmlspecialchars($a_cert[$id]['descr'])) . "<br />";
+	$savemsg = sprintf(gettext("Certificate %s successfully deleted."), htmlspecialchars($a_cert[$id]['descr']));
 	pfSenseHeader("system_certmanager.php");
 	exit;
 }
@@ -247,7 +244,7 @@ if ($act == "csr") {
 }
 
 if ($_POST) {
-	// This is just the blank altername name that is added for display purposes. We don't want to validate/save it
+	// This is just the blank alternate name that is added for display purposes. We don't want to validate/save it
 	if ($_POST['altname_value0'] == "") {
 		unset($_POST['altname_type0']);
 		unset($_POST['altname_value0']);
@@ -345,7 +342,7 @@ if ($_POST) {
 						break;
 					case "email":
 						if (empty($altname['value'])) {
-							array_push($input_errors, "You must provide an e-mail address for this type of subjectAltName");
+							array_push($input_errors, "An e-mail address must be provided for this type of subjectAltName");
 						}
 						if (preg_match("/[\!\#\$\%\^\(\)\~\?\>\<\&\/\\\,\"\']/", $altname['value'])) {
 							array_push($input_errors, "The e-mail provided in a subjectAltName contains invalid characters.");
@@ -371,14 +368,14 @@ if ($_POST) {
 			for ($i = 0; $i < count($reqdfields); $i++) {
 				if (preg_match('/email/', $reqdfields[$i])) { /* dn_email or csr_dn_name */
 					if (preg_match("/[\!\#\$\%\^\(\)\~\?\>\<\&\/\\\,\"\']/", $_POST[$reqdfields[$i]])) {
-						array_push($input_errors, "The field 'Distinguished name Email Address' contains invalid characters.");
+						array_push($input_errors, gettext("The field 'Distinguished name Email Address' contains invalid characters."));
 					}
 				} else if (preg_match('/commonname/', $reqdfields[$i])) { /* dn_commonname or csr_dn_commonname */
 					if (preg_match("/[\!\@\#\$\%\^\(\)\~\?\>\<\&\/\\\,\"\']/", $_POST[$reqdfields[$i]])) {
-						array_push($input_errors, "The field 'Distinguished name Common Name' contains invalid characters.");
+						array_push($input_errors, gettext("The field 'Distinguished name Common Name' contains invalid characters."));
 					}
 				} else if (($reqdfields[$i] != "descr") && preg_match("/[\!\@\#\$\%\^\(\)\~\?\>\<\&\/\\\,\.\"\']/", $_POST[$reqdfields[$i]])) {
-					array_push($input_errors, "The field '" . $reqdfieldsn[$i] . "' contains invalid characters.");
+					array_push($input_errors, sprintf(gettext("The field '%s' contains invalid characters."), $reqdfieldsn[$i]));
 				}
 			}
 
@@ -559,6 +556,11 @@ if ($_POST) {
 	}
 }
 
+$pgtitle = array(gettext("System"), gettext("Certificate Manager"), gettext("Certificates"));
+
+if (($act == "new" || ($_POST['save'] == gettext("Save") && $input_errors)) || ($act == "csr" || ($_POST['save'] == gettext("Update") && $input_errors))) {
+	$pgtitle[] = gettext('Edit');
+}
 include("head.inc");
 
 if ($input_errors) {
@@ -587,12 +589,17 @@ if (file_exists("/etc/ca_countries")) {
 }
 
 if ($act == "new" || (($_POST['save'] == gettext("Save")) && $input_errors)) {
-$form = new Form;
+	$form = new Form();
+	$form->setAction('system_certmanager.php?act=edit');
 
-if ($act == "csr" || (($_POST['save'] == gettext("Update")) && $input_errors)) {
-	$form->setAction('system_certmanager.php?act=csr');
-
-	$section = new Form_Section('Complete Signing Request');
+	if (isset($userid) && $a_user) {
+		$form->addGlobal(new Form_Input(
+			'userid',
+			null,
+			'hidden',
+			$userid
+		));
+	}
 
 	if (isset($id) && $a_cert[$id]) {
 		$form->addGlobal(new Form_Input(
@@ -603,354 +610,309 @@ if ($act == "csr" || (($_POST['save'] == gettext("Update")) && $input_errors)) {
 		));
 	}
 
+	$section = new Form_Section('Add a New Certificate');
+
+	if (!isset($id)) {
+		$section->addInput(new Form_Select(
+			'method',
+			'Method',
+			$pconfig['method'],
+			$cert_methods
+		))->toggles();
+	}
+
 	$section->addInput(new Form_Input(
 		'descr',
 		'Descriptive name',
 		'text',
-		$pconfig['descr']
-	));
+		($a_user && empty($pconfig['descr'])) ? $a_user[$userid]['name'] : $pconfig['descr']
+	))->addClass('toggle-existing');
 
-	$section->addInput(new Form_Textarea(
-		'csr',
-		'Signing request data',
-		$pconfig['csr']
-	))->setReadonly()->setHelp('Copy the certificate signing data from here and '.
-		'forward it to your certificate authority for signing.');
+	$form->add($section);
+	$section = new Form_Section('Import Certificate');
+	$section->addClass('toggle-import collapse');
 
 	$section->addInput(new Form_Textarea(
 		'cert',
-		'Final certificate data',
+		'Certificate data',
 		$pconfig['cert']
-	))->setHelp('Paste the certificate received from your certificate authority here.');
+	))->setHelp('Paste a certificate in X.509 PEM format here.');
+
+	$section->addInput(new Form_Textarea(
+		'key',
+		'Private key data',
+		$pconfig['key']
+	))->setHelp('Paste a private key in X.509 PEM format here.');
+
+	$form->add($section);
+	$section = new Form_Section('Internal Certificate');
+	$section->addClass('toggle-internal collapse');
+
+	if (!$internal_ca_count) {
+		$section->addInput(new Form_StaticText(
+			'Certificate authority',
+			gettext('No internal Certificate Authorities have been defined. ').
+			gettext('An internal CA must be defined in order to create an internal certificate. ').
+			'<a href="system_camanager.php?act=new&amp;method=internal"> '. gettext("Create") .'</a>'.
+			gettext(' an internal CA.')
+		));
+	} else {
+		$allCas = array();
+		foreach ($a_ca as $ca) {
+			if (!$ca['prv']) {
+				continue;
+			}
+
+			$allCas[ $ca['refid'] ] = $ca['descr'];
+		}
+
+		$section->addInput(new Form_Select(
+			'caref',
+			'Certificate authority',
+			$pconfig['caref'],
+			$allCas
+		));
+	}
+
+	$section->addInput(new Form_Select(
+		'keylen',
+		'Key length',
+		$pconfig['keylen'],
+		array_combine($cert_keylens, $cert_keylens)
+	));
+
+	$section->addInput(new Form_Select(
+		'digest_alg',
+		'Digest Algorithm',
+		$pconfig['digest_alg'],
+		array_combine($openssl_digest_algs, $openssl_digest_algs)
+	))->setHelp('NOTE: It is recommended to use an algorithm stronger than '.
+		'SHA1 when possible.');
+
+	$section->addInput(new Form_Select(
+		'type',
+		'Certificate Type',
+		$pconfig['type'],
+		$cert_types
+	))->setHelp('Type of certificate to generate. Used for placing '.
+		'restrictions on the usage of the generated certificate.');
+
+	$section->addInput(new Form_Input(
+		'lifetime',
+		'Lifetime (days)',
+		'number',
+		$pconfig['lifetime']
+	));
+
+	$section->addInput(new Form_Select(
+		'dn_country',
+		'Country Code',
+		$pconfig['dn_country'],
+		$dn_cc
+	));
+
+	$section->addInput(new Form_Input(
+		'dn_state',
+		'State or Province',
+		'text',
+		$pconfig['dn_state'],
+		['placeholder' => 'e.g. Texas']
+	));
+
+	$section->addInput(new Form_Input(
+		'dn_city',
+		'City',
+		'text',
+		$pconfig['dn_city'],
+		['placeholder' => 'e.g. Austin']
+	));
+
+	$section->addInput(new Form_Input(
+		'dn_organization',
+		'Organization',
+		'text',
+		$pconfig['dn_organization'],
+		['placeholder' => 'e.g. My Company Inc.']
+	));
+
+	$section->addInput(new Form_Input(
+		'dn_email',
+		'Email Address',
+		'text',
+		$pconfig['dn_email'],
+		['placeholder' => 'e.g. admin@mycompany.com']
+	));
+
+	$section->addInput(new Form_Input(
+		'dn_commonname',
+		'Common Name',
+		'text',
+		$pconfig['dn_commonname'],
+		['placeholder' => 'e.g. www.example.com']
+	));
+
+	if (empty($pconfig['altnames']['item'])) {
+		$pconfig['altnames']['item'] = array(
+			array('type' => null, 'value' => null)
+		);
+	}
+
+	$counter = 0;
+	$numrows = count($pconfig['altnames']['item']) - 1;
+
+	foreach ($pconfig['altnames']['item'] as $item) {
+
+		$group = new Form_Group($counter == 0 ? 'Alternative Names':'');
+
+		$group->add(new Form_Select(
+			'altname_type' . $counter,
+			'Type',
+			$item['type'],
+			array(
+				'DNS' => gettext('FQDN or Hostname'),
+				'IP' => gettext('IP address'),
+				'URI' => gettext('URI'),
+				'email' => gettext('email address'),
+			)
+		))->setHelp(($counter == $numrows) ? 'Type':null);
+
+		$group->add(new Form_Input(
+			'altname_value' . $counter,
+			null,
+			'text',
+			$item['value']
+		))->setHelp(($counter == $numrows) ? 'Value':null);
+
+		$group->add(new Form_Button(
+			'deleterow' . $counter,
+			'Delete',
+			null,
+			'fa-trash'
+		))->addClass('btn-warning');
+
+		$group->addClass('repeatable');
+
+		$section->add($group);
+
+		$counter++;
+	}
+
+	$section->addInput(new Form_Button(
+		'addrow',
+		'Add',
+		null,
+		'fa-plus'
+	))->addClass('btn-success');
+
+	$form->add($section);
+	$section = new Form_Section('External Signing Request');
+	$section->addClass('toggle-external collapse');
+
+	$section->addInput(new Form_Select(
+		'csr_keylen',
+		'Key length',
+		$pconfig['csr_keylen'],
+		array_combine($cert_keylens, $cert_keylens)
+	));
+
+	$section->addInput(new Form_Select(
+		'csr_digest_alg',
+		'Digest Algorithm',
+		$pconfig['csr_digest_alg'],
+		array_combine($openssl_digest_algs, $openssl_digest_algs)
+	))->setHelp('NOTE: It is recommended to use an algorithm stronger than '.
+		'SHA1 when possible');
+
+	$section->addInput(new Form_Select(
+		'csr_dn_country',
+		'Country Code',
+		$pconfig['csr_dn_country'],
+		$dn_cc
+	));
+
+	$section->addInput(new Form_Input(
+		'csr_dn_state',
+		'State or Province',
+		'text',
+		$pconfig['csr_dn_state'],
+		['placeholder' => 'e.g. Texas']
+	));
+
+	$section->addInput(new Form_Input(
+		'csr_dn_city',
+		'City',
+		'text',
+		$pconfig['csr_dn_city'],
+		['placeholder' => 'e.g. Austin']
+	));
+
+	$section->addInput(new Form_Input(
+		'csr_dn_organization',
+		'Organization',
+		'text',
+		$pconfig['csr_dn_organization'],
+		['placeholder' => 'e.g. My Company Inc.']
+	));
+
+	$section->addInput(new Form_Input(
+		'csr_dn_email',
+		'Email Address',
+		'text',
+		$pconfig['csr_dn_email'],
+		['placeholder' => 'e.g. admin@mycompany.com']
+	));
+
+	$section->addInput(new Form_Input(
+		'csr_dn_commonname',
+		'Common Name',
+		'text',
+		$pconfig['csr_dn_commonname'],
+		['placeholder' => 'e.g. internal-ca']
+	));
+
+	$form->add($section);
+	$section = new Form_Section('Choose an Existing Certificate');
+	$section->addClass('toggle-existing collapse');
+
+	$existCerts = array();
+
+	foreach ($config['cert'] as $cert)	{
+		if (is_array($config['system']['user'][$userid]['cert'])) { // Could be MIA!
+			if (isset($userid) && in_array($cert['refid'], $config['system']['user'][$userid]['cert'])) {
+				continue;
+			}
+		}
+
+		$ca = lookup_ca($cert['caref']);
+		if ($ca) {
+			$cert['descr'] .= " (CA: {$ca['descr']})";
+		}
+
+		if (cert_in_use($cert['refid'])) {
+			$cert['descr'] .= " <i>In Use</i>";
+		}
+		if (is_cert_revoked($cert)) {
+			$cert['descr'] .= " <b>Revoked</b>";
+		}
+
+		$existCerts[ $cert['refid'] ] = $cert['descr'];
+	}
+
+	$section->addInput(new Form_Select(
+		'certref',
+		'Existing Certificates',
+		$pconfig['certref'],
+		$existCerts
+	));
 
 	$form->add($section);
 	print $form;
 
-	include("foot.inc");
-	exit;
-}
-
-$form->setAction('system_certmanager.php?act=edit');
-
-if (isset($userid) && $a_user) {
-	$form->addGlobal(new Form_Input(
-		'userid',
-		null,
-		'hidden',
-		$userid
-	));
-}
-
-if (isset($id) && $a_cert[$id]) {
-	$form->addGlobal(new Form_Input(
-		'id',
-		null,
-		'hidden',
-		$id
-	));
-}
-
-$section = new Form_Section('Add a new certificate');
-
-if (!isset($id)) {
-	$section->addInput(new Form_Select(
-		'method',
-		'Method',
-		$pconfig['method'],
-		$cert_methods
-	))->toggles();
-}
-
-$section->addInput(new Form_Input(
-	'descr',
-	'Descriptive name',
-	'text',
-	($a_user && empty($pconfig['descr'])) ? $a_user[$userid]['name'] : $pconfig['descr']
-))->addClass('toggle-existing');
-
-$form->add($section);
-$section = new Form_Section('Import Certificate');
-$section->addClass('toggle-import collapse');
-
-$section->addInput(new Form_Textarea(
-	'cert',
-	'Certificate data',
-	$pconfig['cert']
-))->setHelp('Paste a certificate in X.509 PEM format here.');
-
-$section->addInput(new Form_Textarea(
-	'key',
-	'Private key data',
-	$pconfig['key']
-))->setHelp('Paste a private key in X.509 PEM format here.');
-
-$form->add($section);
-$section = new Form_Section('Internal Certificate');
-$section->addClass('toggle-internal collapse');
-
-if (!$internal_ca_count) {
-	$section->addInput(new Form_StaticText(
-		'Certificate authority',
-		gettext('No internal Certificate Authorities have been defined. You must ').
-		'<a href="system_camanager.php?act=new&amp;method=internal"> '. gettext(" create") .'</a>'.
-		gettext(' an internal CA before creating an internal certificate.')
-	));
-} else {
-	$allCas = array();
-	foreach ($a_ca as $ca) {
-		if (!$ca['prv']) {
-			continue;
-		}
-
-		$allCas[ $ca['refid'] ] = $ca['descr'];
-	}
-
-	$section->addInput(new Form_Select(
-		'caref',
-		'Certificate authority',
-		$pconfig['caref'],
-		$allCas
-	));
-}
-
-$section->addInput(new Form_Select(
-	'keylen',
-	'Key length',
-	$pconfig['keylen'],
-	array_combine($cert_keylens, $cert_keylens)
-));
-
-$section->addInput(new Form_Select(
-	'digest_alg',
-	'Digest Algorithm',
-	$pconfig['digest_alg'],
-	array_combine($openssl_digest_algs, $openssl_digest_algs)
-))->setHelp('NOTE: It is recommended to use an algorithm stronger than '.
-	'SHA1 when possible.');
-
-$section->addInput(new Form_Select(
-	'type',
-	'Certificate Type',
-	$pconfig['type'],
-	$cert_types
-))->setHelp('Type of certificate to generate. Used for placing '.
-	'restrictions on the usage of the generated certificate.');
-
-$section->addInput(new Form_Input(
-	'lifetime',
-	'Lifetime (days)',
-	'number',
-	$pconfig['lifetime']
-));
-
-$section->addInput(new Form_Select(
-	'dn_country',
-	'Country Code',
-	$pconfig['dn_country'],
-	$dn_cc
-));
-
-$section->addInput(new Form_Input(
-	'dn_state',
-	'State or Province',
-	'text',
-	$pconfig['dn_state'],
-	['placeholder' => 'e.g. Texas']
-));
-
-$section->addInput(new Form_Input(
-	'dn_city',
-	'City',
-	'text',
-	$pconfig['dn_city'],
-	['placeholder' => 'e.g. Austin']
-));
-
-$section->addInput(new Form_Input(
-	'dn_organization',
-	'Organization',
-	'text',
-	$pconfig['dn_organization'],
-	['placeholder' => 'e.g. My Company Inc.']
-));
-
-$section->addInput(new Form_Input(
-	'dn_email',
-	'Email Address',
-	'email',
-	$pconfig['dn_email'],
-	['placeholder' => 'e.g. admin@mycompany.com']
-));
-
-$section->addInput(new Form_Input(
-	'dn_commonname',
-	'Common Name',
-	'text',
-	$pconfig['dn_commonname'],
-	['placeholder' => 'e.g. www.example.com']
-));
-
-if (empty($pconfig['altnames']['item'])) {
-	$pconfig['altnames']['item'] = array(
-		array('type' => null, 'value' => null)
-	);
-}
-
-$counter = 0;
-$numrows = count($pconfig['altnames']['item']) - 1;
-
-foreach ($pconfig['altnames']['item'] as $item) {
-
-	$group = new Form_Group($counter == 0 ? 'Alternative Names':'');
-
-	$group->add(new Form_Select(
-		'altname_type' . $counter,
-		'Type',
-		$item['type'],
-		array(
-			'DNS' => 'FQDN or Hostname',
-			'IP' => 'IP address',
-			'URI' => 'URI',
-			'email' => 'email address',
-		)
-	))->setHelp(($counter == $numrows) ? 'Type':null);
-
-	$group->add(new Form_Input(
-		'altname_value' . $counter,
-		null,
-		'text',
-		$item['value']
-	))->setHelp(($counter == $numrows) ? 'Value':null);
-
-	$group->add(new Form_Button(
-		'deleterow' . $counter,
-		'Delete'
-	))->removeClass('btn-primary')->addClass('btn-warning');
-
-	$group->addClass('repeatable');
-
-	$section->add($group);
-
-	$counter++;
-}
-
-$section->addInput(new Form_Button(
-	'addrow',
-	'Add'
-))->removeClass('btn-primary')->addClass('btn-success');
-
-$form->add($section);
-$section = new Form_Section('External Signing Request');
-$section->addClass('toggle-external collapse');
-
-$section->addInput(new Form_Select(
-	'csr_keylen',
-	'Key length',
-	$pconfig['csr_keylen'],
-	array_combine($cert_keylens, $cert_keylens)
-));
-
-$section->addInput(new Form_Select(
-	'csr_digest_alg',
-	'Digest Algorithm',
-	$pconfig['csr_digest_alg'],
-	array_combine($openssl_digest_algs, $openssl_digest_algs)
-))->setHelp('NOTE: It is recommended to use an algorithm stronger than '.
-	'SHA1 when possible');
-
-$section->addInput(new Form_Select(
-	'csr_dn_country',
-	'Country Code',
-	$pconfig['csr_dn_country'],
-	$dn_cc
-));
-
-$section->addInput(new Form_Input(
-	'csr_dn_state',
-	'State or Province',
-	'text',
-	$pconfig['csr_dn_state'],
-	['placeholder' => 'e.g. Texas']
-));
-
-$section->addInput(new Form_Input(
-	'csr_dn_city',
-	'City',
-	'text',
-	$pconfig['csr_dn_city'],
-	['placeholder' => 'e.g. Austin']
-));
-
-$section->addInput(new Form_Input(
-	'csr_dn_organization',
-	'Organization',
-	'text',
-	$pconfig['csr_dn_organization'],
-	['placeholder' => 'e.g. My Company Inc.']
-));
-
-$section->addInput(new Form_Input(
-	'csr_dn_email',
-	'Email Address',
-	'email',
-	$pconfig['csr_dn_email'],
-	['placeholder' => 'e.g. admin@mycompany.com']
-));
-
-$section->addInput(new Form_Input(
-	'csr_dn_commonname',
-	'Common Name',
-	'text',
-	$pconfig['csr_dn_commonname'],
-	['placeholder' => 'e.g. internal-ca']
-));
-
-$form->add($section);
-$section = new Form_Section('Choose an Existing Certificate');
-$section->addClass('toggle-existing collapse');
-
-$existCerts = array();
-
-foreach ($config['cert'] as $cert)	{
-	if (is_array($config['system']['user'][$userid]['cert'])) { // Could be MIA!
-		if (isset($userid) && in_array($cert['refid'], $config['system']['user'][$userid]['cert'])) {
-			continue;
-		}
-	}
-
-	$ca = lookup_ca($cert['caref']);
-	if ($ca) {
-		$cert['descr'] .= " (CA: {$ca['descr']})";
-	}
-
-	if (cert_in_use($cert['refid'])) {
-		$cert['descr'] .= " <i>In Use</i>";
-	}
-	if (is_cert_revoked($cert)) {
-		$cert['descr'] .= " <b>Revoked</b>";
-	}
-
-	$existCerts[ $cert['refid'] ] = $cert['descr'];
-}
-
-
-$section->addInput(new Form_Select(
-	'certref',
-	'Existing Certificates',
-	$pconfig['certref'],
-	$existCerts
-));
-
-$form->add($section);
-print $form;
-
 } else if ($act == "csr" || (($_POST['save'] == gettext("Update")) && $input_errors)) {
-	$form = new Form(new Form_Button(
-		'save',
-		'Update'
-	));
+	$form = new Form(false);
+	$form->setAction('system_certmanager.php?act=csr');
 
-	$section = new Form_Section("Complete signing request for " . $pconfig['descr']);
+	$section = new Form_Section("Complete Signing Request for " . $pconfig['descr']);
 
 	$section->addInput(new Form_Input(
 		'descr',
@@ -965,14 +927,14 @@ print $form;
 		$pconfig['csr']
 	))->setReadonly()
 	  ->setWidth(7)
-	  ->setHelp('Copy the certificate signing data from here and forward it to your certificate authority for signing.');
+	  ->setHelp('Copy the certificate signing data from here and forward it to a certificate authority for signing.');
 
 	$section->addInput(new Form_Textarea(
 		'cert',
 		'Final certificate data',
 		$pconfig['cert']
 	))->setWidth(7)
-	  ->setHelp('Paste the certificate received from your certificate authority here.');
+	  ->setHelp('Paste the certificate received from the certificate authority here.');
 
 	 if (isset($id) && $a_cert[$id]) {
 		 $section->addInput(new Form_Input(
@@ -991,22 +953,40 @@ print $form;
 	 }
 
 	$form->add($section);
+
+	$form->addGlobal(new Form_Button(
+		'save',
+		'Update',
+		null,
+		'fa-save'
+	))->addClass('btn-primary');
+
 	print($form);
 } else {
 ?>
-<div class="table-responsive">
-<table class="table table-striped table-hover">
-	<thead>
-		<tr>
-			<th><?=gettext("Name")?></th>
-			<th><?=gettext("Issuer")?></th>
-			<th><?=gettext("Distinguished Name")?></th>
-			<th><?=gettext("In Use")?></th>
-			<th class="col-sm-2"><?=gettext("Actions")?></th>
-		</tr>
-	</thead>
-	<tbody>
+<div class="panel panel-default">
+	<div class="panel-heading"><h2 class="panel-title"><?=gettext('Certificates')?></h2></div>
+	<div class="panel-body">
+		<div class="table-responsive">
+		<table class="table table-striped table-hover">
+			<thead>
+				<tr>
+					<th><?=gettext("Name")?></th>
+					<th><?=gettext("Issuer")?></th>
+					<th><?=gettext("Distinguished Name")?></th>
+					<th><?=gettext("In Use")?></th>
+
+					<th class="col-sm-2"><?=gettext("Actions")?></th>
+				</tr>
+			</thead>
+			<tbody>
 <?php
+
+$pluginparams = array();
+$pluginparams['type'] = 'certificates';
+$pluginparams['event'] = 'used_certificates';
+$certificates_used_by_packages = pkg_call_plugins('plugin_certificates', $pluginparams);
+$i = 0;
 foreach ($a_cert as $i => $cert):
 	$name = htmlspecialchars($cert['descr']);
 
@@ -1035,67 +1015,90 @@ foreach ($a_cert as $i => $cert):
 		$caname = $ca['descr'];
 	}
 ?>
-		<tr>
-			<td>
-				<?=$name?><br />
-				<?php if ($cert['type']): ?>
-					<i><?=$cert_types[$cert['type']]?></i><br />
-				<?php endif?>
-				<?php if (is_array($purpose)): ?>
-					CA: <b><?=$purpose['ca']?></b>, Server: <b><?=$purpose['server']?></b>
-				<?php endif?>
-			</td>
-			<td><?=$caname?></td>
-			<td>
-				<?=$subj?>
-				<?php if (!$cert['csr']): ?>
-				<br />
-				<small>
-					<?=gettext("Valid From")?>: <b><?=$startdate ?></b><br /><?=gettext("Valid Until")?>: <b><?=$enddate ?></b>
-				</small>
-				<?php endif?>
-			</td>
-			<td>
-				<?php if (is_cert_revoked($cert)): ?>
-					<i>Revoked </i>
-				<?php endif?>
-				<?php if (is_webgui_cert($cert['refid'])): ?>
-					webConfigurator
-				<?php endif?>
-				<?php if (is_user_cert($cert['refid'])): ?>
-					User Cert
-				<?php endif?>
-				<?php if (is_openvpn_server_cert($cert['refid'])): ?>
-					OpenVPN Server
-				<?php endif?>
-				<?php if (is_openvpn_client_cert($cert['refid'])): ?>
-					OpenVPN Client
-				<?php endif?>
-				<?php if (is_ipsec_cert($cert['refid'])): ?>
-					IPsec Tunnel
-				<?php endif?>
-				<?php if (is_captiveportal_cert($cert['refid'])): ?>
-					Captive Portal
-				<?php endif?>
-			</td>
-			<td>
-				<?php if (!$cert['csr']): ?>
-					<a href="system_certmanager.php?act=exp&amp;id=<?=$i?>" class="fa fa-sign-in" title="<?=gettext("Export Certificate")?>"></a>
-					<a href="system_certmanager.php?act=key&amp;id=<?=$i?>" class="fa fa-key" title="<?=gettext("Export Key")?>"></a>
-					<a href="system_certmanager.php?act=p12&amp;id=<?=$i?>" class="fa fa-key" title="<?=gettext("Export P12")?>"> P12</a>
-				<?php else: ?>
-					<a href="system_certmanager.php?act=csr&amp;id=<?=$i?>" class="fa fa-pencil" title="<?=gettext("Update CSR")?>"></a>
-					<a href="system_certmanager.php?act=req&amp;id=<?=$i?>" class="fa fa-sign-in" title="<?=gettext("Export Request")?>"></a>
-					<a href="system_certmanager.php?act=key&amp;id=<?=$i?>" class="fa fa-key" title="<?=gettext("Export Key")?>"></a>
-				<?php endif?>
-				<?php if (!cert_in_use($cert['refid'])): ?>
-					<a href="system_certmanager.php?act=del&amp;id=<?=$i?>" class="fa fa-trash" title="<?=gettext("Delete")?>"></a>
-				<?php endif?>
-			</td>
-		</tr>
-<?php endforeach; ?>
-	</tbody>
-</table>
+				<tr>
+					<td>
+						<?=$name?><br />
+						<?php if ($cert['type']): ?>
+							<i><?=$cert_types[$cert['type']]?></i><br />
+						<?php endif?>
+						<?php if (is_array($purpose)): ?>
+							CA: <b><?=$purpose['ca']?></b>, <?=gettext("Server")?>: <b><?=$purpose['server']?></b>
+						<?php endif?>
+					</td>
+					<td><?=$caname?></td>
+					<td>
+						<?=$subj?>
+						<?php if (!$cert['csr']): ?>
+						<br />
+						<small>
+							<?=gettext("Valid From")?>: <b><?=$startdate ?></b><br /><?=gettext("Valid Until")?>: <b><?=$enddate ?></b>
+						</small>
+						<?php endif?>
+					</td>
+					<td>
+						<?php if (is_cert_revoked($cert)): ?>
+							<i><?=gettext("Revoked")?></i>
+						<?php endif?>
+						<?php if (is_webgui_cert($cert['refid'])): ?>
+							<?=gettext("webConfigurator")?>
+						<?php endif?>
+						<?php if (is_user_cert($cert['refid'])): ?>
+							<?=gettext("User Cert")?>
+						<?php endif?>
+						<?php if (is_openvpn_server_cert($cert['refid'])): ?>
+							<?=gettext("OpenVPN Server")?>
+						<?php endif?>
+						<?php if (is_openvpn_client_cert($cert['refid'])): ?>
+							<?=gettext("OpenVPN Client")?>
+						<?php endif?>
+						<?php if (is_ipsec_cert($cert['refid'])): ?>
+							<?=gettext("IPsec Tunnel")?>
+						<?php endif?>
+						<?php if (is_captiveportal_cert($cert['refid'])): ?>
+							<?=gettext("Captive Portal")?>
+						<?php endif?>
+<?php
+							$refid = $cert['refid'];
+							if (is_array($certificates_used_by_packages)) {
+								foreach ($certificates_used_by_packages as $name => $package) {
+									if (isset($package['certificatelist'][$refid])) {
+										$hint = "" ;
+										if (is_array($package['certificatelist'][$refid])) {
+											foreach ($package['certificatelist'][$refid] as $cert_used) {
+												$hint = $hint . $cert_used['usedby']."\n";
+											}
+										}
+										$count = count($package['certificatelist'][$refid]);
+										echo "<div title='".htmlspecialchars($hint)."'>";
+										echo htmlspecialchars($package['pkgname'])." ($count)<br />";
+										echo "</div>";
+									}
+								}
+							}
+?>
+					</td>
+					<td>
+						<?php if (!$cert['csr']): ?>
+							<a href="system_certmanager.php?act=exp&amp;id=<?=$i?>" class="fa fa-certificate" title="<?=gettext("Export Certificate")?>"></a>
+							<a href="system_certmanager.php?act=key&amp;id=<?=$i?>" class="fa fa-key" title="<?=gettext("Export Key")?>"></a>
+							<a href="system_certmanager.php?act=p12&amp;id=<?=$i?>" class="fa fa-archive" title="<?=gettext("Export P12")?>"></a>
+						<?php else: ?>
+							<a href="system_certmanager.php?act=csr&amp;id=<?=$i?>" class="fa fa-pencil" title="<?=gettext("Update CSR")?>"></a>
+							<a href="system_certmanager.php?act=req&amp;id=<?=$i?>" class="fa fa-sign-in" title="<?=gettext("Export Request")?>"></a>
+							<a href="system_certmanager.php?act=key&amp;id=<?=$i?>" class="fa fa-key" title="<?=gettext("Export Key")?>"></a>
+						<?php endif?>
+						<?php if (!cert_in_use($cert['refid'])): ?>
+							<a href="system_certmanager.php?act=del&amp;id=<?=$i?>" class="fa fa-trash" title="<?=gettext("Delete Certificate")?>"></a>
+						<?php endif?>
+					</td>
+				</tr>
+<?php
+	$i++; 
+	endforeach; ?>
+			</tbody>
+		</table>
+		</div>
+	</div>
 </div>
 
 <nav class="action-buttons">
@@ -1104,7 +1107,7 @@ foreach ($a_cert as $i => $cert):
 		<?=gettext("Add")?>
 	</a>
 </nav>
-<?
+<?php
 	include("foot.inc");
 	exit;
 }

@@ -56,6 +56,9 @@
 if (!function_exists("dump_rrd_to_xml")) {
 	require("rrd.inc");
 }
+if (!function_exists("read_altq_config")) {
+	require("shaper.inc");
+}
 
 /* Upgrade functions must be named:
 *    upgrade_XXX_to_YYY
@@ -654,10 +657,10 @@ function upgrade_039_to_040() {
 		$config['system']['user'][0]['priv'][2]['descr'] = gettext("Indicates whether this user is able to login for example via SSH.");
 		$config['system']['user'][0]['priv'][3]['id'] = "copyfiles";
 		$config['system']['user'][0]['priv'][3]['name'] = "Is allowed to copy files";
-		$config['system']['user'][0]['priv'][3]['descr'] = sprintf(gettext("Indicates whether this user is allowed to copy files onto the %s appliance via SCP/SFTP. If you are going to use this privilege, you must install scponly on the appliance (Hint: pkg_add -r scponly)."), $g['product_name']);
+		$config['system']['user'][0]['priv'][3]['descr'] = sprintf(gettext("Indicates whether this user is allowed to copy files onto the %s appliance via SCP/SFTP."), $g['product_name']);
 		$config['system']['user'][0]['priv'][4]['id'] = "isroot";
 		$config['system']['user'][0]['priv'][4]['name'] = "Is root user";
-		$config['system']['user'][0]['priv'][4]['descr'] = gettext("This user is associated with the UNIX root user (you should associate this privilege only with one single user).");
+		$config['system']['user'][0]['priv'][4]['descr'] = gettext("This user is associated with the UNIX root user (this privilege should only be associated with one single user).");
 
 		$config['system']['nextuid'] = "111";
 		$config['system']['nextgid'] = "111";
@@ -2157,10 +2160,6 @@ function upgrade_054_to_055() {
 		@unlink("{$g['tmp_path']}/{$xmldump}");
 		@unlink("{$g['tmp_path']}/{$xmldumpnew}");
 	}
-	/* let apinger recreate required files */
-	if (!platform_booting()) {
-		setup_gateways_monitor();
-	}
 
 	/* build a list of traffic and packets databases */
 	$databases = return_dir_as_array($rrddbpath, '/-(traffic|packets)\.rrd$/');
@@ -3334,9 +3333,8 @@ function upgrade_096_to_097() {
 }
 
 function upgrade_097_to_098() {
-	global $config, $g;
-	/* Disable kill_states by default */
-	$config['system']['kill_states'] = true;
+	// no longer used (used to set kill_states)
+	return;
 }
 
 function upgrade_098_to_099() {
@@ -3489,8 +3487,8 @@ function upgrade_104_to_105() {
 }
 
 function upgrade_105_to_106() {
-
-	/* NOTE: This entry can be reused for something else since the upgrade code was reverted */
+	/* NOTE: This upgrade code was reverted. See redmine ticket #3967 and
+	   https://github.com/pfsense/pfsense/commit/6f55af1c25f5232ffe905a90f5f97aad4c87bdfa */
 }
 
 function upgrade_106_to_107() {
@@ -3822,9 +3820,9 @@ function upgrade_117_to_118() {
 function upgrade_118_to_119() {
 	global $config;
 
-        if (!isset($config['ipsec']['phase1'])) {
-                return;
-        }
+	if (!isset($config['ipsec']['phase1'])) {
+		return;
+	}
 
 	// change peerid_type to 'any' for EAP types to retain previous behavior of omitting rightid
 	$a_phase1 =& $config['ipsec']['phase1'];
@@ -4004,7 +4002,7 @@ function upgrade_124_to_125() {
 			if (!function_exists("file_notice")) {
 				require_once("notices.inc");
 			}
-			file_notice("WirelessSettings", "WEP is no longer supported. It will be disabled on the {$ifname} interface and the interface will be disabled. Please reconfigure the interface.");
+			file_notice("WirelessSettings", sprintf(gettext("WEP is no longer supported. It will be disabled on the %s interface and the interface will be disabled. Please reconfigure the interface."), $ifname));
 			unset($config['interfaces'][$ifname]['wireless']['wep']);
 			if (isset($intf['enable'])) {
 				unset($config['interfaces'][$ifname]['enable']);
@@ -4119,6 +4117,14 @@ function upgrade_128_to_129() {
 	/* IPSEC is always on in 2.3. */
 	if (isset($config['ipsec']['enable'])) {
 		unset($config['ipsec']['enable']);
+	} else if (is_array($config['ipsec']['phase1'])) {
+		/*
+		 * If IPsec was globally disabled, disable all
+		 * phase1 entries
+		 */
+		foreach ($config['ipsec']['phase1'] as $idx => $p1) {
+			$config['ipsec']['phase1'][$idx]['disabled'] = true;
+		}
 	}
 }
 
@@ -4128,7 +4134,7 @@ function upgrade_129_to_130() {
 	/* Change OpenVPN topology_subnet checkbox into topology multi-select #5526 */
 	if (is_array($config['openvpn']) && is_array($config['openvpn']['openvpn-server'])) {
 		foreach ($config['openvpn']['openvpn-server'] as & $serversettings) {
-			if (isset($serversettings['topology_subnet'])) {
+			if (strtolower($serversettings['topology_subnet']) == "yes") {
 				unset($serversettings['topology_subnet']);
 				$serversettings['topology'] = "subnet";
 			} else {
@@ -4140,6 +4146,12 @@ function upgrade_129_to_130() {
 
 function upgrade_130_to_131() {
 	global $config;
+
+	// Default dpinger parameters at time of this upgrade (2.3)
+	$default_interval = 500;
+	$default_alert_interval = 1000;
+	$default_loss_interval = 2000;
+	$default_time_period = 60000;
 
 	if (isset($config['syslog']['apinger'])) {
 		$config['syslog']['dpinger'] = true;
@@ -4155,35 +4167,76 @@ function upgrade_130_to_131() {
 		return;
 	}
 
-	foreach ($config['gateways']['gateway_item'] as &$gw) {
-		// dpinger uses milliseconds
-		if (isset($gw['interval']) &&
-		    is_numeric($gw['interval'])) {
-			$gw['interval'] = $gw['interval'] * 1000;
-		}
-		if (isset($gw['down']) &&
-		    is_numeric($gw['down'])) {
-			$gw['loss_interval'] = $gw['down'] * 1000;
-			unset($gw['down']);
-		}
+	if (is_array($config['gateways']['gateway_item'])) {
+		foreach ($config['gateways']['gateway_item'] as &$gw) {
+			// dpinger uses milliseconds
+			if (isset($gw['interval']) &&
+				is_numeric($gw['interval'])) {
+				$gw['interval'] = $gw['interval'] * 1000;
+			}
 
-		if (isset($gw['avg_delay_samples'])) {
-			unset($gw['avg_delay_samples']);
-		}
-		if (isset($gw['avg_delay_samples_calculated'])) {
-			unset($gw['avg_delay_samples_calculated']);
-		}
-		if (isset($gw['avg_loss_samples'])) {
-			unset($gw['avg_loss_samples']);
-		}
-		if (isset($gw['avg_loss_samples_calculated'])) {
-			unset($gw['avg_loss_samples_calculated']);
-		}
-		if (isset($gw['avg_loss_delay_samples'])) {
-			unset($gw['avg_loss_delay_samples']);
-		}
-		if (isset($gw['avg_loss_delay_samples_calculated'])) {
-			unset($gw['avg_loss_delay_samples_calculated']);
+			if (isset($gw['interval'])) {
+				$effective_interval = $gw['interval'];
+			} else {
+				$effective_interval = $default_interval;
+			}
+
+			if (isset($gw['down']) &&
+				is_numeric($gw['down'])) {
+				$gw['time_period'] = $gw['down'] * 1000;
+				unset($gw['down']);
+			}
+
+			if (isset($gw['time_period'])) {
+				$effective_time_period = $gw['time_period'];
+			} else {
+				$effective_time_period = $default_time_period;
+			}
+
+			if (isset($gw['latencyhigh'])) {
+				// Default loss_interval is 2000, but must be set
+				// higher if latencyhigh is higher.
+				if ($gw['latencyhigh'] > $default_loss_interval) {
+					$gw['loss_interval'] = $gw['latencyhigh'];
+				}
+			}
+
+			if (isset($gw['loss_interval'])) {
+				$effective_loss_interval = $gw['loss_interval'];
+			} else {
+				$effective_loss_interval = $default_loss_interval;
+			}
+
+			if (isset($gw['interval'])) {
+				// Default alert_interval is 1000, but must be set
+				// higher if interval is higher.
+				if ($gw['interval'] > $default_alert_interval) {
+					$gw['alert_interval'] = $gw['interval'];
+				}
+			}
+
+			if ((($effective_interval * 2) + $effective_loss_interval) >= $effective_time_period) {
+				$gw['time_period'] = ($effective_interval * 2) + $effective_loss_interval + 1;
+			}
+
+			if (isset($gw['avg_delay_samples'])) {
+				unset($gw['avg_delay_samples']);
+			}
+			if (isset($gw['avg_delay_samples_calculated'])) {
+				unset($gw['avg_delay_samples_calculated']);
+			}
+			if (isset($gw['avg_loss_samples'])) {
+				unset($gw['avg_loss_samples']);
+			}
+			if (isset($gw['avg_loss_samples_calculated'])) {
+				unset($gw['avg_loss_samples_calculated']);
+			}
+			if (isset($gw['avg_loss_delay_samples'])) {
+				unset($gw['avg_loss_delay_samples']);
+			}
+			if (isset($gw['avg_loss_delay_samples_calculated'])) {
+				unset($gw['avg_loss_delay_samples_calculated']);
+			}
 		}
 	}
 }
@@ -4194,5 +4247,737 @@ function upgrade_131_to_132() {
 		unset($config['system']['usefifolog']);
 		clear_all_log_files(false);
 	}
+}
+
+function upgrade_132_to_133() {
+	global $config;
+
+	if (isset($config['ipsec']['phase1']) &&
+	    is_array($config['ipsec']['phase1'])) {
+		foreach ($config['ipsec']['phase1'] as &$p1) {
+			if (isset($p1['encryption-algorithm']['name']) &&
+			    $p1['encryption-algorithm']['name'] == 'des') {
+				$p1['disabled'] = true;
+				file_notice("IPsec",
+				    sprintf(gettext("DES is no longer supported, IPsec phase 1 item '%s' is being disabled."), $p1['descr']));
+			}
+		}
+	}
+
+	if (isset($config['ipsec']['phase2']) &&
+	    is_array($config['ipsec']['phase2'])) {
+		foreach ($config['ipsec']['phase2'] as &$p2) {
+			if (!isset($p2['encryption-algorithm-option']) ||
+			    !is_array($p2['encryption-algorithm-option'])) {
+				continue;
+			}
+
+			foreach ($p2['encryption-algorithm-option'] as $ealgo) {
+				if ($ealgo['name'] == 'des') {
+					$p2['disabled'] = true;
+					file_notice("IPsec",
+					    sprintf(gettext("DES is no longer supported, IPsec phase 2 item '%s' is being disabled."), $p2['descr']));
+				}
+			}
+		}
+	}
+}
+
+// Determine the highest column number in use and set dashboardcolumns accordingly
+function upgrade_133_to_134() {
+	global $config;
+
+	if (!isset($config['widgets']['sequence']) || isset($config['system']['webgui']['dashboardcolumns'])) {
+		return;
+	}
+
+	$cur_widgets = explode(',', trim($config['widgets']['sequence']));
+	$maxcols = 2;
+
+	foreach ($cur_widgets as $widget) {
+		list($file, $col, $display) = explode(':', $widget);
+
+		if (($display != 'none') && ($display != 'hide')) {
+			preg_match('#[0-9]+$#', $col, $column);
+			if ($column[0] > $maxcols) {
+				$maxcols = $column[0];
+			}
+		}
+	}
+
+	$config['system']['webgui']['dashboardcolumns'] = $maxcols % 10;
+}
+
+function upgrade_134_to_135() {
+	global $config;
+
+	if (isset($config['syslog']['nologlighttpd'])) {
+		unset($config['syslog']['nologlighttpd']);
+		$config['syslog']['nolognginx'] = true;
+	}
+}
+
+function upgrade_135_to_136() {
+	global $config;
+
+	$l7_active = false;
+	if (isset($config['l7shaper'])) {
+		unset($config['l7shaper']);
+		if (is_array($config['filter']['rule'])) {
+			foreach ($config['filter']['rule'] as $idx => $rule) {
+				if (isset($rule['l7container'])) {
+					unset($config['filter']['rule'][$idx]['l7container']);
+					$l7_active = true;
+				}
+			}
+		}
+		if ($l7_active) {
+			file_notice("L7shaper", gettext("Layer 7 shaping is no longer supported. Its configuration has been removed."));
+		}
+	}
+}
+
+function upgrade_136_to_137() {
+	global $config;
+
+	if (is_array($config['dhcpd'])) {
+		foreach ($config['dhcpd'] as &$dhcpd) {
+			if (!is_array($dhcpd['numberoptions']['item'])) {
+				continue;
+			}
+
+			foreach ($dhcpd['numberoptions']['item'] as &$item) {
+				$item['value'] = base64_encode($item['value']);
+			}
+		}
+	}
+
+	if (is_array($config['dhcpdv6'])) {
+		foreach ($config['dhcpdv6'] as &$dhcpdv6) {
+			if (!is_array($dhcpdv6['numberoptions']['item'])) {
+				continue;
+			}
+
+			foreach ($dhcpdv6['numberoptions']['item'] as &$item) {
+				$item['value'] = base64_encode($item['value']);
+			}
+		}
+	}
+}
+
+function upgrade_137_to_138() {
+	global $config;
+
+	// the presence of unityplugin tag used to disable loading of unity plugin
+	// it's now disabled by default, and config tag is to enable. Unset accordingly.
+	if (is_array($config['ipsec'])) {
+		if (isset($config['ipsec']['unityplugin'])) {
+			unset($config['ipsec']['unityplugin']);
+		}
+	}
+}
+
+function upgrade_138_to_139() {
+	global $config;
+
+	// clean up state killing on gateway failure. having kill_states set used to mean it was disabled
+	// now set gw_down_kill_states if enabled.
+	if (!isset($config['system']['kill_states'])) {
+		$config['system']['gw_down_kill_states'] = true;
+	} else {
+		unset($config['system']['kill_states']);
+	}
+}
+
+function upgrade_139_to_140() {
+	global $config;
+
+	if (is_array($config['virtualip']['vip'])) {
+		foreach ($config['virtualip']['vip'] as $idx => $vip) {
+			if ($vip['mode'] == "carp") {
+				if (!isset($vip['uniqid'])) {
+					$config['virtualip']['vip'][$idx]['uniqid'] = uniqid();
+				}
+			}
+		}
+	}
+}
+
+function upgrade_140_to_141() {
+	global $config;
+
+	// retain OpenVPN's net30 default topology for upgraded client configs so they still work
+	// This is for 2.3 ALPHA to a later 2.3, not 2.2.x upgrades, which had no topology setting on clients
+	if (is_array($config['openvpn']) && is_array($config['openvpn']['openvpn-client'])) {
+		foreach ($config['openvpn']['openvpn-client'] as $idx => $ovpnclient) {
+			if (!isset($ovpnclient['topology'])) {
+				$config['openvpn']['openvpn-client'][$idx]['topology'] = "net30";
+			}
+		}
+	}
+
+	// repeat addition of filter tracker IDs from 106_to_107 where missing since associated filter rules were missing them
+	if (is_array($config['filter']) && is_array($config['filter']['rule'])) {
+		$tracker = (int)microtime(true);
+		foreach ($config['filter']['rule'] as $ridx => $rule) {
+			if (empty($rule['tracker'])) {
+				$config['filter']['rule'][$ridx]['tracker'] = $tracker;
+				$tracker++;
+			}
+		}
+		unset($tracker, $ridx);
+	}
+
+}
+
+function upgrade_141_to_142() {
+	global $config;
+	/* Convert Namecheap type DynDNS entries to the new split hostname and domain format */
+
+	if (!is_array($config['dyndnses'])) {
+		$config['dyndnses'] = array();
+	}
+	if (!is_array($config['dyndnses']['dyndns'])) {
+		$config['dyndnses']['dyndns'] = array();
+	}
+	$a_dyndns = &$config['dyndnses']['dyndns'];
+
+	foreach ($a_dyndns as &$dyndns) {
+		if ($dyndns['type'] == "namecheap") {
+			/* Use the old style logic to split the host and domain one last time. */
+			$dparts = explode(".", trim($dyndns['host']));
+			$domain_part_count = ($dparts[count($dparts)-1] == "uk") ? 3 : 2;
+			$domain_offset = count($dparts) - $domain_part_count;
+			$dyndns['host'] = implode(".", array_slice($dparts, 0, $domain_offset));
+			$dyndns['domainname'] = implode(".", array_slice($dparts, $domain_offset));
+		}
+	}
+
+	/* unset old pppoerestart cron job if it exists. redmine 1905 */
+	if (is_array($config['cron']['item'])) {
+		foreach ($config['cron']['item'] as $idx => $cronitem) {
+			if ($cronitem['command'] == "/etc/pppoerestart") {
+				unset($config['cron']['item'][$idx]);
+			}
+		}
+	}
+}
+
+// Updated to check for empty separator definitions via is_array()
+function upgrade_142_to_143() {
+	global $config;
+
+	/* Re-index firewall rule separators per interface */
+	if (is_array($config['filter']['separator'])) {
+		foreach ($config['filter']['separator'] as $interface => $separators) {
+
+			if(is_array($separators)) {
+				foreach ($separators as $sepn => $separator) {
+
+					$seprow = substr($separator['row']['0'], 2);
+					$sepif  = $separator['if'];
+
+					// Determine position of separator within the interface rules.
+					$i = -1; $j = 0;
+					foreach ($config['filter']['rule'] as $rulen => $filterent) {
+
+						if ($i == $seprow) {
+							// Set separator row to it's position within the interface rules.
+							$config['filter']['separator'][$sepif][$sepn]['row'] = 'fr' . $j;
+							continue 2;	// Advance to next separator
+						}
+
+						// Position within the interface rules.
+						if (($filterent['interface'] == $sepif && !isset($filterent['floating'])) || (isset($filterent['floating']) && "floatingrules" == $sepif)) {
+							$j++;
+						}
+						$i++;
+					}
+				}
+			}
+		}
+	}
+
+	/* Re-index nat rule separators */
+	if (is_array($config['nat']['separator'])) {
+		foreach ($config['nat']['separator'] as $sepn => $separator) {
+			if (is_array($separator)) {
+				$seprow = substr($separator['row']['0'], 2);
+				$config['nat']['separator'][$sepn]['row'] = 'fr' . ($seprow + 1);
+			}
+		}
+	}
+}
+
+function get_vip_from_ip_alias($ipalias) {
+	global $config;
+
+	foreach ($config['virtualip']['vip'] as $idx => $vip) {
+		if ($vip['mode'] != "ipalias") {
+			continue;
+		}
+		if ($ipalias == $vip['subnet']) {
+			return ("_vip{$vip['uniqid']}");
+		}
+	}
+
+	return ($ipalias);
+}
+
+function get_vip_from_oldcarp($carp) {
+	global $config;
+
+	foreach ($config['virtualip']['vip'] as $idx => $vip) {
+		if ($vip['mode'] != "carp") {
+			continue;
+		}
+		if ($carp == "{$vip['interface']}_vip{$vip['vhid']}") {
+			return ("_vip{$vip['uniqid']}");
+		}
+	}
+
+	return ($carp);
+}
+
+function upgrade_143_to_144() {
+	global $config;
+
+	if (is_array($config['virtualip']['vip'])) {
+		foreach ($config['virtualip']['vip'] as $idx => $vip) {
+			if ($vip['mode'] == "ipalias") {
+				if (!isset($vip['uniqid'])) {
+					$config['virtualip']['vip'][$idx]['uniqid'] = uniqid();
+				}
+			}
+		}
+	}
+
+	/* Convert IPsec phase 1 entries. */
+	if (is_array($config['ipsec']['phase1'])) {
+		foreach ($config['ipsec']['phase1'] as $idx => $ph1ent) {
+			if (is_ipaddr($ph1ent['interface']) || is_ipaddrv6($ph1ent['interface'])) {
+				$config['ipsec']['phase1'][$idx]['interface'] = get_vip_from_ip_alias($ph1ent['interface']);
+			} else if (strpos($ph1ent['interface'], "_vip")) {
+				$config['ipsec']['phase1'][$idx]['interface'] = get_vip_from_oldcarp($ph1ent['interface']);
+			}
+		}
+	}
+
+	/* Convert openvpn. */
+	if (is_array($config['openvpn']['openvpn-server'])) {
+		foreach ($config['openvpn']['openvpn-server'] as $idx => $ovpn) {
+			if (empty($ovpn['interface'])) {
+				continue;
+			}
+			if (is_ipaddr($ovpn['interface']) || is_ipaddrv6($ovpn['interface'])) {
+				$config['openvpn']['openvpn-server'][$idx]['interface'] = get_vip_from_ip_alias($ovpn['interface']);
+			} else if (strpos($ovpn['interface'], "_vip")) {
+				$config['openvpn']['openvpn-server'][$idx]['interface'] = get_vip_from_oldcarp($ovpn['interface']);
+			}
+		}
+	}
+	if (is_array($config['openvpn']['openvpn-client'])) {
+		foreach ($config['openvpn']['openvpn-client'] as $idx => $ovpn) {
+			if (empty($ovpn['interface'])) {
+				continue;
+			}
+			if (is_ipaddr($ovpn['interface']) || is_ipaddrv6($ovpn['interface'])) {
+				$config['openvpn']['openvpn-client'][$idx]['interface'] = get_vip_from_ip_alias($ovpn['interface']);
+			} else if (strpos($ovpn['interface'], "_vip")) {
+				$config['openvpn']['openvpn-client'][$idx]['interface'] = get_vip_from_oldcarp($ovpn['interface']);
+			}
+		}
+	}
+
+	/* Convert unbound. */
+	if (is_array($config['unbound']) && !empty($config['unbound']['active_interface'])) {
+		$active_ifs = explode(",", $config['unbound']['active_interface']);
+		$ifs = array();
+		foreach ($active_ifs as $if) {
+			if (is_ipaddr($if) || is_ipaddrv6($if)) {
+				$ifs[] = get_vip_from_ip_alias($if);
+			} else if (strpos($if, "_vip")) {
+				$ifs[] = get_vip_from_oldcarp($if);
+			} else {
+				$ifs[] = $if;
+			}
+		}
+		$config['unbound']['active_interface'] = implode(",", $ifs);
+	}
+
+	/* Convert dnsmasq. */
+	if (is_array($config['dnsmasq']) && !empty($config['dnsmasq']['interface'])) {
+		$active_ifs = explode(",", $config['dnsmasq']['interface']);
+		$ifs = array();
+		foreach ($active_ifs as $if) {
+			if (is_ipaddr($if) || is_ipaddrv6($if)) {
+				$ifs[] = get_vip_from_ip_alias($if);
+			} else if (strpos($if, "_vip")) {
+				$ifs[] = get_vip_from_oldcarp($if);
+			} else {
+				$ifs[] = $if;
+			}
+		}
+		$config['dnsmasq']['interface'] = implode(",", $ifs);
+	}
+}
+
+function upgrade_144_to_145() {
+	global $config;
+
+	// Enable DHCPv6 server and radvd config for track6 interfaces,
+	// matching what used to be automatically enabled with no user
+	// configurability.
+	if (is_array($config['interfaces'])) {
+		foreach ($config['interfaces'] as $ifname => $ifcfg) {
+			if (isset($ifcfg['enable'])) {
+				if ($ifcfg['ipaddrv6'] == "track6") {
+					$config['dhcpdv6'][$ifname]['enable'] = true;
+					$config['dhcpdv6'][$ifname]['range']['from'] = "::1000";
+					$config['dhcpdv6'][$ifname]['range']['to'] = "::2000";
+					$config['dhcpdv6'][$ifname]['ramode'] = "assist";
+					$config['dhcpdv6'][$ifname]['rapriority'] = "medium";
+				}
+			}
+		}
+	}
+}
+
+function upgrade_145_to_146() {
+	// Add standard deviation to the quality rrds
+	global $config, $g;
+
+	$rrddbpath = "/var/db/rrd";
+	$rrdtool = "/usr/local/bin/rrdtool";
+
+	$awkcmd = "/usr/bin/awk '";
+	$awkcmd .= "{\n";
+	$awkcmd .= "    if (sub(/<\\/v><\\/row>/, \"</v><v>NaN</v></row>\") == 0)\n";
+	$awkcmd .= "    {\n";
+	$awkcmd .= "        if (/<\\/cdp_prep>/)\n";
+	$awkcmd .= "        {\n";
+	$awkcmd .= "            print \"			<ds>\"\n";
+	$awkcmd .= "            print \"			<primary_value> 0.0000000000e+00 </primary_value>\"\n";
+	$awkcmd .= "            print \"			<secondary_value> 0.0000000000e+00 </secondary_value>\"\n";
+	$awkcmd .= "            print \"			<value> NaN </value>\"\n";
+	$awkcmd .= "            print \"			<unknown_datapoints> 0 </unknown_datapoints>\"\n";
+	$awkcmd .= "            print \"			</ds>\"\n";
+	$awkcmd .= "        }\n";
+	$awkcmd .= "        else if (/<!-- Round Robin Archives -->/)\n";
+	$awkcmd .= "        {\n";
+	$awkcmd .= "            print \"	<ds>\"\n";
+	$awkcmd .= "            print \"		<name> stddev </name>\"\n";
+	$awkcmd .= "            print \"		<type> GAUGE </type>\"\n";
+	$awkcmd .= "            print \"		<minimal_heartbeat> 120 </minimal_heartbeat>\"\n";
+	$awkcmd .= "            print \"		<min> 0.0000000000e+00 </min>\"\n";
+	$awkcmd .= "            print \"		<max> 1.0000000000e+05 </max>\\n\"\n";
+	$awkcmd .= "            print \"		<!-- PDP Status -->\"\n";
+	$awkcmd .= "            print \"		<last_ds> 0 </last_ds>\"\n";
+	$awkcmd .= "            print \"		<value> 0.0000000000e+00 </value>\"\n";
+	$awkcmd .= "            print \"		<unknown_sec> 0 </unknown_sec>\"\n";
+	$awkcmd .= "            print \"	</ds>\\n\"\n";
+	$awkcmd .= "        }\n";
+	$awkcmd .= "    }\n";
+	$awkcmd .= "    print;\n";
+	$awkcmd .= "}'";
+
+	if ($g['platform'] != $g['product_name']) {
+		/* restore the databases, if we have one */
+		if (restore_rrd()) {
+			/* Make sure to move the rrd backup out of the way. We will make a new one after converting. */
+			@rename("{$g['cf_conf_path']}/rrd.tgz", "{$g['cf_conf_path']}/backup/rrd.tgz");
+		}
+	}
+
+	$databases = return_dir_as_array($rrddbpath, '/-quality\.rrd$/');
+	foreach ($databases as $database) {
+		$xmldump = "{$g['tmp_path']}/{$database}.xml";
+
+		if (platform_booting()) {
+			echo "Update RRD database {$database}.\n";
+		}
+
+		exec("$rrdtool dump {$rrddbpath}/{$database} | {$awkcmd} > {$xmldump}");
+		exec("$rrdtool restore -f {$xmldump} {$rrddbpath}/{$database}");
+		@unlink("{$xmldump}");
+	}
+
+	if (!platform_booting()) {
+		enable_rrd_graphing();
+	}
+	/* Let's save the RRD graphs after we run enable RRD graphing */
+	/* The function will restore the rrd.tgz so we will save it after */
+	exec("cd /; LANG=C NO_REMOUNT=1 RRDDBPATH='{$rrddbpath}' CF_CONF_PATH='{$g['cf_conf_path']}' /etc/rc.backup_rrd.sh");
+}
+
+function upgrade_bgpd_146_to_147() {
+	global $config;
+
+	if (!isset($config['installedpackages']['openbgpd']['config']) ||
+	    !is_array($config['installedpackages']['openbgpd']['config'])) {
+		return;
+	}
+	$openbgpd_conf = &$config['installedpackages']['openbgpd']['config'][0];
+	if (!isset($openbgpd_conf['carpstatusip']) &&
+	    !is_ipaddr($openbgpd_conf['carpstatusip'])) {
+		return;
+	}
+
+	if (!is_array($config['virtualip']['vip']))
+		return;
+	foreach ($config['virtualip']['vip'] as $idx => $vip) {
+		if ($vip['subnet'] == $openbgpd_conf['carpstatusip']) {
+			$openbgpd_conf['carpstatusvid'] = "_vip{$vip['uniqid']}";
+			unset($openbgpd_conf['carpstatusip']);
+			return;
+		}
+	}
+}
+
+function upgrade_quagga_146_to_147() {
+	global $config;
+
+	if (!isset($config['installedpackages']['quaggaospfd']['config']) ||
+	    !is_array($config['installedpackages']['quaggaospfd']['config'])) {
+		return;
+	}
+	$ospfd_conf = &$config['installedpackages']['quaggaospfd']['config'][0];
+	if (!isset($ospfd_conf['carpstatusip']) &&
+	    !is_ipaddr($ospfd_conf['carpstatusip'])) {
+		return;
+	}
+
+	if (!is_array($config['virtualip']['vip']))
+		return;
+	foreach ($config['virtualip']['vip'] as $idx => $vip) {
+		if ($vip['subnet'] == $ospfd_conf['carpstatusip']) {
+			$ospfd_conf['carpstatusvid'] = "_vip{$vip['uniqid']}";
+			unset($ospfd_conf['carpstatusip']);
+			return;
+		}
+	}
+}
+
+function upgrade_146_to_147() {
+
+	upgrade_bgpd_146_to_147();
+	upgrade_quagga_146_to_147();
+}
+
+function upgrade_147_to_148() {
+	global $config;
+
+	// Ensure there are no spaces in group names by
+	// replacing spaces with underscores
+	if (is_array($config['system']['group'])) {
+		$cleargroups = false;
+		foreach ($config['system']['group'] as $idx => $grp) {
+			if (strstr($grp['name'], " ")) {
+				$cleargroups = true;
+				$config['system']['group'][$idx]['scope'] = "remote";
+			}
+		}
+
+		// if there was a space in a group name, there may be multiple
+		// groups with the same name in the group file. To prevent pw 
+		// from getting into a neverending loop, delete all user-defined
+		// groups here. local_sync_accounts will run shortly after this
+		// and add them back. redmine #6012
+		if ($cleargroups) {
+			foreach ($config['system']['group'] as $grp) {
+				mwexec("/usr/sbin/pw groupdel -g {$grp['gid']}");
+			}
+		}
+	}
+}
+
+function upgrade_148_to_149() {
+	global $config;
+	global $altq_list_queues;
+
+        if (!isset($config['shaper']['queue']) || !is_array($config['shaper']['queue']))
+                return;
+
+	read_altq_config();
+
+	/* Set root queue bandwidth. */
+	foreach ($altq_list_queues as $altq) {
+		$sum = $altq->GetTotalBw();
+		while ($sum > get_queue_bandwidth($altq)) {
+			if (intval(($sum / 1000) * 1.2) < (1024 * 1024)) {
+				/* 1Gb where possible. */
+				$bw = 1024 * 1024;
+			} else {
+				/* Increase by 20% until it fits. */
+				$bw = intval(($sum / 1000) * 1.2);
+			}
+			$altq->SetBandwidth($bw);
+			$altq->SetBwscale("Kb");
+			$altq->wconfig();
+			$sum = $altq->GetTotalBw();
+		}
+	}
+}
+
+function upgrade_149_to_150() {
+	global $config;
+
+	if (is_array($config['dhcpdv6'])) {
+                foreach ($config['dhcpdv6'] as &$dhcpdv6) {
+			if (isset($dhcpdv6['rainterface'])) {
+				if (strstr($dhcpdv6['rainterface'], "_vip")) {
+					$dhcpdv6['rainterface'] = get_vip_from_oldcarp($dhcpdv6['rainterface']);
+				}
+			}
+		}
+	}
+}
+
+function upgrade_150_to_151() {
+	global $config;
+
+	// Default dpinger parameters at time of this upgrade (2.3.1)
+	$default_interval = 500;
+	$default_alert_interval = 1000;
+	$default_loss_interval = 2000;
+	$default_time_period = 60000;
+	$default_latencyhigh = 500;
+
+	// Check advanced gateway parameter relationships in case they are incorrect
+	if (is_array($config['gateways']['gateway_item'])) {
+		foreach ($config['gateways']['gateway_item'] as &$gw) {
+			if (isset($gw['interval'])) {
+				$effective_interval = $gw['interval'];
+			} else {
+				$effective_interval = $default_interval;
+			}
+
+			if (isset($gw['alert_interval'])) {
+				$effective_alert_interval = $gw['alert_interval'];
+			} else {
+				$effective_alert_interval = $default_alert_interval;
+			}
+
+			if (isset($gw['loss_interval'])) {
+				$effective_loss_interval = $gw['loss_interval'];
+			} else {
+				$effective_loss_interval = $default_loss_interval;
+			}
+
+			if (isset($gw['time_period'])) {
+				$effective_time_period = $gw['time_period'];
+			} else {
+				$effective_time_period = $default_time_period;
+			}
+
+			if (isset($gw['latencyhigh'])) {
+				$effective_latencyhigh = $gw['latencyhigh'];
+			} else {
+				$effective_latencyhigh = $default_latencyhigh;
+			}
+
+			// Loss interval has to be at least as big as high latency.
+			if ($effective_latencyhigh > $effective_loss_interval) {
+				$effective_loss_interval = $gw['loss_interval'] = $effective_latencyhigh;
+			}
+
+			// Alert interval has to be at least as big as probe interval.
+			if ($effective_interval > $effective_alert_interval) {
+				$gw['alert_interval'] = $effective_interval;
+			}
+
+			// The time period for averaging has to be more than 2 probes plus the loss interval.
+			if ((($effective_interval * 2) + $effective_loss_interval) >= $effective_time_period) {
+				$gw['time_period'] = ($effective_interval * 2) + $effective_loss_interval + 1;
+			}
+		}
+	}
+}
+
+function upgrade_151_to_152() {
+	global $g, $config;
+
+	require_once("/etc/inc/services.inc");
+
+	// Remove these cron jobs on full install if not using ramdisk.
+	if (($g['platform'] == $g['product_name']) && !isset($config['system']['use_mfs_tmpvar'])) {
+		install_cron_job("/etc/rc.backup_rrd.sh", false);
+		install_cron_job("/etc/rc.backup_dhcpleases.sh", false);
+	}
+}
+
+function upgrade_152_to_153() {
+	global $config;
+
+	if (is_array($config['virtualip']['vip'])) {
+		foreach ($config['virtualip']['vip'] as $idx => $vip) {
+			if (substr($vip['interface'], 0, 4) == "_vip") {
+				// using new VIP format
+				continue;
+			} else if (strstr($vip['interface'], "_vip")) {
+				// using old VIP format, update
+				$config['virtualip']['vip'][$idx]['interface'] = get_vip_from_oldcarp($vip['interface']);
+			}
+		}
+	}
+
+	// upgrade GIFs using VIP to new format
+	if (is_array($config['gifs']['gif'])) {
+		foreach ($config['gifs']['gif'] as $idx => $gif) {
+			if (substr($gif['if'], 0, 4) == "_vip") {
+				// using new VIP format
+				continue;
+			} else if (strstr($gif['if'], "_vip")) {
+				// using old VIP format, update
+				$config['gifs']['gif'][$idx]['if'] = get_vip_from_oldcarp($gif['if']);
+			}
+		}
+	}
+
+	// upgrade GREs using VIP to new format
+	if (is_array($config['gres']['gre'])) {
+		foreach ($config['gres']['gre'] as $idx => $gre) {
+			if (substr($gre['if'], 0, 4) == "_vip") {
+				// using new VIP format
+				continue;
+			} else if (strstr($gre['if'], "_vip")) {
+				// using old VIP format, update
+				$config['gres']['gre'][$idx]['if'] = get_vip_from_oldcarp($gre['if']);
+			}
+		}
+	}
+
+	// upgrade gateway groups using VIPs
+	if (is_array($config['gateways']['gateway_group'])) {
+		foreach ($config['gateways']['gateway_group'] as $idx => $gw) {
+			if (is_array($gw['item'])) {
+				$newitems = array();
+				$gwvipchange = false;
+				foreach ($gw['item'] as $item) {
+					if (strstr($item, "|_vip")) {
+						// using new VIP format
+						$newitems[] = $item;
+						continue;
+					} else if (strstr($item, "_vip")) {
+						// using old VIP format, update
+						$gwitemarr = explode("|", $item);
+						$gwitemarr[2] = get_vip_from_oldcarp($gwitemarr[2]);
+						$newitems[] = implode("|", $gwitemarr);
+						$gwvipchange = true;
+					} else {
+						$newitems[] = $item;
+					}
+				}
+				if ($gwvipchange) {
+					$config['gateways']['gateway_group'][$idx]['item'] = $newitems;
+				}
+			}
+		}
+	}
+}
+
+function upgrade_153_to_154() {
+	/* NOTE: This upgrade code was reverted. See redmine ticket #6118 and
+	   https://github.com/pfsense/pfsense/commit/538a3c04a6b6671151e913b06b2f340b6f8ee222 */
 }
 ?>

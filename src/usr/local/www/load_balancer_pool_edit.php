@@ -116,7 +116,7 @@ if ($_POST) {
 	}
 
 	if (preg_match('/[ \/]/', $_POST['name'])) {
-		$input_errors[] = gettext("You cannot use spaces or slashes in the 'name' field.");
+		$input_errors[] = gettext("Spaces or slashes cannot be used in the 'name' field.");
 	}
 
 	if (strlen($_POST['name']) > 16) {
@@ -216,7 +216,7 @@ if ($_POST) {
 	}
 }
 
-$pgtitle = array(gettext("Services"), gettext("Load Balancer"), gettext("Pool"), gettext("Edit"));
+$pgtitle = array(gettext("Services"), gettext("Load Balancer"), gettext("Pools"), gettext("Edit"));
 $shortcut_section = "relayd";
 
 include("head.inc");
@@ -243,7 +243,7 @@ events.push(function() {
 		var len = From.length;
 		var option;
 
-		if (len > 1) {
+		if (len > 0) {
 			for (i=0; i<len; i++) {
 				if (From.eq(i).is(':selected')) {
 					option = From.eq(i).val();
@@ -281,13 +281,6 @@ events.push(function() {
 			}
 		}
 	}
-
-	// Make buttons plain buttons, not a submit
-	$("#btnaddtopool").prop('type','button');
-	$("#removeenabled").prop('type','button');
-	$("#removedisabled").prop('type','button');
-	$("#movetodisabled").prop('type','button');
-	$("#movetoenabled").prop('type','button');
 
 	// On click . .
 	$("#btnaddtopool").click(function() {
@@ -335,12 +328,11 @@ if ($input_errors) {
 	print_input_errors($input_errors);
 }
 
-$form = new Form(new Form_Button(
-	'Submit',
-	gettext("Save")
-));
+$form = new Form();
 
-$section = new Form_Section('Add/edit Load Balancer - Pool entry');
+$form->setAction("load_balancer_pool_edit.php");
+
+$section = new Form_Section('Add/Edit Load Balancer - Pool Entry');
 
 $section->addInput(new Form_Input(
 	'name',
@@ -354,8 +346,8 @@ $section->addInput(new Form_Select(
 	'Mode',
 	$pconfig['mode'],
 	array(
-		'loadbalance' => 'Load Balance',
-		'failover' => 'Manual Failover'
+		'loadbalance' => gettext('Load Balance'),
+		'failover' => gettext('Manual Failover')
 	)
 ));
 
@@ -371,7 +363,7 @@ $section->addInput(new Form_Input(
 	'Port',
 	'text',
 	$pconfig['port']
-))->setHelp('This is the port your servers are listening on. You may also specify a port alias listed in Firewall -> Aliases here.');
+))->setHelp('This is the port the servers are listening on. A port alias listed in Firewall -> Aliases may also be specified here.');
 
 $section->addInput(new Form_Input(
 	'retry',
@@ -383,7 +375,7 @@ $section->addInput(new Form_Input(
 
 $form->add($section);
 
-$section = new Form_Section('Add item to the pool');
+$section = new Form_Section('Add Item to the Pool');
 
 $monitorlist = array();
 
@@ -401,7 +393,7 @@ if (count($config['load_balancer']['monitor_type'])) {
 } else {
 	$section->addInput(new Form_StaticText(
 		'Monitor',
-		'Please add a monitor IP address on the monitors tab if you wish to use this feature."'
+		'Please add a monitor IP address on the monitors tab to use this feature."'
 	));
 }
 
@@ -415,14 +407,16 @@ $group->add(new Form_IpAddress(
 
 $group->add(new Form_Button(
 	'btnaddtopool',
-	'Add to pool'
-))->removeClass('btn-primary')->addClass('btn-default');
+	'Add to pool',
+	null,
+	'fa-plus'
+))->setAttribute('type','button')->addClass('btn-success');
 
 $section->add($group);
 
 $form->add($section);
 
-$section = new Form_Section('Current pool members');
+$section = new Form_Section('Current Pool Members');
 
 $group = new Form_Group('Members');
 
@@ -458,13 +452,17 @@ $group = new Form_Group('');
 
 $group->add(new Form_Button(
 	'removedisabled',
-	'Remove'
-))->removeClass('btn-primary')->addClass('btn-default btn-sm');
+	'Remove',
+	null,
+	'fa-trash'
+))->setAttribute('type','button')->addClass('btn-danger btn-sm');
 
 $group->add(new Form_Button(
 	'removeenabled',
-	'Remove'
-))->removeClass('btn-primary')->addClass('btn-default btn-sm');
+	'Remove',
+	null,
+	'fa-trash'
+))->setAttribute('type','button')->addClass('btn-danger btn-sm');
 
 $section->add($group);
 
@@ -472,13 +470,17 @@ $group = new Form_Group('');
 
 $group->add(new Form_Button(
 	'movetoenabled',
-	'Move to enabled list >'
-))->removeClass('btn-primary')->addClass('btn-default btn-sm');
+	'Move to enabled list',
+	null,
+	'fa-angle-double-right'
+))->setAttribute('type','button')->addClass('btn-info btn-sm');
 
 $group->add(new Form_Button(
 	'movetodisabled',
-	'< Move to disabled list'
-))->removeClass('btn-primary')->addClass('btn-default btn-sm');
+	'Move to disabled list',
+	null,
+	'fa-angle-double-left'
+))->setAttribute('type','button')->addClass('btn-info btn-sm');
 
 $section->add($group);
 

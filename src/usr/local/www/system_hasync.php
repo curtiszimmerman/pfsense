@@ -95,15 +95,31 @@ if ($_POST) {
 	foreach ($checkbox_names as $name) {
 		$a_hasync[$name] = $pconfig[$name] ? $pconfig[$name] : false;
 	}
-	$a_hasync['pfsyncpeerip']	= $pconfig['pfsyncpeerip'];
+	$a_hasync['pfsyncpeerip'] = $pconfig['pfsyncpeerip'];
 	$a_hasync['pfsyncinterface'] = $pconfig['pfsyncinterface'];
 	$a_hasync['synchronizetoip'] = $pconfig['synchronizetoip'];
-	$a_hasync['username']		= $pconfig['username'];
-	$a_hasync['password']		= $pconfig['passwordfld'];
-	write_config("Updated High Availability Sync configuration");
-	interfaces_sync_setup();
-	header("Location: system_hasync.php");
-	exit();
+	$a_hasync['username'] = $pconfig['username'];
+
+	if ($pconfig['passwordfld'] == $pconfig['passwordfld_confirm']) {
+		if ($pconfig['passwordfld'] != DMYPWD) {
+				$a_hasync['password'] = $pconfig['passwordfld'];
+		}
+	} else {
+		$input_errors[] = gettext("Password and confirmation must match.");
+	}
+
+	if ($pconfig['pfsyncpeerip'] != "") {
+		if (!is_ipaddrv4($pconfig['pfsyncpeerip'])) {
+			$input_errors[] = gettext("pfsync Synchronize Peer IP must be an IPv4 IP.");
+		}
+	}
+
+	if (!$input_errors) {
+		write_config("Updated High Availability Sync configuration");
+		interfaces_sync_setup();
+		header("Location: system_hasync.php");
+		exit();
+	}
 }
 
 foreach ($checkbox_names as $name) {
@@ -129,6 +145,10 @@ foreach ($ifaces as $ifname => $iface) {
 
 include("head.inc");
 
+if ($input_errors) {
+	print_input_errors($input_errors);
+}
+
 $form = new Form;
 
 $section = new Form_Section('State Synchronization Settings (pfsync)');
@@ -150,9 +170,9 @@ $section->addInput(new Form_Select(
 	$pconfig['pfsyncinterface'],
 	$iflist
 ))->setHelp('If Synchronize States is enabled this interface will be used for communication.<br />' .
-			'We recommend setting this to an interface other than LAN! A dedicated interface works the best.<br />' .
-			'You must define an IP on each machine participating in this failover group.<br />' .
-			'You must have an IP assigned to the interface on any participating sync nodes.');
+			'It is recommended to set this to an interface other than LAN! A dedicated interface works the best.<br />' .
+			'An IP must be defined on each machine participating in this failover group.<br />' .
+			'An IP must be assigned to the interface on any participating sync nodes.');
 
 $section->addInput(new Form_Input(
 	'pfsyncpeerip',
@@ -181,15 +201,15 @@ $section->addInput(new Form_Input(
 	'Remote System Username',
 	'text',
 	$pconfig['username']
-))->setHelp('Enter the webConfigurator username of the system entered above for synchronizing your configuration.<br />' .
+))->setHelp('Enter the webConfigurator username of the system entered above for synchronizing the configuration.<br />' .
 			'Do not use the Synchronize Config to IP and username option on backup cluster members!');
 
-$section->addInput(new Form_Input(
+$section->addPassword(new Form_Input(
 	'passwordfld',
 	'Remote System Password',
 	'password',
 	$pconfig['passwordfld']
-))->setHelp('Enter the webConfigurator password of the system entered above for synchronizing your configuration.<br />' .
+))->setHelp('Enter the webConfigurator password of the system entered above for synchronizing the configuration.<br />' .
 			'Do not use the Synchronize Config to IP and password option on backup cluster members!');
 
 $group = new Form_MultiCheckboxGroup('Select options to sync');
@@ -276,7 +296,7 @@ $group->add(new Form_MultiCheckbox(
 
 $group->add(new Form_MultiCheckbox(
 	'synchronizewol',
-	'Synchronize Wake on LAN',
+	'Synchronize Wake-on-LAN',
 	'WoL Server settings ',
 	($pconfig['synchronizewol'] === 'on'),
 	'on'
