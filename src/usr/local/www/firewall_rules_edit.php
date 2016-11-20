@@ -1,59 +1,26 @@
 <?php
 /*
-	firewall_rules_edit.php
-*/
-/* ====================================================================
- *	Copyright (c)  2004-2015  Electric Sheep Fencing, LLC. All rights reserved.
+ * firewall_rules_edit.php
  *
- *	Some or all of this file is based on the m0n0wall project which is
- *	Copyright (c)  2004 Manuel Kasper (BSD 2 clause)
+ * part of pfSense (https://www.pfsense.org)
+ * Copyright (c) 2004-2016 Rubicon Communications, LLC (Netgate)
+ * All rights reserved.
  *
- *	Redistribution and use in source and binary forms, with or without modification,
- *	are permitted provided that the following conditions are met:
+ * originally based on m0n0wall (http://m0n0.ch/wall)
+ * Copyright (c) 2003-2004 Manuel Kasper <mk@neon1.net>.
+ * All rights reserved.
  *
- *	1. Redistributions of source code must retain the above copyright notice,
- *		this list of conditions and the following disclaimer.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *	2. Redistributions in binary form must reproduce the above copyright
- *		notice, this list of conditions and the following disclaimer in
- *		the documentation and/or other materials provided with the
- *		distribution.
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *	3. All advertising materials mentioning features or use of this software
- *		must display the following acknowledgment:
- *		"This product includes software developed by the pfSense Project
- *		 for use in the pfSense software distribution. (http://www.pfsense.org/).
- *
- *	4. The names "pfSense" and "pfSense Project" must not be used to
- *		 endorse or promote products derived from this software without
- *		 prior written permission. For written permission, please contact
- *		 coreteam@pfsense.org.
- *
- *	5. Products derived from this software may not be called "pfSense"
- *		nor may "pfSense" appear in their names without prior written
- *		permission of the Electric Sheep Fencing, LLC.
- *
- *	6. Redistributions of any form whatsoever must retain the following
- *		acknowledgment:
- *
- *	"This product includes software developed by the pfSense Project
- *	for use in the pfSense software distribution (http://www.pfsense.org/).
- *
- *	THIS SOFTWARE IS PROVIDED BY THE pfSense PROJECT ``AS IS'' AND ANY
- *	EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- *	IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- *	PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE pfSense PROJECT OR
- *	ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *	SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- *	NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- *	LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- *	HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- *	STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- *	ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
- *	OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *	====================================================================
- *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 ##|+PRIV
@@ -63,10 +30,10 @@
 ##|*MATCH=firewall_rules_edit.php*
 ##|-PRIV
 
-require("guiconfig.inc");
+require_once("guiconfig.inc");
 require_once("ipsec.inc");
 require_once("filter.inc");
-require("shaper.inc");
+require_once("shaper.inc");
 
 if (isset($_POST['referer'])) {
 	$referer = $_POST['referer'];
@@ -75,8 +42,8 @@ if (isset($_POST['referer'])) {
 }
 
 function is_posnumericint($arg) {
-	// Note that to be safe we do not allow any leading zero - "01", "007"
-	return (is_numericint($arg) && $arg[0] != '0' && $arg > 0);
+	// Integer > 0? (Note that to be safe we do not allow any leading zero - "01", "007")
+	return (is_numericint($arg) && $arg[0] != '0');
 }
 
 function is_aoadv_used($rule_config) {
@@ -338,33 +305,28 @@ if ($_POST) {
 	if (($_POST['ipprotocol'] <> "") && ($_POST['gateway'] <> "")) {
 		if (is_array($config['gateways']['gateway_group'])) {
 			foreach ($config['gateways']['gateway_group'] as $gw_group) {
-				if ($gw_group['name'] == $_POST['gateway']) {
-					$family = $a_gatewaygroups[$_POST['gateway']]['ipprotocol'];
-					if ($_POST['ipprotocol'] == $family) {
-						continue;
-					}
-					if (($_POST['ipprotocol'] == "inet46") && ($_POST['ipprotocol'] != $family)) {
-						$input_errors[] = gettext("A gateway can not be assigned to a rule that applies to IPv4 and IPv6");
-					}
-					if (($_POST['ipprotocol'] == "inet6") && ($_POST['ipprotocol'] != $family)) {
-						$input_errors[] = gettext("An IPv4 gateway group can not be assigned on an IPv6 Address Family rule");
-					}
-					if (($_POST['ipprotocol'] == "inet") && ($_POST['ipprotocol'] != $family)) {
-						$input_errors[] = gettext("An IPv6 gateway group can not be assigned on an IPv4 Address Family rule");
+				if ($gw_group['name'] == $_POST['gateway'] && $_POST['ipprotocol'] != $a_gatewaygroups[$_POST['gateway']]['ipprotocol']) {
+					if ($_POST['ipprotocol'] == "inet46") {
+						$input_errors[] = gettext("Gateways can not be assigned in a rule that applies to both IPv4 and IPv6.");
+					} elseif ($_POST['ipprotocol'] == "inet6") {
+						$input_errors[] = gettext("An IPv4 gateway group can not be assigned in IPv6 rules.");
+					} elseif ($_POST['ipprotocol'] == "inet") {
+						$input_errors[] = gettext("An IPv6 gateway group can not be assigned in IPv4 rules.");
 					}
 				}
 			}
 		}
-	}
-	if (($_POST['ipprotocol'] <> "") && ($_POST['gateway'] <> "") && (is_ipaddr(lookup_gateway_ip_by_name($_POST['gateway'])))) {
-		if (($_POST['ipprotocol'] == "inet46") && ($_POST['gateway'] <> "")) {
-			$input_errors[] = gettext("A gateway can not be assigned to a rule that applies to IPv4 and IPv6");
-		}
-		if (($_POST['ipprotocol'] == "inet6") && (!is_ipaddrv6(lookup_gateway_ip_by_name($_POST['gateway'])))) {
-			$input_errors[] = gettext("An IPv4 Gateway can not be assigned to an IPv6 Filter rule");
-		}
-		if (($_POST['ipprotocol'] == "inet") && (!is_ipaddrv4(lookup_gateway_ip_by_name($_POST['gateway'])))) {
-			$input_errors[] = gettext("An IPv6 Gateway can not be assigned to an IPv4 Filter rule");
+		if ($iptype = is_ipaddr(lookup_gateway_ip_by_name($_POST['gateway']))) {
+			// this also implies that  $_POST['gateway'] was set and not empty
+			if ($_POST['ipprotocol'] == "inet46") {
+				$input_errors[] = gettext("Gateways can not be assigned in a rule that applies to both IPv4 and IPv6.");
+			}
+			if (($_POST['ipprotocol'] == "inet6") && ($iptype != 6)) {
+				$input_errors[] = gettext("An IPv4 gateway can not be assigned in IPv6 rules.");
+			}
+			if (($_POST['ipprotocol'] == "inet") && ($iptype != 4)) {
+				$input_errors[] = gettext("An IPv6 gateway can not be assigned in IPv4 rules.");
+			}
 		}
 	}
 	if (($_POST['proto'] == "icmp") && ($_POST['icmptype'] <> "")) {
@@ -561,7 +523,7 @@ if ($_POST) {
 	}
 	if ((is_ipaddr($_POST['src']) && is_ipaddr($_POST['dst']))) {
 		if (!validate_address_family($_POST['src'], $_POST['dst'])) {
-			$input_errors[] = sprintf(gettext("The Source IP address %s Address Family differs from the destination %s."), $_POST['src'], $_POST['dst']);
+			$input_errors[] = gettext("The source and destination IP addresses must have the same family (IPv4 / IPv6).");
 		}
 	}
 	if ((is_ipaddrv6($_POST['src']) || is_ipaddrv6($_POST['dst'])) && ($_POST['ipprotocol'] == "inet")) {
@@ -572,7 +534,7 @@ if ($_POST) {
 	}
 
 	if ((is_ipaddr($_POST['src']) || is_ipaddr($_POST['dst'])) && ($_POST['ipprotocol'] == "inet46")) {
-		$input_errors[] = gettext("An IPv4 or IPv6 address can not be used in combined IPv4 + IPv6 rules.");
+		$input_errors[] = gettext("IPv4 and IPv6 addresses can not be used in rules that apply to both IPv4 and IPv6.");
 	}
 
 	if ($_POST['srcbeginport'] > $_POST['srcendport']) {
@@ -1356,26 +1318,28 @@ foreach (['src' => 'Source', 'dst' => 'Destination'] as $type => $name) {
 		$type,
 		$name .' Address',
 		$pconfig[$type]
-	))->addMask($type .'mask', $pconfig[$type.'mask'])->setPattern('[a-zA-Z0-9\_\.\:]+');
+	))->addMask($type .'mask', $pconfig[$type.'mask'])->setPattern('[a-zA-Z0-9_.:]+');
 
 	$section->add($group);
 
 	if ($type == 'src') {
 		$section->addInput(new Form_Button(
-			'btnsrcadv',
-			'Display Advanced',
+			'btnsrctoggle',
+			'',
 			null,
 			'fa-cog'
-		))->setAttribute('type','button')->addClass('btn-info btn-sm');
+		))->setAttribute('type','button')->addClass('btn-info btn-sm')->setHelp(
+			'The <b>Source Port Range</b> for a connection is typically random '.
+			'and almost never equal to the destination port. '.
+			'In most cases this setting must remain at its default value, <b>any</b>.');
 	}
 
 	$portValues = ['' => gettext('(other)'), 'any' => gettext('any')];
-
 	foreach ($wkports as $port => $portName) {
 		$portValues[$port] = $portName.' ('. $port .')';
 	}
 
-	$group = new Form_Group($name .' port range');
+	$group = new Form_Group($name .' Port Range');
 
 	$group->addClass($type . 'portrange');
 
@@ -1407,16 +1371,7 @@ foreach (['src' => 'Source', 'dst' => 'Destination'] as $type => $name) {
 		(isset($portValues[ $pconfig[$type .'endport'] ]) ? null : $pconfig[$type .'endport'])
 	))->setHelp('Custom');
 
-
-	if ($type == 'src')
-		$group->setHelp('Specify the source port or port range for this rule. This is '.
-			'usually random and almost never equal to the destination port range (and '.
-			'should usually be <b>any</b>).  The "To" field may be left '.
-			'empty if only filtering a single port.');
-	else
-		$group->setHelp('Specify the destination port or port range for this rule. ' .
-			'The "To" field may be left empty if only filtering a '.
-			'single port.');
+	$group->setHelp(sprintf('Specify the %s port or port range for this rule. The "To" field may be left empty if only filtering a single port.',strtolower($name)));
 
 	$group->addClass(($type == 'src') ? 'srcprtr':'dstprtr');
 	$section->add($group);
@@ -1836,7 +1791,7 @@ events.push(function() {
 		} else {
 			text = "<?=gettext('Display Advanced');?>";
 		}
-		$('#btnsrcadv').html('<i class="fa fa-cog"></i> ' + text);
+		$('#btnsrctoggle').html('<i class="fa fa-cog"></i> ' + text);
 	}
 
 	function typesel_change() {
@@ -1922,7 +1877,7 @@ events.push(function() {
 
 		if ($('#proto').find(":selected").index() <= 2) {
 			hideClass('dstprtr', false);
-			hideInput('btnsrcadv', false);
+			hideInput('btnsrctoggle', false);
 			if ((($('#srcbeginport').val() == "any") || ($('#srcbeginport').val() == "")) &&
 			    (($('#srcendport').val() == "any") || ($('#srcendport').val() == ""))) {
 				srcportsvisible = false;
@@ -1931,7 +1886,7 @@ events.push(function() {
 			}
 		} else {
 			hideClass('dstprtr', true);
-			hideInput('btnsrcadv', true);
+			hideInput('btnsrctoggle', true);
 			srcportsvisible = false;
 		}
 
@@ -1967,7 +1922,7 @@ events.push(function() {
 		ext_change();
 	});
 
-	$('#btnsrcadv').click(function() {
+	$('#btnsrctoggle').click(function() {
 		srcportsvisible = !srcportsvisible;
 		show_source_port_range();
 	});
@@ -2065,7 +2020,7 @@ events.push(function() {
 
 	// ---------- Autocomplete --------------------------------------------------------------------
 
-	var addressarray = <?= json_encode(get_alias_list(array("host", "network", "openvpn", "urltable"))) ?>;
+	var addressarray = <?= json_encode(get_alias_list(array("host", "network", "openvpn", "url", "urltable"))) ?>;
 	var customarray = <?= json_encode(get_alias_list(array("port", "url_ports", "urltable_ports"))) ?>;
 
 	$('#src, #dst').autocomplete({

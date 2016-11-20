@@ -1,57 +1,23 @@
 <?php
 /*
-	vpn_openvpn_server.php
-*/
-/* ====================================================================
- *	Copyright (c)  2004-2015  Electric Sheep Fencing, LLC. All rights reserved.
- *	Copyright (c)  2008 Shrew Soft Inc
+ * vpn_openvpn_server.php
  *
- *	Redistribution and use in source and binary forms, with or without modification,
- *	are permitted provided that the following conditions are met:
+ * part of pfSense (https://www.pfsense.org)
+ * Copyright (c) 2004-2016 Rubicon Communications, LLC (Netgate)
+ * Copyright (c) 2008 Shrew Soft Inc.
+ * All rights reserved.
  *
- *	1. Redistributions of source code must retain the above copyright notice,
- *		this list of conditions and the following disclaimer.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *	2. Redistributions in binary form must reproduce the above copyright
- *		notice, this list of conditions and the following disclaimer in
- *		the documentation and/or other materials provided with the
- *		distribution.
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *	3. All advertising materials mentioning features or use of this software
- *		must display the following acknowledgment:
- *		"This product includes software developed by the pfSense Project
- *		 for use in the pfSense software distribution. (http://www.pfsense.org/).
- *
- *	4. The names "pfSense" and "pfSense Project" must not be used to
- *		 endorse or promote products derived from this software without
- *		 prior written permission. For written permission, please contact
- *		 coreteam@pfsense.org.
- *
- *	5. Products derived from this software may not be called "pfSense"
- *		nor may "pfSense" appear in their names without prior written
- *		permission of the Electric Sheep Fencing, LLC.
- *
- *	6. Redistributions of any form whatsoever must retain the following
- *		acknowledgment:
- *
- *	"This product includes software developed by the pfSense Project
- *	for use in the pfSense software distribution (http://www.pfsense.org/).
- *
- *	THIS SOFTWARE IS PROVIDED BY THE pfSense PROJECT ``AS IS'' AND ANY
- *	EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- *	IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- *	PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE pfSense PROJECT OR
- *	ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *	SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- *	NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- *	LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- *	HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- *	STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- *	ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
- *	OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *	====================================================================
- *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 ##|+PRIV
@@ -61,7 +27,7 @@
 ##|*MATCH=vpn_openvpn_server.php*
 ##|-PRIV
 
-require("guiconfig.inc");
+require_once("guiconfig.inc");
 require_once("openvpn.inc");
 require_once("pkg-utils.inc");
 
@@ -270,6 +236,7 @@ if ($_GET['act'] == "edit") {
 			$pconfig['verbosity_level'] = 1; // Default verbosity is 1
 		}
 
+		$pconfig['push_blockoutsidedns'] = $a_server[$id]['push_blockoutsidedns'];
 		$pconfig['push_register_dns'] = $a_server[$id]['push_register_dns'];
 	}
 }
@@ -536,6 +503,9 @@ if ($_POST) {
 			$server['dns_server4'] = $pconfig['dns_server4'];
 		}
 
+		if ($pconfig['push_blockoutsidedns']) {
+			$server['push_blockoutsidedns'] = $pconfig['push_blockoutsidedns'];
+		}
 		if ($pconfig['push_register_dns']) {
 			$server['push_register_dns'] = $pconfig['push_register_dns'];
 		}
@@ -578,8 +548,9 @@ if ($_POST) {
 			$a_server[] = $server;
 		}
 
-		openvpn_resync('server', $server);
 		write_config();
+		openvpn_resync('server', $server);
+		openvpn_resync_csc_all();
 
 		header("Location: vpn_openvpn_server.php");
 		exit;
@@ -1067,6 +1038,13 @@ if ($act=="new" || $act=="edit"):
 	));
 
 	$section->addInput(new Form_Checkbox(
+		'push_blockoutsidedns',
+		'Block Outside DNS',
+		'Make Windows 10 Clients Block access to DNS servers except across OpenVPN while connected, forcing clients to use only VPN DNS servers.',
+		$pconfig['push_blockoutsidedns']
+	))->setHelp('Requires Windows 10 and OpenVPN 2.3.9 or later. Only Windows 10 is prone to DNS leakage in this way, other clients will ignore the option as they are not affected.');
+
+	$section->addInput(new Form_Checkbox(
 		'push_register_dns',
 		'Force DNS cache update',
 		'Run "net stop dnscache", "net start dnscache", "ipconfig /flushdns" and "ipconfig /registerdns" on connection initiation.',
@@ -1200,11 +1178,12 @@ else:
 <div class="panel panel-default">
 	<div class="panel-heading"><h2 class="panel-title"><?=gettext('OpenVPN Servers')?></h2></div>
 		<div class="panel-body table-responsive">
-		<table class="table table-striped table-hover table-condensed sortable-theme-bootstrap" data-sortable>
+		<table class="table table-striped table-hover table-condensed sortable-theme-bootstrap table-rowdblclickedit" data-sortable>
 			<thead>
 				<tr>
 					<th><?=gettext("Protocol / Port")?></th>
 					<th><?=gettext("Tunnel Network")?></th>
+					<th><?=gettext("Crypto")?></th>
 					<th><?=gettext("Description")?></th>
 					<th><?=gettext("Actions")?></th>
 				</tr>
@@ -1224,7 +1203,10 @@ else:
 						<?=htmlspecialchars($server['tunnel_networkv6'])?>
 					</td>
 					<td>
-						<?=htmlspecialchars($server['description'])?>
+						<?=sprintf("Crypto: %s/%s<br/>D-H Params: %d bits", $server['crypto'], $server['digest'], $server['dh_length'])?><br />
+					</td>
+					<td>
+						<?=htmlspecialchars(sprintf('%s (%s)', $server['description'], $server['dev_mode']))?>
 					</td>
 					<td>
 						<a class="fa fa-pencil"	title="<?=gettext('Edit server')?>" href="vpn_openvpn_server.php?act=edit&amp;id=<?=$i?>"></a>
@@ -1260,7 +1242,7 @@ endif;
 events.push(function() {
 
 	function advanced_change(hide, mode) {
-		if(!hide) {
+		if (!hide) {
 			hideClass('advanced', false);
 			hideClass("clientadv", false);
 		} else if (mode == "p2p_tls") {
@@ -1497,8 +1479,10 @@ events.push(function() {
 					hideInput('local_networkv6', true);
 					hideInput('topology', true);
 				} else {
-					hideInput('local_network', false);
-					hideInput('local_networkv6', false);
+					// For tunnel mode that is not shared key,
+					// the display status of local network fields depends on
+					// the state of the gwredir checkbox.
+					gwredir_change();
 					hideInput('topology', false);
 				}
 				break;
@@ -1589,7 +1573,7 @@ events.push(function() {
 	});
 
 	 // Mode
-	$('#mode').click(function () {
+	$('#mode').change(function () {
 		mode_change();
 		tuntap_change();
 	});

@@ -2,73 +2,40 @@
 #
 # build.sh
 #
-# Copyright (c) 2004-2015 Electric Sheep Fencing, LLC. All rights reserved.
+# part of pfSense (https://www.pfsense.org)
+# Copyright (c) 2004-2016 Rubicon Communications, LLC (Netgate)
+# All rights reserved.
 #
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are met:
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-# 1. Redistributions of source code must retain the above copyright notice,
-#    this list of conditions and the following disclaimer.
+# http://www.apache.org/licenses/LICENSE-2.0
 #
-# 2. Redistributions in binary form must reproduce the above copyright
-#    notice, this list of conditions and the following disclaimer in
-#    the documentation and/or other materials provided with the
-#    distribution.
-#
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgment:
-#    "This product includes software developed by the pfSense Project
-#    for use in the pfSense® software distribution. (http://www.pfsense.org/).
-#
-# 4. The names "pfSense" and "pfSense Project" must not be used to
-#    endorse or promote products derived from this software without
-#    prior written permission. For written permission, please contact
-#    coreteam@pfsense.org.
-#
-# 5. Products derived from this software may not be called "pfSense"
-#    nor may "pfSense" appear in their names without prior written
-#    permission of the Electric Sheep Fencing, LLC.
-#
-# 6. Redistributions of any form whatsoever must retain the following
-#    acknowledgment:
-#
-# "This product includes software developed by the pfSense Project
-# for use in the pfSense software distribution (http://www.pfsense.org/).
-#
-# THIS SOFTWARE IS PROVIDED BY THE pfSense PROJECT ``AS IS'' AND ANY
-# EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE pfSense PROJECT OR
-# ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-# SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
-# NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-# HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-# STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
-# OF THE POSSIBILITY OF SUCH DAMAGE.
-#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 set +e
 usage() {
-	echo "Usage $0 [options] [ iso | nanobsd | ova | nanobsd-vga | memstick | memstickserial | memstickadi | fullupdate | all ]"
-	echo "		all = iso nanobsd nanobsd-vga memstick memstickserial memstickadi fullupdate"
+	echo "Usage $0 [options] [ iso | ova | memstick | memstickserial | memstickadi | all | none ]"
+	echo "		all = iso memstick memstickserial memstickadi"
+	echo "		none = upgrade only pkg repo"
 	echo "	[ options ]: "
-	echo "		--flash-size|-f size(s) - a list of flash sizes to build with nanobsd i.e. '2g 4g'. Default: 2g"
 	echo "		--no-buildworld|-c - Will set NO_BUILDWORLD NO_BUILDKERNEL to not build kernel and world"
-	echo "		--no-cleanobjdir|--no-cleanrepos|-d - Will not clean FreeBSD object built dir to allow restarting a build with NO_CLEAN"
+	echo "		--no-cleanobjdir|-d - Will not clean FreeBSD object built dir to allow restarting a build with NO_CLEAN"
 	echo "		--resume-image-build|-r - Includes -c -d and also will just move directly to image creation using pre-staged data"
 	echo "		--setup - Install required repo and ports builder require to work"
 	echo "		--update-sources - Refetch FreeBSD sources"
-	echo "		--print-flags - Show current builder configuration"
+	echo "		--rsync-repos - rsync pkg repos"
 	echo "		--clean-builder - clean all builder used data/resources"
 	echo "		--build-kernels - build all configured kernels"
 	echo "		--build-kernel argument - build specified kernel. Example --build-kernel KERNEL_NAME"
 	echo "		--install-extra-kernels argument - Put extra kernel(s) under /kernel image directory. Example --install-extra-kernels KERNEL_NAME_WRAP"
 	echo "		--snapshots - Build snapshots and upload them to RSYNCIP"
 	echo "		--poudriere-snapshots - Update poudriere packages and send them to PKG_RSYNC_HOSTNAME"
-	echo "		--enable-memorydisks - This will put stage_dir and iso_dir as MFS filesystems"
-	echo "		--disable-memorydisks - Will just teardown these filesystems created by --enable-memorydisks"
 	echo "		--setup-poudriere - Install poudriere and create necessary jails and ports tree"
 	echo "		--create-unified-patch - Create a big patch with all changes done on FreeBSD"
 	echo "		--update-poudriere-jails [-a ARCH_LIST] - Update poudriere jails using current patch versions"
@@ -99,29 +66,21 @@ while test "$1" != ""; do
 			export NO_BUILDWORLD=YES
 			export NO_BUILDKERNEL=YES
 			;;
-		--no-cleanobjdir|--no-cleanrepos|-d)
+		--no-cleanobjdir|-d)
 			export NO_CLEAN_FREEBSD_OBJ=YES
-			export NO_CLEAN_FREEBSD_SRC=YES
-			;;
-		--flash-size|-f)
-			shift
-			if [ $# -eq 0 ]; then
-				echo "--flash-size needs extra parameter."
-				echo
-				usage
-			fi
-			export FLASH_SIZE="${1}"
 			;;
 		--resume-image-build|-r)
 			export NO_BUILDWORLD=YES
 			export NO_BUILDKERNEL=YES
 			export NO_CLEAN_FREEBSD_OBJ=YES
-			export NO_CLEAN_FREEBSD_SRC=YES
 			_SKIP_REBUILD_PRESTAGE=YES
 			_USE_OLD_DATESTRING=YES
 			;;
 		--setup)
 			BUILDACTION="builder_setup"
+			;;
+		--rsync-repos)
+			BUILDACTION="rsync_repos"
 			;;
 		--build-kernels)
 			BUILDACTION="buildkernels"
@@ -137,7 +96,6 @@ while test "$1" != ""; do
 			;;
 		--snapshots)
 			export SNAPSHOTS=1
-			IMAGETYPE="all"
 			;;
 		--poudriere-snapshots)
 			export POUDRIERE_SNAPSHOTS=1
@@ -155,18 +113,8 @@ while test "$1" != ""; do
 		--update-sources)
 			BUILDACTION="updatesources"
 			;;
-		--print-flags)
-			BUILDACTION="printflags"
-			_USE_OLD_DATESTRING=YES
-			;;
 		--clean-builder)
 			BUILDACTION="cleanbuilder"
-			;;
-		--enable-memorydisks)
-			BUILDACTION="enablememorydisk"
-			;;
-		--disable-memorydisks)
-			BUILDACTION="disablememorydisk"
 			;;
 		--setup-poudriere)
 			BUILDACTION="setup_poudriere"
@@ -195,7 +143,7 @@ while test "$1" != ""; do
 		--do-not-upload|-u)
 			export DO_NOT_UPLOAD=1
 			;;
-		all|*iso*|*ova*|*memstick*|*memstickserial*|*memstickadi*|*nanobsd*|*nanobsd-vga*|*fullupdate*)
+		all|none|*iso*|*ova*|*memstick*|*memstickserial*|*memstickadi*)
 			BUILDACTION="images"
 			IMAGETYPE="${1}"
 			;;
@@ -257,20 +205,11 @@ case $BUILDACTION in
 	cleanbuilder)
 		clean_builder
 	;;
-	printflags)
-		print_flags
-	;;
-	images|snapshots)
+	images)
 		# It will be handled below
 	;;
 	updatesources)
 		update_freebsd_sources
-	;;
-	enablememorydisk)
-		prestage_on_ram_setup
-	;;
-	disablememorydisk)
-		prestage_on_ram_cleanup
 	;;
 	setup_poudriere)
 		poudriere_init
@@ -283,6 +222,10 @@ case $BUILDACTION in
 	;;
 	update_poudriere_ports)
 		poudriere_update_ports
+	;;
+	rsync_repos)
+		unset SKIP_FINAL_RSYNC
+		pkg_repo_rsync "${CORE_PKG_PATH}"
 	;;
 	update_pkg_repo)
 		if [ -z "${DO_NOT_UPLOAD}" -a ! -f /usr/local/bin/rsync ]; then
@@ -306,7 +249,6 @@ if [ -n "${SNAPSHOTS}" -a -z "${DO_NOT_UPLOAD}" ]; then
 		RSYNCIP \
 		RSYNCUSER \
 		RSYNCPATH \
-		RSYNCLOGS \
 		PKG_RSYNC_HOSTNAME \
 		PKG_RSYNC_USERNAME \
 		PKG_RSYNC_SSH_PORT \
@@ -336,16 +278,26 @@ if [ $# -gt 1 ]; then
 	echo
 	usage
 fi
+
+if [ -n "${SNAPSHOTS}" -a -z "${IMAGETYPE}" ]; then
+	IMAGETYPE="all"
+fi
+
 if [ -z "${IMAGETYPE}" ]; then
 	echo "ERROR: Need to specify image type to build."
 	echo
 	usage
 fi
 
-if [ "$IMAGETYPE" = "all" ]; then
-	_IMAGESTOBUILD="iso fullupdate nanobsd nanobsd-vga memstick memstickserial"
+if [ "$IMAGETYPE" = "none" ]; then
+	_IMAGESTOBUILD=""
+elif [ "$IMAGETYPE" = "all" ]; then
+	_IMAGESTOBUILD="iso memstick memstickserial"
 	if [ "${TARGET}" = "amd64" ]; then
 		_IMAGESTOBUILD="${_IMAGESTOBUILD} memstickadi"
+		if [ -n "${_IS_RELEASE}"  ]; then
+			_IMAGESTOBUILD="${_IMAGESTOBUILD} ova"
+		fi
 	fi
 else
 	_IMAGESTOBUILD="${IMAGETYPE}"
@@ -354,8 +306,6 @@ fi
 echo ">>> Building image type(s): ${_IMAGESTOBUILD}"
 
 if [ -n "${SNAPSHOTS}" ]; then
-	snapshots_rotate_logfile
-
 	snapshots_update_status ">>> Starting snapshot build operations"
 
 	if pkg update -r ${PRODUCT_NAME} >/dev/null 2>&1; then
@@ -365,8 +315,6 @@ if [ -n "${SNAPSHOTS}" ]; then
 fi
 
 if [ -z "${_SKIP_REBUILD_PRESTAGE}" ]; then
-	[ -n "${CORE_PKG_TMP}" -a -d "${CORE_PKG_TMP}" ] \
-		&& rm -rf ${CORE_PKG_TMP}
 	[ -n "${CORE_PKG_PATH}" -a -d "${CORE_PKG_PATH}" ] \
 		&& rm -rf ${CORE_PKG_PATH}
 
@@ -380,19 +328,14 @@ if [ -z "${_SKIP_REBUILD_PRESTAGE}" ]; then
 	# Ensure binaries are present that builder system requires
 	builder_setup
 
-	# Output build flags
-	print_flags
-
-	# Check to see if pre-staging will be hosted on ram
-	prestage_on_ram_setup
-
 	# Build world, kernel and install
-	echo ">>> Building world for ISO... $FREEBSD_BRANCH ..."
 	make_world
 
 	# Build kernels
-	echo ">>> Building kernel configs: $BUILD_KERNELS for FreeBSD: $FREEBSD_BRANCH ..."
 	build_all_kernels
+
+	# Install kernel on installer
+	installkernel ${INSTALLER_CHROOT_DIR} ${PRODUCT_NAME}
 
 	# Prepare pre-final staging area
 	clone_to_staging_area
@@ -400,6 +343,12 @@ if [ -z "${_SKIP_REBUILD_PRESTAGE}" ]; then
 	# Install packages needed for Product
 	install_pkg_install_ports
 fi
+
+# Create core repo
+core_pkg_create_repo
+
+# Send core repo to staging area
+pkg_repo_rsync "${CORE_PKG_PATH}" ignore_final_rsync
 
 export DEFAULT_KERNEL=${DEFAULT_KERNEL_ISO:-"${PRODUCT_NAME}"}
 
@@ -416,27 +365,19 @@ for _IMGTOBUILD in $_IMAGESTOBUILD; do
 			create_iso_image
 			;;
 		memstick)
-			create_memstick_image
+			if [ -n "${MEMSTICK_VARIANTS}" ]; then
+				for _variant in ${MEMSTICK_VARIANTS}; do
+					create_memstick_image ${_variant}
+				done
+			else
+				create_memstick_image
+			fi
 			;;
 		memstickserial)
 			create_memstick_serial_image
 			;;
 		memstickadi)
 			create_memstick_adi_image
-			;;
-		fullupdate)
-			create_Full_update_tarball
-			;;
-		nanobsd|nanobsd-vga)
-			if [ "${TARGET}" = "i386" -a "${_IMGTOBUILD}" = "nanobsd" ]; then
-				export DEFAULT_KERNEL=${DEFAULT_KERNEL_NANOBSD:-"${PRODUCT_NAME}_wrap"}
-			elif [ "${TARGET}" = "i386" -a "${_IMGTOBUILD}" = "nanobsd-vga" ]; then
-				export DEFAULT_KERNEL=${DEFAULT_KERNEL_NANOBSDVGA:-"${PRODUCT_NAME}_wrap_vga"}
-			elif [ "${TARGET}" = "amd64" ]; then
-				export DEFAULT_KERNEL=${DEFAULT_KERNEL_NANOBSD:-"${PRODUCT_NAME}"}
-			fi
-			# Create the NanoBSD disk image
-			create_nanobsd_diskimage ${_IMGTOBUILD} "${FLASH_SIZE}"
 			;;
 		ova)
 			old_custom_package_list="${custom_package_list}"
@@ -448,8 +389,6 @@ for _IMGTOBUILD in $_IMAGESTOBUILD; do
 			;;
 	esac
 done
-
-core_pkg_create_repo
 
 if [ -n "${_bg_pids}" ]; then
 	if [ -n "${SNAPSHOTS}" ]; then
@@ -476,18 +415,21 @@ if [ -n "${_bg_pids}" ]; then
 fi
 
 if [ -n "${SNAPSHOTS}" ]; then
-	snapshots_copy_to_staging_iso_updates
-	snapshots_copy_to_staging_nanobsd "${FLASH_SIZE}"
-	# SCP files to snapshot web hosting area
-	if [ -z "${DO_NOT_UPLOAD}" ]; then
-		snapshots_scp_files
+	if [ "${IMAGETYPE}" = "none" -a -z "${DO_NOT_UPLOAD}" ]; then
+		pkg_repo_rsync "${CORE_PKG_PATH}"
+	elif [ "${IMAGETYPE}" != "none" ]; then
+		snapshots_create_sha256
+		# SCP files to snapshot web hosting area
+		if [ -z "${DO_NOT_UPLOAD}" ]; then
+			snapshots_scp_files
+		fi
 	fi
 	# Alert the world that we have some snapshots ready.
 	snapshots_update_status ">>> Builder run is complete."
 fi
 
 echo ">>> ${IMAGES_FINAL_DIR} now contains:"
-ls -lah ${IMAGES_FINAL_DIR}
+(cd ${IMAGES_FINAL_DIR} && find ${IMAGES_FINAL_DIR} -type f)
 
 set -e
 # Run final finish routines

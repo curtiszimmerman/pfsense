@@ -1,57 +1,23 @@
 <?php
 /*
  * pkg-utils.inc
- */
-/* ====================================================================
- *	Copyright (c)  2004-2015  Electric Sheep Fencing, LLC. All rights reserved.
- *	Copyright (c)  2005-2006 Colin Smith (ethethlay@gmail.com)
  *
- *	Redistribution and use in source and binary forms, with or without modification,
- *	are permitted provided that the following conditions are met:
+ * part of pfSense (https://www.pfsense.org)
+ * Copyright (c) 2005-2006 Colin Smith (ethethlay@gmail.com)
+ * Copyright (c) 2004-2016 Rubicon Communications, LLC (Netgate)
+ * All rights reserved.
  *
- *	1. Redistributions of source code must retain the above copyright notice,
- *		this list of conditions and the following disclaimer.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *	2. Redistributions in binary form must reproduce the above copyright
- *		notice, this list of conditions and the following disclaimer in
- *		the documentation and/or other materials provided with the
- *		distribution.
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *	3. All advertising materials mentioning features or use of this software
- *		must display the following acknowledgment:
- *		"This product includes software developed by the pfSense Project
- *		 for use in the pfSense software distribution. (http://www.pfsense.org/).
- *
- *	4. The names "pfSense" and "pfSense Project" must not be used to
- *		 endorse or promote products derived from this software without
- *		 prior written permission. For written permission, please contact
- *		 coreteam@pfsense.org.
- *
- *	5. Products derived from this software may not be called "pfSense"
- *		nor may "pfSense" appear in their names without prior written
- *		permission of the Electric Sheep Fencing, LLC.
- *
- *	6. Redistributions of any form whatsoever must retain the following
- *		acknowledgment:
- *
- *	"This product includes software developed by the pfSense Project
- *	for use in the pfSense software distribution (http://www.pfsense.org/).
- *
- *	THIS SOFTWARE IS PROVIDED BY THE pfSense PROJECT ``AS IS'' AND ANY
- *	EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- *	IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- *	PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE pfSense PROJECT OR
- *	ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *	SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- *	NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- *	LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- *	HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- *	STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- *	ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
- *	OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *	====================================================================
- *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 require_once("globals.inc");
@@ -81,6 +47,14 @@ if (!function_exists("pkg_debug")) {
 		}
 		@fwrite($fd_log, $msg);
 	}
+}
+
+/* Validate if pkg name is valid */
+function pkg_valid_name($pkgname) {
+	global $g;
+
+	$pattern = "/^{$g['pkg_prefix']}[a-zA-Z0-9\.\-_]+$/";
+	return preg_match($pattern, $pkgname);
 }
 
 /* Remove pkg_prefix from package name if it's present */
@@ -119,8 +93,7 @@ function pkg_env($extra_env = array()) {
 		$pkg_env_vars['HTTP_PROXY'] = $http_proxy;
 	}
 
-	if ($g['platform'] == "nanobsd" ||
-	    isset($config['system']['use_mfs_tmpvar'])) {
+	if (isset($config['system']['use_mfs_tmpvar'])) {
 		$pkg_env_vars['PKG_DBDIR'] = '/root/var/db/pkg';
 		$pkg_env_vars['PKG_CACHEDIR'] = '/root/var/cache/pkg';
 	}
@@ -150,14 +123,12 @@ function pkg_call($params, $mute = false, $extra_env = array()) {
 		2 => array("pipe", "w")	 /* stderr */
 	);
 
-	conf_mount_rw();
 
 	pkg_debug("pkg_call(): {$params}\n");
 	$process = proc_open("/usr/sbin/pkg {$params}", $descriptorspec, $pipes,
 	    '/', pkg_env($extra_env));
 
 	if (!is_resource($process)) {
-		conf_mount_ro();
 		return false;
 	}
 
@@ -198,7 +169,6 @@ function pkg_call($params, $mute = false, $extra_env = array()) {
 	fclose($pipes[2]);
 	proc_close($process);
 
-	conf_mount_ro();
 
 	$rc = $status['exitcode'];
 
@@ -235,14 +205,12 @@ function pkg_exec($params, &$stdout, &$stderr, $extra_env = array()) {
 		2 => array("pipe", "w")	 /* stderr */
 	);
 
-	conf_mount_rw();
 
 	pkg_debug("pkg_exec(): {$params}\n");
 	$process = proc_open("/usr/sbin/pkg {$params}", $descriptorspec, $pipes,
 	    '/', pkg_env($extra_env));
 
 	if (!is_resource($process)) {
-		conf_mount_ro();
 		return -1;
 	}
 
@@ -258,7 +226,6 @@ function pkg_exec($params, &$stdout, &$stderr, $extra_env = array()) {
 	}
 	fclose($pipes[2]);
 
-	conf_mount_ro();
 
 	return proc_close($process);
 }
@@ -366,7 +333,7 @@ function get_package_internal_name($package_data) {
 }
 
 // Get information about packages.
-function get_pkg_info($pkgs = 'all', $info = 'all', $only_local = false) {
+function get_pkg_info($pkgs = 'all', $only_local = false) {
 	global $g, $input_errors;
 
 	$out = '';
@@ -402,7 +369,7 @@ function get_pkg_info($pkgs = 'all', $info = 'all', $only_local = false) {
 	if ($lock) {
 		mark_subsystem_dirty('pkg');
 	}
-	$rc = pkg_exec("search {$extra_param}--raw-format json-compact " . $pkgs, $out, $err);
+	$rc = pkg_exec("search {$extra_param}-R --raw-format json-compact " . $pkgs, $out, $err);
 	if ($lock) {
 		clear_subsystem_dirty('pkg');
 	}
@@ -482,7 +449,7 @@ function get_pkg_info($pkgs = 'all', $info = 'all', $only_local = false) {
 function register_all_installed_packages() {
 	global $g, $config, $pkg_interface;
 
-	$pkg_info = get_pkg_info('all', 'all', true);
+	$pkg_info = get_pkg_info('all', true);
 
 	foreach ($pkg_info as $pkg) {
 		if (!isset($pkg['installed'])) {
@@ -519,7 +486,6 @@ function resync_all_package_configs($show_message = false) {
 		echo "Syncing packages:";
 	}
 
-	conf_mount_rw();
 
 	foreach ($config['installedpackages']['package'] as $idx => $package) {
 		if (empty($package['name'])) {
@@ -540,7 +506,6 @@ function resync_all_package_configs($show_message = false) {
 	}
 
 	@unlink("/conf/needs_package_sync");
-	conf_mount_ro();
 }
 
 function uninstall_package($package_name) {
@@ -699,7 +664,6 @@ function install_package_xml($package_name) {
 	}
 
 	/* safe side. Write config below will send to ro again. */
-	conf_mount_rw();
 
 	pkg_debug(gettext("Beginning package installation.") . "\n");
 	log_error(sprintf(gettext('Beginning package installation for %s .'), $pkg_info['name']));
@@ -718,7 +682,6 @@ function install_package_xml($package_name) {
 	}
 	unlink_if_exists('/conf/needs_package_sync');
 	write_config(sprintf(gettext("Intermediate config write during package install for %s."), $pkg_info['name']));
-	conf_mount_ro();
 	update_status($to_output);
 
 	if (($pkgid = get_package_id($package_name)) == -1) {
@@ -848,14 +811,12 @@ function install_package_xml($package_name) {
 function delete_package_xml($package_name, $when = "post-deinstall") {
 	global $g, $config, $pkg_interface;
 
-	conf_mount_rw();
 
 	$pkgid = get_package_id($package_name);
 	if ($pkgid == -1) {
 		update_status(sprintf(gettext("The %s package is not installed.%sDeletion aborted."), $package_name, "\n\n"));
 		ob_flush();
 		sleep(1);
-		conf_mount_ro();
 		return;
 	}
 	pkg_debug(sprintf(gettext("Removing %s package... "), $package_name));
@@ -978,7 +939,6 @@ function delete_package_xml($package_name, $when = "post-deinstall") {
 		system_syslogd_start();
 	}
 
-	conf_mount_ro();
 }
 
 /*
@@ -1024,6 +984,9 @@ function package_reinstall_all() {
 		    FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
 		unlink_if_exists("{$g['cf_conf_path']}/packages_to_reinstall_after_upgrade.txt");
 	} else {
+		if (!isset($config['installedpackages']['package']) || !is_array($config['installedpackages']['package'])) {
+			return true;
+		}
 		$package_list = array();
 		foreach ($config['installedpackages']['package'] as $package) {
 			$package_list[] = get_package_internal_name($package);
@@ -1221,6 +1184,21 @@ function pkg_switch_repo($path) {
 	safe_mkdir("/usr/local/etc/pkg/repos");
 	@unlink("/usr/local/etc/pkg/repos/{$g['product_name']}.conf");
 	@symlink($path, "/usr/local/etc/pkg/repos/{$g['product_name']}.conf");
+
+	$abi_file = str_replace('.conf', '.abi', $path);
+	$altabi_file = str_replace('.conf', '.altabi', $path);
+
+	if (file_exists($abi_file) && file_exists($altabi_file)) {
+		$abi = file_get_contents($abi_file);
+		$altabi = file_get_contents($altabi_file);
+
+		$pkg_conf = array(
+			"ABI={$abi}",
+			"ALTABI={$altabi}"
+		);
+
+		file_put_contents("/usr/local/etc/pkg.conf", $pkg_conf);
+	}
 
 	return pkg_update(true);
 }

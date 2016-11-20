@@ -1,60 +1,28 @@
 <?php
 /*
-	config.lib.inc
-
-	Ported from config.inc by Erik Kristensen
-
-	part of pfSense (https://www.pfsense.org)
-	Copyright (c) 2004-2016 Electric Sheep Fencing, LLC. All rights reserved.
-
-	originally part of m0n0wall (http://m0n0.ch/wall)
-	Copyright (C) 2003-2004 Manuel Kasper <mk@neon1.net>.
-	All rights reserved.
-
-	Redistribution and use in source and binary forms, with or without
-	modification, are permitted provided that the following conditions are met:
-
-	1. Redistributions of source code must retain the above copyright notice,
-	   this list of conditions and the following disclaimer.
-
-	2. Redistributions in binary form must reproduce the above copyright
-	   notice, this list of conditions and the following disclaimer in
-	   the documentation and/or other materials provided with the
-	   distribution.
-
-	3. All advertising materials mentioning features or use of this software
-	   must display the following acknowledgment:
-	   "This product includes software developed by the pfSense Project
-	   for use in the pfSense® software distribution. (http://www.pfsense.org/).
-
-	4. The names "pfSense" and "pfSense Project" must not be used to
-	   endorse or promote products derived from this software without
-	   prior written permission. For written permission, please contact
-	   coreteam@pfsense.org.
-
-	5. Products derived from this software may not be called "pfSense"
-	   nor may "pfSense" appear in their names without prior written
-	   permission of the Electric Sheep Fencing, LLC.
-
-	6. Redistributions of any form whatsoever must retain the following
-	   acknowledgment:
-
-	"This product includes software developed by the pfSense Project
-	for use in the pfSense software distribution (http://www.pfsense.org/).
-
-	THIS SOFTWARE IS PROVIDED BY THE pfSense PROJECT ``AS IS'' AND ANY
-	EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-	IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-	PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE pfSense PROJECT OR
-	ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-	SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
-	NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-	LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-	HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-	STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-	ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
-	OF THE POSSIBILITY OF SUCH DAMAGE.
-*/
+ * config.lib.inc
+ *
+ * part of pfSense (https://www.pfsense.org)
+ * Copyright (c) 2004-2016 Rubicon Communications, LLC (Netgate)
+ * Copyright (c) 2009 Erik Kristensen
+ * All rights reserved.
+ *
+ * originally part of m0n0wall (http://m0n0.ch/wall)
+ * Copyright (c) 2003-2004 Manuel Kasper <mk@neon1.net>.
+ * All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 /****f* config/encrypted_configxml
  * NAME
@@ -232,7 +200,6 @@ function restore_backup($file) {
 	global $g;
 
 	if (file_exists($file)) {
-		conf_mount_rw();
 		unlink_if_exists("{$g['tmp_path']}/config.cache");
 		copy("$file", "/cf/conf/config.xml");
 		pfSense_fsync("/cf/conf/config.xml");
@@ -240,7 +207,6 @@ function restore_backup($file) {
 		disable_security_checks();
 		log_error(sprintf(gettext('%1$s is restoring the configuration %2$s'), $g['product_name'], $file));
 		file_notice("config.xml", sprintf(gettext('%1$s is restoring the configuration %2$s'), $g['product_name'], $file), "pfSenseConfigurator", "");
-		conf_mount_ro();
 	}
 }
 
@@ -260,32 +226,20 @@ function parse_config_bootup() {
 	$lockkey = lock('config');
 	if (!file_exists("{$g['conf_path']}/config.xml")) {
 		if (platform_booting()) {
-			if (strstr($g['platform'], "cdrom")) {
-				/* try copying the default config. to the floppy */
-				echo gettext("Resetting factory defaults...") . "\n";
-				reset_factory_defaults(true, false);
-				if (!file_exists("{$g['conf_path']}/config.xml")) {
-					echo gettext("No XML configuration file found - using factory defaults.\n" .
-								 "Make sure that the configuration floppy disk with the conf/config.xml\n" .
-								 "file is inserted. If it isn't, the configuration changes will be lost\n" .
-								 "on reboot.\n");
-				}
-			} else {
-				$last_backup = discover_last_backup();
-				if ($last_backup) {
-					log_error("No config.xml found, attempting last known config restore.");
-					file_notice("config.xml", gettext("No config.xml found, attempting last known config restore."), "pfSenseConfigurator", "");
-					restore_backup("/cf/conf/backup/{$last_backup}");
-				}
-				if (!file_exists("{$g['conf_path']}/config.xml")) {
-					echo sprintf(gettext("XML configuration file not found.  %s cannot continue booting."), $g['product_name']) . "\n";
-					unlock($lockkey);
-					mwexec("/sbin/halt");
-					exit;
-				}
-				log_error("Last known config found and restored.  Please double check the configuration file for accuracy.");
-				file_notice("config.xml", gettext("Last known config found and restored.  Please double check the configuration file for accuracy."), "pfSenseConfigurator", "");
+			$last_backup = discover_last_backup();
+			if ($last_backup) {
+				log_error("No config.xml found, attempting last known config restore.");
+				file_notice("config.xml", gettext("No config.xml found, attempting last known config restore."), "pfSenseConfigurator", "");
+				restore_backup("/cf/conf/backup/{$last_backup}");
 			}
+			if (!file_exists("{$g['conf_path']}/config.xml")) {
+				echo sprintf(gettext("XML configuration file not found.  %s cannot continue booting."), $g['product_name']) . "\n";
+				unlock($lockkey);
+				mwexec("/sbin/halt");
+				exit;
+			}
+			log_error("Last known config found and restored.  Please double check the configuration file for accuracy.");
+			file_notice("config.xml", gettext("Last known config found and restored.  Please double check the configuration file for accuracy."), "pfSenseConfigurator", "");
 		} else {
 			unlock($lockkey);
 			log_error(gettext("Could not find a usable configuration file! Exiting...."));
@@ -336,36 +290,8 @@ EOD;
  ******/
 /* mount flash card read/write */
 function conf_mount_rw() {
-	global $g, $config;
-
-	/* do not mount on cdrom platform */
-	if ($g['platform'] == "cdrom" or $g['platform'] == $g['product_name']) {
-		return;
-	}
-
-	if ((refcount_reference(1000) > 1) && is_writable("/")) {
-		return;
-	}
-
-	$status = mwexec("/sbin/mount -u -w -o sync,noatime {$g['cf_path']}");
-	if ($status <> 0) {
-		if (platform_booting()) {
-			echo gettext("/cf Filesystem is dirty.") . "\n";
-		}
-		$status = mwexec("/sbin/mount -u -w -o sync,noatime {$g['cf_path']}");
-	}
-
-	/*    if the platform is soekris or wrap or $product, lets mount the
-	 *    compact flash cards root.
-	*/
-	$status = mwexec("/sbin/mount -u -w -o sync,noatime /");
-	/* we could not mount this correctly. */
-	if ($status <> 0) {
-		log_error(gettext("/ File system is dirty."));
-		$status = mwexec("/sbin/mount -u -w -o sync,noatime /");
-	}
-
-	mark_subsystem_dirty('mount');
+	/* Obsoleted. Keep it here untill all calls are removed */
+	return;
 }
 
 /****f* config/conf_mount_ro
@@ -375,35 +301,8 @@ function conf_mount_rw() {
  *   null
  ******/
 function conf_mount_ro() {
-	global $g, $config;
-
-	// do nothing here. redmine #6184
+	/* Obsoleted. Keep it here untill all calls are removed */
 	return;
-
-	/* Do not trust $g['platform'] since this can be clobbered during factory reset. */
-	$platform = trim(file_get_contents("/etc/platform"));
-	/* do not umount on cdrom or pfSense platforms */
-	if ($platform == "cdrom" or $platform == $g['product_name']) {
-		return;
-	}
-
-	if (refcount_unreference(1000) > 0) {
-		return;
-	}
-
-	if (isset($config['system']['nanobsd_force_rw'])) {
-		return;
-	}
-
-	if (platform_booting()) {
-		return;
-	}
-
-	clear_subsystem_dirty('mount');
-	/* sync data, then force a remount of /cf */
-	pfSense_fsync($g['cf_path']);
-	mwexec("/sbin/mount -u -r -f -o sync,noatime {$g['cf_path']}");
-	mwexec("/sbin/mount -u -r -f -o sync,noatime /");
 }
 
 /****f* config/convert_config
@@ -485,13 +384,13 @@ function convert_config() {
  *   process, them renaming the temporary file over the original.
  * INPUTS
  *   $filename  - string containing the filename of the file to write
- *   $content   - string containing the file content to write to file
+ *   $content   - string or array containing the file content to write to file
  *   $force_binary      - boolean denoting whether we should force binary
  *   mode writing.
  * RESULT
  *   boolean - true if successful, false if not
  ******/
-function safe_write_file($file, $content, $force_binary) {
+function safe_write_file($file, $content, $force_binary = false) {
 	$tmp_file = $file . "." . getmypid();
 	$write_mode = $force_binary ? "wb" : "w";
 
@@ -500,7 +399,15 @@ function safe_write_file($file, $content, $force_binary) {
 		// Unable to open temporary file for writing
 		return false;
 	}
-	if (!fwrite($fd, $content)) {
+	if (is_array($content)) {
+		foreach ($content as $line) {
+			if (!fwrite($fd, $line . "\n")) {
+				// Unable to write to temporary file
+				fclose($fd);
+				return false;
+			}
+		}
+	} elseif (!fwrite($fd, $content)) {
 		// Unable to write to temporary file
 		fclose($fd);
 		return false;
@@ -558,14 +465,13 @@ function write_config($desc="Unknown", $backup = true, $write_config_only = fals
 
 	$config['revision'] = make_config_revision_entry($desc);
 
-	conf_mount_rw();
 	$lockkey = lock('config', LOCK_EX);
 
 	/* generate configuration XML */
 	$xmlconfig = dump_xml_config($config, $g['xml_rootobj']);
 
 	/* write new configuration */
-	if (!safe_write_file("{$g['cf_conf_path']}/config.xml", $xmlconfig, false)) {
+	if (!safe_write_file("{$g['cf_conf_path']}/config.xml", $xmlconfig)) {
 		log_error(gettext("WARNING: Config contents could not be saved. Could not open file!"));
 		unlock($lockkey);
 		file_notice("config.xml", sprintf(gettext("Unable to open %s/config.xml for writing in write_config()%s"), $g['cf_conf_path'], "\n"));
@@ -598,15 +504,10 @@ function write_config($desc="Unknown", $backup = true, $write_config_only = fals
 	unlock($lockkey);
 
 	if ($write_config_only) {
-		/* tell kernel to sync fs data */
-		conf_mount_ro();
 		return $config;
 	}
 
 	unlink_if_exists("/usr/local/pkg/pf/carp_sync_client.php");
-
-	/* tell kernel to sync fs data */
-	conf_mount_ro();
 
 	/* sync carp entries to other firewalls */
 	carp_sync_client();
@@ -628,7 +529,6 @@ function write_config($desc="Unknown", $backup = true, $write_config_only = fals
 function reset_factory_defaults($lock = false, $reboot_required = true) {
 	global $g;
 
-	conf_mount_rw();
 
 	/* Remove all additional packages */
 	mwexec("/bin/sh /usr/local/sbin/{$g['product_name']}-upgrade " .
@@ -668,7 +568,6 @@ function reset_factory_defaults($lock = false, $reboot_required = true) {
 	if (!$lock) {
 		unlock($lockkey);
 	}
-	conf_mount_ro();
 	setup_serial_port();
 	return 0;
 }
@@ -682,7 +581,6 @@ function config_restore($conffile) {
 
 	backup_config();
 
-	conf_mount_rw();
 
 	$lockkey = lock('config', LOCK_EX);
 
@@ -695,7 +593,6 @@ function config_restore($conffile) {
 
 	$config = parse_config(true);
 
-	conf_mount_ro();
 
 	write_config(sprintf(gettext("Reverted to %s."), array_pop(explode("/", $conffile))), false);
 
@@ -719,7 +616,6 @@ function config_install($conffile) {
 		log_error(gettext("Installing configuration ...."));
 	}
 
-	conf_mount_rw();
 	$lockkey = lock('config', LOCK_EX);
 
 	copy($conffile, "{$g['conf_path']}/config.xml");
@@ -732,7 +628,6 @@ function config_install($conffile) {
 	}
 
 	unlock($lockkey);
-	conf_mount_ro();
 
 	return 0;
 }
@@ -789,16 +684,15 @@ function config_validate($conffile) {
 }
 
 function cleanup_backupcache($lock = false) {
-	global $g;
+	global $config, $g;
 	$i = false;
 
-	$revisions = get_config_backup_count();
+	$revisions = intval(is_numericint($config['system']['backupcount']) ? $config['system']['backupcount'] : $g['default_config_backup_count']);
 
 	if (!$lock) {
 		$lockkey = lock('config');
 	}
 
-	conf_mount_rw();
 
 	$backups = get_backups();
 	if ($backups) {
@@ -870,7 +764,6 @@ function cleanup_backupcache($lock = false) {
 	fwrite($bakout, serialize($tocache));
 	fclose($bakout);
 	pfSense_fsync("{$g['cf_conf_path']}/backup/backup.cache");
-	conf_mount_ro();
 
 	if (!$lock) {
 		unlock($lockkey);
@@ -898,11 +791,6 @@ function get_backups() {
 function backup_config() {
 	global $config, $g;
 
-	if ($g['platform'] == "cdrom") {
-		return;
-	}
-
-	conf_mount_rw();
 
 	/* Create backup directory if needed */
 	safe_mkdir("{$g['cf_conf_path']}/backup");
@@ -933,7 +821,6 @@ function backup_config() {
 	fclose($bakout);
 	pfSense_fsync("{$g['cf_conf_path']}/backup/backup.cache");
 
-	conf_mount_ro();
 
 	return true;
 }
@@ -995,17 +882,6 @@ function make_config_revision_entry($desc = null, $override_user = null) {
 	}
 	$revision['username'] = $username;
 	return $revision;
-}
-
-function get_config_backup_count() {
-	global $config, $g;
-	if (isset($config['system']['backupcount']) && is_numeric($config['system']['backupcount']) && ($config['system']['backupcount'] >= 0)) {
-		return intval($config['system']['backupcount']);
-	} elseif ($g['platform'] == "nanobsd") {
-		return 5;
-	} else {
-		return 30;
-	}
 }
 
 function pfSense_clear_globals() {

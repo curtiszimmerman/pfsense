@@ -1,56 +1,22 @@
 <?php
 /*
-	system_advanced_notifications.php
-*/
-/* ====================================================================
- *  Copyright (c)  2004-2015  Electric Sheep Fencing, LLC. All rights reserved.
+ * system_advanced_notifications.php
  *
- *  Redistribution and use in source and binary forms, with or without modification,
- *  are permitted provided that the following conditions are met:
+ * part of pfSense (https://www.pfsense.org)
+ * Copyright (c) 2004-2016 Rubicon Communications, LLC (Netgate)
+ * All rights reserved.
  *
- *  1. Redistributions of source code must retain the above copyright notice,
- *      this list of conditions and the following disclaimer.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *  2. Redistributions in binary form must reproduce the above copyright
- *      notice, this list of conditions and the following disclaimer in
- *      the documentation and/or other materials provided with the
- *      distribution.
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *  3. All advertising materials mentioning features or use of this software
- *      must display the following acknowledgment:
- *      "This product includes software developed by the pfSense Project
- *       for use in the pfSense software distribution. (http://www.pfsense.org/).
- *
- *  4. The names "pfSense" and "pfSense Project" must not be used to
- *       endorse or promote products derived from this software without
- *       prior written permission. For written permission, please contact
- *       coreteam@pfsense.org.
- *
- *  5. Products derived from this software may not be called "pfSense"
- *      nor may "pfSense" appear in their names without prior written
- *      permission of the Electric Sheep Fencing, LLC.
- *
- *  6. Redistributions of any form whatsoever must retain the following
- *      acknowledgment:
- *
- *  "This product includes software developed by the pfSense Project
- *  for use in the pfSense software distribution (http://www.pfsense.org/).
- *
- *  THIS SOFTWARE IS PROVIDED BY THE pfSense PROJECT ``AS IS'' AND ANY
- *  EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- *  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- *  PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE pfSense PROJECT OR
- *  ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- *  NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- *  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- *  HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- *  STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- *  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
- *  OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *  ====================================================================
- *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 ##|+PRIV
@@ -60,7 +26,7 @@
 ##|*MATCH=system_advanced_notifications.php*
 ##|-PRIV
 
-require("guiconfig.inc");
+require_once("guiconfig.inc");
 require_once("notices.inc");
 
 // Growl
@@ -81,7 +47,7 @@ if ($config['notifications']['growl']['notification_name']) {
 if ($config['notifications']['growl']['name']) {
 	$pconfig['name'] = $config['notifications']['growl']['name'];
 } else {
-  $pconfig['name'] = 'PHP-Growl';
+  $pconfig['name'] = 'pfSense-Growl';
 }
 
 
@@ -96,8 +62,8 @@ if ($config['notifications']['smtp']['port']) {
 if (isset($config['notifications']['smtp']['ssl'])) {
 	$pconfig['smtpssl'] = true;
 }
-if (isset($config['notifications']['smtp']['tls'])) {
-	$pconfig['smtptls'] = true;
+if (!empty($config['notifications']['smtp']['timeout'])) {
+	$pconfig['smtptimeout'] = $config['notifications']['smtp']['timeout'];
 }
 if ($config['notifications']['smtp']['notifyemailaddress']) {
 	$pconfig['smtpnotifyemailaddress'] = $config['notifications']['smtp']['notifyemailaddress'];
@@ -152,12 +118,7 @@ if ($_POST) {
 			unset($config['notifications']['smtp']['ssl']);
 		}
 
-		if (isset($_POST['smtptls'])) {
-			$config['notifications']['smtp']['tls'] = true;
-		} else {
-			unset($config['notifications']['smtp']['tls']);
-		}
-
+		$config['notifications']['smtp']['timeout'] = $_POST['smtptimeout'];
 		$config['notifications']['smtp']['notifyemailaddress'] = $_POST['smtpnotifyemailaddress'];
 		$config['notifications']['smtp']['username'] = $_POST['smtpusername'];
 
@@ -199,7 +160,13 @@ if ($_POST) {
 		if (isset($config['notifications']['growl']['ipaddress'])) {
 			unlink_if_exists($g['vardb_path'] . "/growlnotices_lastmsg.txt");
 			register_via_growl();
-			notify_via_growl(sprintf(gettext("This is a test message from %s.  It is safe to ignore this message."), $g['product_name']), true);
+			$test_result = notify_via_growl(sprintf(gettext("This is a test message from %s.  It is safe to ignore this message."), $g['product_name']), true);
+			if (empty($test_result)) {
+				$test_result = gettext("Growl testing notification successfully sent");
+				$test_class = 'success';
+			} else {
+				$test_class = 'danger';
+			}
 		}
 	}
 
@@ -208,7 +175,13 @@ if ($_POST) {
 		if (file_exists("/var/db/notices_lastmsg.txt")) {
 			unlink("/var/db/notices_lastmsg.txt");
 		}
-		$savemsg = notify_via_smtp(sprintf(gettext("This is a test message from %s. It is safe to ignore this message."), $g['product_name']), true);
+		$test_result = notify_via_smtp(sprintf(gettext("This is a test message from %s. It is safe to ignore this message."), $g['product_name']), true);
+		if (empty($test_result)) {
+			$test_result = gettext("SMTP testing e-mail successfully sent");
+			$test_class = 'success';
+		} else {
+			$test_class = 'danger';
+		}
 	}
 }
 
@@ -219,8 +192,8 @@ if ($input_errors) {
 	print_input_errors($input_errors);
 }
 
-if ($savemsg) {
-	print_info_box($savemsg, 'success');
+if ($test_result) {
+	print_info_box($test_result, $test_class);
 }
 
 $tab_array = array();
@@ -249,7 +222,7 @@ $section->addInput(new Form_Input(
 	'Registration Name',
 	'text',
 	$pconfig['name'],
-	['placeholder' => 'PHP-Growl']
+	['placeholder' => 'pfSense-Growl']
 ))->setHelp('Enter the name to register with the Growl server.');
 
 $section->addInput(new Form_Input(
@@ -311,19 +284,19 @@ $section->addInput(new Form_Input(
 ))->setHelp('This is the port of the SMTP E-Mail server, typically 25, 587 '.
 	'(submission) or 465 (smtps).');
 
+$section->addInput(new Form_Input(
+	'smtptimeout',
+	'Connection timeout to E-Mail server',
+	'number',
+	$pconfig['smtptimeout']
+))->setHelp('This is how many seconds it will wait for the SMTP server to connect. Default is 20s.');
+
 $group = new Form_Group('Secure SMTP Connection');
 $group->add(new Form_Checkbox(
 	'smtpssl',
 	'Enable SSL/TLS',
 	'Enable SMTP over SSL/TLS',
 	isset($pconfig['smtpssl'])
-));
-
-$group->add(new Form_Checkbox(
-	'smtptls',
-	'Secure STARTTLS',
-	'Enable STARTTLS',
-	isset($pconfig['smtptls'])
 ));
 
 $section->add($group);

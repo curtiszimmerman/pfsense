@@ -1,31 +1,23 @@
 <?php
 /*
-	picture.widget.php
-	Copyright (C) 2013-2015 Electric Sheep Fencing, LP
-	Copyright 2009 Scott Ullrich
-	Part of pfSense widgets (https://www.pfsense.org)
-
-	Redistribution and use in source and binary forms, with or without
-	modification, are permitted provided that the following conditions are met:
-
-	1. Redistributions of source code must retain the above copyright notice,
-	   this list of conditions and the following disclaimer.
-
-	2. Redistributions in binary form must reproduce the above copyright
-	   notice, this list of conditions and the following disclaimer in the
-	   documentation and/or other materials provided with the distribution.
-
-	THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
-	INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
-	AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
-	AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
-	OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-	SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-	INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-	CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-	ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-	POSSIBILITY OF SUCH DAMAGE.
-*/
+ * picture.widget.php
+ *
+ * part of pfSense (https://www.pfsense.org)
+ * Copyright (c) 2004-2016 Rubicon Communications, LLC (Netgate)
+ * All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 $nocsrf = true;
 
@@ -34,12 +26,12 @@ require_once("pfsense-utils.inc");
 require_once("functions.inc");
 
 if ($_GET['getpic']=="true") {
-	$pic_type_s = explode(".", $config['widgets']['picturewidget_filename']);
+	$pic_type_s = explode(".", $user_settings['widgets']['picturewidget_filename']);
 	$pic_type = $pic_type_s[1];
-	if ($config['widgets']['picturewidget']) {
-		$data = base64_decode($config['widgets']['picturewidget']);
+	if ($user_settings['widgets']['picturewidget']) {
+		$data = base64_decode($user_settings['widgets']['picturewidget']);
 	}
-	header("Content-Disposition: inline; filename=\"{$config['widgets']['picturewidget_filename']}\"");
+	header("Content-Disposition: inline; filename=\"{$user_settings['widgets']['picturewidget_filename']}\"");
 	header("Content-Type: image/{$pic_type}");
 	header("Content-Length: " . strlen($data));
 	echo $data;
@@ -60,9 +52,9 @@ if ($_POST) {
 			die("Could not read temporary file");
 		} else {
 			$picname = basename($_FILES['uploadedfile']['name']);
-			$config['widgets']['picturewidget'] = base64_encode($data);
-			$config['widgets']['picturewidget_filename'] = $_FILES['pictfile']['name'];
-			write_config("Picture widget saved via Dashboard.");
+			$user_settings['widgets']['picturewidget'] = base64_encode($data);
+			$user_settings['widgets']['picturewidget_filename'] = $_FILES['pictfile']['name'];
+			save_widget_settings($_SESSION['Username'], $user_settings["widgets"], gettext("Picture widget saved via Dashboard."));
 			header("Location: /index.php");
 			exit;
 		}

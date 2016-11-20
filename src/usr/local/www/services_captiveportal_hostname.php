@@ -1,56 +1,22 @@
 <?php
 /*
-	services_captiveportal_hostname.php
-*/
-/* ====================================================================
- *	Copyright (c)  2004-2015  Electric Sheep Fencing, LLC. All rights reserved.
+ * services_captiveportal_hostname.php
  *
- *	Redistribution and use in source and binary forms, with or without modification,
- *	are permitted provided that the following conditions are met:
+ * part of pfSense (https://www.pfsense.org)
+ * Copyright (c) 2004-2016 Rubicon Communications, LLC (Netgate)
+ * All rights reserved.
  *
- *	1. Redistributions of source code must retain the above copyright notice,
- *		this list of conditions and the following disclaimer.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *	2. Redistributions in binary form must reproduce the above copyright
- *		notice, this list of conditions and the following disclaimer in
- *		the documentation and/or other materials provided with the
- *		distribution.
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *	3. All advertising materials mentioning features or use of this software
- *		must display the following acknowledgment:
- *		"This product includes software developed by the pfSense Project
- *		 for use in the pfSense software distribution. (http://www.pfsense.org/).
- *
- *	4. The names "pfSense" and "pfSense Project" must not be used to
- *		 endorse or promote products derived from this software without
- *		 prior written permission. For written permission, please contact
- *		 coreteam@pfsense.org.
- *
- *	5. Products derived from this software may not be called "pfSense"
- *		nor may "pfSense" appear in their names without prior written
- *		permission of the Electric Sheep Fencing, LLC.
- *
- *	6. Redistributions of any form whatsoever must retain the following
- *		acknowledgment:
- *
- *	"This product includes software developed by the pfSense Project
- *	for use in the pfSense software distribution (http://www.pfsense.org/).
- *
- *	THIS SOFTWARE IS PROVIDED BY THE pfSense PROJECT ``AS IS'' AND ANY
- *	EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- *	IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- *	PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE pfSense PROJECT OR
- *	ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *	SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- *	NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- *	LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- *	HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- *	STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- *	ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
- *	OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *	====================================================================
- *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 ##|+PRIV
@@ -67,17 +33,17 @@ $notestr =
 	'This can be used for a web server serving images for the portal page, or a DNS server on another network, for example. ' .
 	'By specifying <em>from</em> addresses, it may be used to always allow pass-through access from a client behind the captive portal.');
 
-require("guiconfig.inc");
-require("functions.inc");
+require_once("guiconfig.inc");
+require_once("functions.inc");
 require_once("filter.inc");
-require("shaper.inc");
-require("captiveportal.inc");
+require_once("shaper.inc");
+require_once("captiveportal.inc");
 
 $cpzone = $_GET['zone'];
 if (isset($_POST['zone'])) {
 	$cpzone = $_POST['zone'];
 }
-$cpzone = strtolower($cpzone);
+$cpzone = strtolower(htmlspecialchars($cpzone));
 
 if (empty($cpzone) || empty($config['captiveportal'][$cpzone])) {
 	header("Location: services_captiveportal_zones.php");
@@ -109,15 +75,16 @@ if ($_GET['act'] == "del" && !empty($cpzone) && isset($cpzoneid)) {
 			}
 			$sn = (is_ipaddrv6($ip)) ? 128 : 32;
 			if (is_ipaddr($ip)) {
-				$ipfw = pfSense_ipfw_getTablestats($cpzoneid, IP_FW_TABLE_XLISTENTRY, 3, $ip);
-				if (is_array($ipfw)) {
-					captiveportal_free_dn_ruleno($ipfw['dnpipe']);
-					pfSense_pipe_action("pipe delete {$ipfw['dnpipe']}");
-					pfSense_pipe_action("pipe delete " . ($ipfw['dnpipe']+1));
-				}
+				$rule = pfSense_ipfw_table_lookup("{$cpzone}_allowed_up", "{$ip}/{$sn}");
 
-				pfSense_ipfw_Tableaction($cpzoneid, IP_FW_TABLE_XDEL, 3, $ip, $sn);
-				pfSense_ipfw_Tableaction($cpzoneid, IP_FW_TABLE_XDEL, 4, $ip, $sn);
+				pfSense_ipfw_table("{$cpzone}_allowed_up", IP_FW_TABLE_XDEL, "{$ip}/{$sn}");
+				pfSense_ipfw_table("{$cpzone}_allowed_down", IP_FW_TABLE_XDEL, "{$ip}/{$sn}");
+
+				if (is_array($rule) && !empty($rule['pipe'])) {
+					captiveportal_free_dn_ruleno($rule['pipe']);
+					pfSense_ipfw_pipe("pipe delete {$rule['pipe']}");
+					pfSense_ipfw_pipe("pipe delete " . ($rule['pipe']+1));
+				}
 			}
 		}
 
@@ -145,7 +112,7 @@ $tab_array[] = array(gettext("File Manager"), false, "services_captiveportal_fil
 display_top_tabs($tab_array, true);
 ?>
 <div class="table-responsive">
-	<table class="table table-hover table-striped table-condensed">
+	<table class="table table-hover table-striped table-condensed table-rowdblclickedit">
 		<thead>
 			<tr>
 				<th><?=gettext("Hostname"); ?></th>

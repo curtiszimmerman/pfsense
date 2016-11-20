@@ -1,63 +1,29 @@
 <?php
 /*
-	upgrade_config.inc
-*/
-/* ====================================================================
- *	Copyright (c)  2004-2015  Electric Sheep Fencing, LLC. All rights reserved.
+ * upgrade_config.inc
  *
- *	Redistribution and use in source and binary forms, with or without modification,
- *	are permitted provided that the following conditions are met:
+ * part of pfSense (https://www.pfsense.org)
+ * Copyright (c) 2004-2016 Rubicon Communications, LLC (Netgate)
+ * All rights reserved.
  *
- *	1. Redistributions of source code must retain the above copyright notice,
- *		this list of conditions and the following disclaimer.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *	2. Redistributions in binary form must reproduce the above copyright
- *		notice, this list of conditions and the following disclaimer in
- *		the documentation and/or other materials provided with the
- *		distribution.
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *	3. All advertising materials mentioning features or use of this software
- *		must display the following acknowledgment:
- *		"This product includes software developed by the pfSense Project
- *		 for use in the pfSense software distribution. (http://www.pfsense.org/).
- *
- *	4. The names "pfSense" and "pfSense Project" must not be used to
- *		 endorse or promote products derived from this software without
- *		 prior written permission. For written permission, please contact
- *		 coreteam@pfsense.org.
- *
- *	5. Products derived from this software may not be called "pfSense"
- *		nor may "pfSense" appear in their names without prior written
- *		permission of the Electric Sheep Fencing, LLC.
- *
- *	6. Redistributions of any form whatsoever must retain the following
- *		acknowledgment:
- *
- *	"This product includes software developed by the pfSense Project
- *	for use in the pfSense software distribution (http://www.pfsense.org/).
- *
- *	THIS SOFTWARE IS PROVIDED BY THE pfSense PROJECT ``AS IS'' AND ANY
- *	EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- *	IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- *	PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE pfSense PROJECT OR
- *	ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *	SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- *	NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- *	LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- *	HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- *	STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- *	ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
- *	OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *	====================================================================
- *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 if (!function_exists("dump_rrd_to_xml")) {
-	require("rrd.inc");
+	require_once("rrd.inc");
 }
 if (!function_exists("read_altq_config")) {
-	require("shaper.inc");
+	require_once("shaper.inc");
 }
 
 /* Upgrade functions must be named:
@@ -2098,7 +2064,7 @@ function upgrade_054_to_055() {
 
 	$rrddbpath = "/var/db/rrd/";
 	$rrdtool = "/usr/bin/nice -n20 /usr/local/bin/rrdtool";
-	if ($g['platform'] != $g['product_name']) {
+	if (isset($config['system']['use_mfs_tmpvar'])) {
 		/* restore the databases, if we have one */
 		if (restore_rrd()) {
 			/* Make sure to move the rrd backup out of the way. We will make a new one after converting. */
@@ -2227,7 +2193,7 @@ function upgrade_054_to_055() {
 	}
 	/* Let's save the RRD graphs after we run enable RRD graphing */
 	/* The function will restore the rrd.tgz so we will save it after */
-	exec("cd /; LANG=C NO_REMOUNT=1 RRDDBPATH='{$rrddbpath}' CF_CONF_PATH='{$g['cf_conf_path']}' /etc/rc.backup_rrd.sh");
+	exec("cd /; LANG=C RRDDBPATH='{$rrddbpath}' CF_CONF_PATH='{$g['cf_conf_path']}' /etc/rc.backup_rrd.sh");
 	unlink_if_exists("{$g['vardb_path']}/rrd/*.xml");
 	if (platform_booting()) {
 		echo "Updating configuration...";
@@ -2817,7 +2783,7 @@ function upgrade_080_to_081() {
 	$rrddbpath = "/var/db/rrd/";
 	$rrdtool = "/usr/bin/nice -n20 /usr/local/bin/rrdtool";
 
-	if ($g['platform'] != $g['product_name']) {
+	if (isset($config['system']['use_mfs_tmpvar'])) {
 		/* restore the databases, if we have one */
 		if (restore_rrd()) {
 			/* Make sure to move the rrd backup out of the way. We will make a new one after converting. */
@@ -2961,7 +2927,7 @@ function upgrade_080_to_081() {
 	}
 	/* Let's save the RRD graphs after we run enable RRD graphing */
 	/* The function will restore the rrd.tgz so we will save it after */
-	exec("cd /; LANG=C NO_REMOUNT=1 RRDDBPATH='{$rrddbpath}' CF_CONF_PATH='{$g['cf_conf_path']}' /etc/rc.backup_rrd.sh");
+	exec("cd /; LANG=C RRDDBPATH='{$rrddbpath}' CF_CONF_PATH='{$g['cf_conf_path']}' /etc/rc.backup_rrd.sh");
 	if (platform_booting()) {
 		echo "Updating configuration...";
 	}
@@ -3289,7 +3255,7 @@ function upgrade_095_to_096() {
 	$rrddbpath = "/var/db/rrd";
 	$rrdtool = "/usr/local/bin/rrdtool";
 
-	if ($g['platform'] != $g['product_name']) {
+	if (isset($config['system']['use_mfs_tmpvar'])) {
 		/* restore the databases, if we have one */
 		if (restore_rrd()) {
 			/* Make sure to move the rrd backup out of the way. We will make a new one after converting. */
@@ -3320,7 +3286,7 @@ function upgrade_095_to_096() {
 	}
 	/* Let's save the RRD graphs after we run enable RRD graphing */
 	/* The function will restore the rrd.tgz so we will save it after */
-	exec("cd /; LANG=C NO_REMOUNT=1 RRDDBPATH='{$rrddbpath}' CF_CONF_PATH='{$g['cf_conf_path']}' /etc/rc.backup_rrd.sh");
+	exec("cd /; LANG=C RRDDBPATH='{$rrddbpath}' CF_CONF_PATH='{$g['cf_conf_path']}' /etc/rc.backup_rrd.sh");
 }
 
 function upgrade_096_to_097() {
@@ -4471,7 +4437,7 @@ function upgrade_142_to_143() {
 	if (is_array($config['filter']['separator'])) {
 		foreach ($config['filter']['separator'] as $interface => $separators) {
 
-			if(is_array($separators)) {
+			if (is_array($separators)) {
 				foreach ($separators as $sepn => $separator) {
 
 					$seprow = substr($separator['row']['0'], 2);
@@ -4681,7 +4647,7 @@ function upgrade_145_to_146() {
 	$awkcmd .= "    print;\n";
 	$awkcmd .= "}'";
 
-	if ($g['platform'] != $g['product_name']) {
+	if (isset($config['system']['use_mfs_tmpvar'])) {
 		/* restore the databases, if we have one */
 		if (restore_rrd()) {
 			/* Make sure to move the rrd backup out of the way. We will make a new one after converting. */
@@ -4707,7 +4673,7 @@ function upgrade_145_to_146() {
 	}
 	/* Let's save the RRD graphs after we run enable RRD graphing */
 	/* The function will restore the rrd.tgz so we will save it after */
-	exec("cd /; LANG=C NO_REMOUNT=1 RRDDBPATH='{$rrddbpath}' CF_CONF_PATH='{$g['cf_conf_path']}' /etc/rc.backup_rrd.sh");
+	exec("cd /; LANG=C RRDDBPATH='{$rrddbpath}' CF_CONF_PATH='{$g['cf_conf_path']}' /etc/rc.backup_rrd.sh");
 }
 
 function upgrade_bgpd_146_to_147() {
@@ -4900,7 +4866,7 @@ function upgrade_151_to_152() {
 	require_once("/etc/inc/services.inc");
 
 	// Remove these cron jobs on full install if not using ramdisk.
-	if (($g['platform'] == $g['product_name']) && !isset($config['system']['use_mfs_tmpvar'])) {
+	if (!isset($config['system']['use_mfs_tmpvar'])) {
 		install_cron_job("/etc/rc.backup_rrd.sh", false);
 		install_cron_job("/etc/rc.backup_dhcpleases.sh", false);
 	}
@@ -4980,4 +4946,86 @@ function upgrade_153_to_154() {
 	/* NOTE: This upgrade code was reverted. See redmine ticket #6118 and
 	   https://github.com/pfsense/pfsense/commit/538a3c04a6b6671151e913b06b2f340b6f8ee222 */
 }
+
+/* Clean up old GRE/GIF options. See Redmine tickets #6586 and #6587 */
+function upgrade_154_to_155() {
+	global $config;
+
+	if (is_array($config['gifs']['gif'])) {
+		foreach ($config['gifs']['gif'] as $idx => $gif) {
+			if (isset($gif['link0'])) {
+				unset($config['gifs']['gif'][$idx]['link0']);
+			}
+		}
+	}
+
+	if (is_array($config['gres']['gre'])) {
+		foreach ($config['gres']['gre'] as $idx => $gre) {
+			if (isset($gre['link0'])) {
+				unset($config['gres']['gre'][$idx]['link0']);
+			}
+			if (isset($gre['link2'])) {
+				unset($config['gres']['gre'][$idx]['link2']);
+			}
+		}
+	}
+}
+
+/* Unset references to glxsb in the config. See #6755 */
+function upgrade_155_to_156() {
+	if ($config['system']['crypto_hardware'] == "glxsb") {
+		unset($config['system']['crypto_hardware']);
+	}
+}
+
+function upgrade_156_to_157() {
+	global $config;
+	/* Convert Cloudflare and GratisDNS type DynDNS entries to the new split hostname and domain format */
+
+	if (!is_array($config['dyndnses'])) {
+		$config['dyndnses'] = array();
+	}
+	if (!is_array($config['dyndnses']['dyndns'])) {
+		$config['dyndnses']['dyndns'] = array();
+	}
+	$a_dyndns = &$config['dyndnses']['dyndns'];
+
+	foreach ($a_dyndns as &$dyndns) {
+		if (($dyndns['type'] == "cloudflare") || ($dyndns['type'] == "cloudflare-v6") || ($dyndns['type'] == "gratisdns")) {
+			/* Use the old style logic to split the host and domain one last time. */
+			$dparts = explode(".", trim($dyndns['host']));
+			$domain_part_count = ($dparts[count($dparts)-1] == "uk") ? 3 : 2;
+			$domain_offset = count($dparts) - $domain_part_count;
+			$dyndns['host'] = implode(".", array_slice($dparts, 0, $domain_offset));
+			$dyndns['domainname'] = implode(".", array_slice($dparts, $domain_offset));
+		}
+	}
+
+	/* unset old pppoerestart cron job if it exists. redmine 1905 */
+	if (is_array($config['cron']['item'])) {
+		foreach ($config['cron']['item'] as $idx => $cronitem) {
+			if ($cronitem['command'] == "/etc/pppoerestart") {
+				unset($config['cron']['item'][$idx]);
+			}
+		}
+	}
+}
+
+function upgrade_157_to_158() {
+	global $config;
+	/* Convert Dynamic DNS passwords to base64 encoding. Redmine #6688 */
+
+	if (!is_array($config['dyndnses'])) {
+		$config['dyndnses'] = array();
+	}
+	if (!is_array($config['dyndnses']['dyndns'])) {
+		$config['dyndnses']['dyndns'] = array();
+	}
+	$a_dyndns = &$config['dyndnses']['dyndns'];
+
+	foreach ($a_dyndns as &$dyndns) {
+		$dyndns['password'] = base64_encode($dyndns['password']);
+	}
+}
+
 ?>

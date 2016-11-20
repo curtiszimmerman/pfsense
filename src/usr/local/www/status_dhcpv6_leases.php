@@ -1,60 +1,27 @@
 <?php
 /*
-	status_dhcpv6_leases.php
-*/
-/* ====================================================================
- *	Copyright (c)  2004-2015  Electric Sheep Fencing, LLC. All rights reserved.
- *	Copyright (c)  2011 Seth Mos
+ * status_dhcpv6_leases.php
  *
- *	Some or all of this file is based on the m0n0wall project which is
- *	Copyright (c)  2004 Manuel Kasper (BSD 2 clause)
+ * part of pfSense (https://www.pfsense.org)
+ * Copyright (c) 2004-2016 Rubicon Communications, LLC (Netgate)
+ * Copyright (c) 2011 Seth Mos
+ * All rights reserved.
  *
- *	Redistribution and use in source and binary forms, with or without modification,
- *	are permitted provided that the following conditions are met:
+ * originally based on m0n0wall (http://m0n0.ch/wall)
+ * Copyright (c) 2003-2004 Manuel Kasper <mk@neon1.net>.
+ * All rights reserved.
  *
- *	1. Redistributions of source code must retain the above copyright notice,
- *		this list of conditions and the following disclaimer.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *	2. Redistributions in binary form must reproduce the above copyright
- *		notice, this list of conditions and the following disclaimer in
- *		the documentation and/or other materials provided with the
- *		distribution.
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *	3. All advertising materials mentioning features or use of this software
- *		must display the following acknowledgment:
- *		"This product includes software developed by the pfSense Project
- *		 for use in the pfSense software distribution. (http://www.pfsense.org/).
- *
- *	4. The names "pfSense" and "pfSense Project" must not be used to
- *		 endorse or promote products derived from this software without
- *		 prior written permission. For written permission, please contact
- *		 coreteam@pfsense.org.
- *
- *	5. Products derived from this software may not be called "pfSense"
- *		nor may "pfSense" appear in their names without prior written
- *		permission of the Electric Sheep Fencing, LLC.
- *
- *	6. Redistributions of any form whatsoever must retain the following
- *		acknowledgment:
- *
- *	"This product includes software developed by the pfSense Project
- *	for use in the pfSense software distribution (http://www.pfsense.org/).
- *
- *	THIS SOFTWARE IS PROVIDED BY THE pfSense PROJECT ``AS IS'' AND ANY
- *	EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- *	IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- *	PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE pfSense PROJECT OR
- *	ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *	SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- *	NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- *	LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- *	HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- *	STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- *	ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
- *	OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *	====================================================================
- *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 ##|+PRIV
@@ -64,7 +31,7 @@
 ##|*MATCH=status_dhcpv6_leases.php*
 ##|-PRIV
 
-require("guiconfig.inc");
+require_once("guiconfig.inc");
 require_once("config.inc");
 
 $pgtitle = array(gettext("Status"), gettext("DHCPv6 Leases"));
@@ -130,17 +97,14 @@ function adjust_gmt($dt) {
 		}
 	}
 
-	$timezone = $config['system']['timezone'];
-	$ts = strtotime($dt . " GMT");
 	if ($dhcpv6leaseinlocaltime == "yes") {
-		$this_tz = new DateTimeZone($timezone);
-		$dhcp_lt = new DateTime(strftime("%I:%M:%S%p", $ts), $this_tz);
-		$offset = $this_tz->getOffset($dhcp_lt);
-		$ts = $ts + $offset;
-		return strftime("%Y/%m/%d %I:%M:%S%p", $ts);
-	} else {
-		return strftime("%Y/%m/%d %H:%M:%S", $ts);
+		$ts = strtotime($dt . " GMT");
+		if ($ts !== false) {
+			return strftime("%Y/%m/%d %H:%M:%S", $ts);
+		}
 	}
+	/* If we did not need to convert to local time or the conversion failed, just return the input. */
+	return $dt;
 }
 
 function remove_duplicate($array, $field) {
@@ -180,14 +144,30 @@ function parse_duid($duid_string) {
 }
 
 $awk = "/usr/bin/awk";
+$sed = "/usr/bin/sed";
 
-/* this pattern sticks comments into a single array item */
-$cleanpattern = "'{ gsub(\"^#.*\", \"\");} { gsub(\"^server-duid.*\", \"\");} { gsub(\";$\", \"\"); print;}'";
-/* We then split the leases file by } */
-$splitpattern = "'BEGIN { RS=\"}\";} {for (i=1; i<=NF; i++) printf \"%s \", \$i; printf \"}\\n\";}'";
+/* Remove all lines except ia-.. blocks */
+$cleanpattern = "'/^ia-.. /, /^}/ !d; s,;$,,; s,  *, ,g'";
+/*                       |               |        |
+ *                       |               |        |
+ *                       |               |        -> Remove extra spaces
+ *                       |               -> Remove ; from EOL
+ *                       -> Delete all lines except blocks that start with ia-..
+ *                          and end with }
+ */
 
-/* stuff the leases file in a proper format into a array by line */
-exec("/bin/cat {$leasesfile} | {$awk} {$cleanpattern} | {$awk} {$splitpattern} | /usr/bin/grep '^ia-.. '", $leases_content);
+/* Join each block in single line */
+$splitpattern = "'{printf $0}; $0 ~ /^\}/ {printf \"\\n\"}'";
+
+if (is_file($leasesfile)) {
+	/* stuff the leases file in a proper format into an array by line */
+	exec("{$sed} {$cleanpattern} {$leasesfile} | {$awk} {$splitpattern}", $leases_content);
+	$leasesfile_found = true;
+} else {
+	$leases_content = array();
+	$leasesfile_found = false;
+}
+
 $leases_count = count($leases_content);
 exec("/usr/sbin/ndp -an", $rawdata);
 $ndpdata = array();
@@ -442,7 +422,7 @@ if (count($pools) > 0) {
 /* only print pool status when we have one */
 }
 
-if (empty($leases)) {
+if (!$leasesfile_found) {
 	print_info_box(gettext("No leases file found. Is the DHCPv6 server active?"), 'warning', false);
 }
 

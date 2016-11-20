@@ -1,57 +1,23 @@
 <?php
 /*
-	system_authservers.php
-*/
-/* ====================================================================
- *	Copyright (c)  2004-2015  Electric Sheep Fencing, LLC. All rights reserved.
- *	Copyright (c)  2008 Shrew Soft Inc.
+ * system_authservers.php
  *
- *	Redistribution and use in source and binary forms, with or without modification,
- *	are permitted provided that the following conditions are met:
+ * part of pfSense (https://www.pfsense.org)
+ * Copyright (c) 2004-2016 Rubicon Communications, LLC (Netgate)
+ * Copyright (c) 2008 Shrew Soft Inc
+ * All rights reserved.
  *
- *	1. Redistributions of source code must retain the above copyright notice,
- *		this list of conditions and the following disclaimer.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *	2. Redistributions in binary form must reproduce the above copyright
- *		notice, this list of conditions and the following disclaimer in
- *		the documentation and/or other materials provided with the
- *		distribution.
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *	3. All advertising materials mentioning features or use of this software
- *		must display the following acknowledgment:
- *		"This product includes software developed by the pfSense Project
- *		 for use in the pfSense software distribution. (http://www.pfsense.org/).
- *
- *	4. The names "pfSense" and "pfSense Project" must not be used to
- *		 endorse or promote products derived from this software without
- *		 prior written permission. For written permission, please contact
- *		 coreteam@pfsense.org.
- *
- *	5. Products derived from this software may not be called "pfSense"
- *		nor may "pfSense" appear in their names without prior written
- *		permission of the Electric Sheep Fencing, LLC.
- *
- *	6. Redistributions of any form whatsoever must retain the following
- *		acknowledgment:
- *
- *	"This product includes software developed by the pfSense Project
- *	for use in the pfSense software distribution (http://www.pfsense.org/).
- *
- *	THIS SOFTWARE IS PROVIDED BY THE pfSense PROJECT ``AS IS'' AND ANY
- *	EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- *	IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- *	PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE pfSense PROJECT OR
- *	ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *	SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- *	NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- *	LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- *	HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- *	STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- *	ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
- *	OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *	====================================================================
- *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 ##|+PRIV
@@ -61,7 +27,7 @@
 ##|*MATCH=system_authservers.php*
 ##|-PRIV
 
-require("guiconfig.inc");
+require_once("guiconfig.inc");
 require_once("auth.inc");
 
 // Have we been called to populate the "Select a container" modal?
@@ -288,14 +254,14 @@ if ($_POST) {
 			gettext("Hostname or IP"),
 			gettext("Services"));
 
-		if ($pconfig['radisu_srvcs'] == "both" ||
-			$pconfig['radisu_srvcs'] == "auth") {
+		if ($pconfig['radius_srvcs'] == "both" ||
+			$pconfig['radius_srvcs'] == "auth") {
 			$reqdfields[] = "radius_auth_port";
 			$reqdfieldsn[] = gettext("Authentication port");
 		}
 
-		if ($pconfig['radisu_srvcs'] == "both" ||
-			$pconfig['radisu_srvcs'] == "acct") {
+		if ($pconfig['radius_srvcs'] == "both" ||
+			$pconfig['radius_srvcs'] == "acct") {
 			$reqdfields[] = "radius_acct_port";
 			$reqdfieldsn[] = gettext("Accounting port");
 		}
@@ -321,12 +287,6 @@ if ($_POST) {
 		if (isset($_POST[$to_field]) && !empty($_POST[$to_field]) && (!is_numeric($_POST[$to_field]) || (is_numeric($_POST[$to_field]) && ($_POST[$to_field] <= 0)))) {
 			$input_errors[] = sprintf(gettext("%s Timeout value must be numeric and positive."), strtoupper($pconfig['type']));
 		}
-	}
-
-	/* if this is an AJAX caller then handle via JSON */
-	if (isAjax() && is_array($input_errors)) {
-		input_errors2Ajax($input_errors);
-		exit;
 	}
 
 	if (!$input_errors) {
@@ -434,7 +394,7 @@ if ($_POST) {
 }
 
 // On error, restore the form contents so the user doesn't have to re-enter too much
-if($_POST && $input_errors) {
+if ($_POST && $input_errors) {
 	$pconfig = $_POST;
 	$pconfig['ldap_authcn'] = $_POST['ldapauthcontainers'];
 	$pconfig['ldap_template'] = $_POST['ldap_tmpltype'];
@@ -469,7 +429,7 @@ if (!($act == "new" || $act == "edit" || $input_errors)) {
 	<div class="panel-heading"><h2 class="panel-title"><?=gettext('Authentication Servers')?></h2></div>
 	<div class="panel-body">
 		<div class="table-responsive">
-			<table class="table table-striped table-hover table-condensed sortable-theme-bootstrap" data-sortable>
+			<table class="table table-striped table-hover table-condensed sortable-theme-bootstrap table-rowdblclickedit" data-sortable>
 				<thead>
 					<tr>
 						<th><?=gettext("Server Name")?></th>
@@ -479,7 +439,7 @@ if (!($act == "new" || $act == "edit" || $input_errors)) {
 					</tr>
 				</thead>
 				<tbody>
-			<?php foreach($a_server as $i => $server): ?>
+			<?php foreach ($a_server as $i => $server): ?>
 					<tr>
 						<td><?=htmlspecialchars($server['name'])?></td>
 						<td><?=htmlspecialchars($auth_server_types[$server['type']])?></td>
@@ -683,7 +643,7 @@ $group->add(new Form_Input(
 $group->add(new Form_Input(
 	'ldap_bindpw',
 	'Password',
-	'text',
+	'password',
 	$pconfig['ldap_bindpw']
 ));
 $section->add($group);
@@ -691,7 +651,7 @@ $section->add($group);
 if (!isset($id)) {
 	$template_list = array();
 
-	foreach($ldap_templates as $option => $template) {
+	foreach ($ldap_templates as $option => $template) {
 		$template_list[$option] = $template['desc'];
 	}
 
@@ -773,7 +733,7 @@ $section->addInput(new Form_Input(
 $section->addInput(new Form_Input(
 	'radius_secret',
 	'Shared Secret',
-	'text',
+	'password',
 	$pconfig['radius_secret']
 ));
 
@@ -920,7 +880,7 @@ events.push(function() {
 	}
 
 	function set_ldap_port() {
-		if($('#ldap_urltype').find(":selected").index() == 0)
+		if ($('#ldap_urltype').find(":selected").index() == 0)
 			$('#ldap_port').val('389');
 		else
 			$('#ldap_port').val('636');
@@ -928,7 +888,7 @@ events.push(function() {
 
 	// Hides all elements of the specified class. This will usually be a section
 	function hideClass(s_class, hide) {
-		if(hide)
+		if (hide)
 			$('.' + s_class).hide();
 		else
 			$('.' + s_class).show();
@@ -961,18 +921,18 @@ events.push(function() {
 	hideClass('ldapanon', $('#ldap_anon').prop('checked'));
 	hideClass('extended', !$('#ldap_extended_enabled').prop('checked'));
 
-	if($('#ldap_port').val() == "")
+	if ($('#ldap_port').val() == "")
 		set_ldap_port();
 
 <?php
-	if($act == 'edit') {
+	if ($act == 'edit') {
 ?>
 		$('#type option:not(:selected)').each(function(){
 			$(this).attr('disabled', 'disabled');
 		});
 
 <?php
-		if(!$input_errors) {
+		if (!$input_errors) {
 ?>
 		$('#name').prop("readonly", true);
 <?php

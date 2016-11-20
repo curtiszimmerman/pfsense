@@ -1,58 +1,26 @@
 <?php
-/* ====================================================================
- *  Copyright (c)  2004-2015  Electric Sheep Fencing, LLC. All rights reserved.
+/*
+ * interfaces.inc
  *
- *  Some or all of this file is based on the m0n0wall project which is
- *  Copyright (c)  2004 Manuel Kasper (BSD 2 clause)
+ * part of pfSense (https://www.pfsense.org)
+ * Copyright (c) 2004-2016 Rubicon Communications, LLC (Netgate)
+ * All rights reserved.
  *
- *  Redistribution and use in source and binary forms, with or without modification,
- *  are permitted provided that the following conditions are met:
+ * originally based on m0n0wall (http://m0n0.ch/wall)
+ * Copyright (c) 2004 Manuel Kasper <mk@neon1.net>.
+ * All rights reserved.
  *
- *  1. Redistributions of source code must retain the above copyright notice,
- *      this list of conditions and the following disclaimer.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *  2. Redistributions in binary form must reproduce the above copyright
- *      notice, this list of conditions and the following disclaimer in
- *      the documentation and/or other materials provided with the
- *      distribution.
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *  3. All advertising materials mentioning features or use of this software
- *      must display the following acknowledgment:
- *      "This product includes software developed by the pfSense Project
- *       for use in the pfSense software distribution. (http://www.pfsense.org/).
- *
- *  4. The names "pfSense" and "pfSense Project" must not be used to
- *       endorse or promote products derived from this software without
- *       prior written permission. For written permission, please contact
- *       coreteam@pfsense.org.
- *
- *  5. Products derived from this software may not be called "pfSense"
- *      nor may "pfSense" appear in their names without prior written
- *      permission of the Electric Sheep Fencing, LLC.
- *
- *  6. Redistributions of any form whatsoever must retain the following
- *      acknowledgment:
- *
- *  "This product includes software developed by the pfSense Project
- *  for use in the pfSense software distribution (http://www.pfsense.org/).
- *
- *  THIS SOFTWARE IS PROVIDED BY THE pfSense PROJECT ``AS IS'' AND ANY
- *  EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- *  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- *  PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE pfSense PROJECT OR
- *  ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- *  NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- *  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- *  HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- *  STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- *  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
- *  OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *  ====================================================================
- *
- * function interfaces_wireless_configure is Copyright (C) 2005 Espen Johansen
- *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 /* include all configuration functions */
@@ -318,17 +286,17 @@ function interface_qinq_configure(&$vlan, $fd = NULL) {
 
 	pfSense_ngctl_attach(".", $qinqif);
 	if (!empty($vlanif) && does_interface_exist($vlanif)) {
-		fwrite($fd, "shutdown {$qinqif}qinq:\n");
-		exec("/usr/sbin/ngctl msg {$qinqif}qinq: gettable", $result);
+		fwrite($fd, "shutdown {$vlanif}qinq:\n");
+		exec("/usr/sbin/ngctl msg {$vlanif}qinq: gettable", $result);
 		if (empty($result)) {
-			fwrite($fd, "mkpeer {$qinqif}: vlan lower downstream\n");
-			fwrite($fd, "name {$qinqif}:lower {$vlanif}qinq\n");
-			fwrite($fd, "connect {$qinqif}: {$vlanif}qinq: upper nomatch\n");
+			fwrite($fd, "mkpeer {$vlanif}: vlan lower downstream\n");
+			fwrite($fd, "name {$vlanif}:lower {$vlanif}qinq\n");
+			fwrite($fd, "connect {$vlanif}: {$vlanif}qinq: upper nomatch\n");
 		}
 	} else {
-		fwrite($fd, "mkpeer {$qinqif}: vlan lower downstream\n");
-		fwrite($fd, "name {$qinqif}:lower {$vlanif}qinq\n");
-		fwrite($fd, "connect {$qinqif}: {$vlanif}qinq: upper nomatch\n");
+		fwrite($fd, "mkpeer {$vlanif}: vlan lower downstream\n");
+		fwrite($fd, "name {$vlanif}:lower {$vlanif}qinq\n");
+		fwrite($fd, "connect {$vlanif}: {$vlanif}qinq: upper nomatch\n");
 	}
 
 	/* invalidate interface cache */
@@ -798,8 +766,6 @@ function interface_lagg_configure($lagg) {
 		hardware_offloading_applyflags($member);
 		mwexec("/sbin/ifconfig " . escapeshellarg($laggif) . " laggport " . escapeshellarg($member));
 	}
-	pfSense_interface_capabilities($laggif, -$flags_off);
-	pfSense_interface_capabilities($laggif, $flags_on);
 
 	mwexec("/sbin/ifconfig {$laggif} laggproto " . escapeshellarg($lagg['proto']));
 
@@ -877,15 +843,6 @@ function interface_gre_configure(&$gre, $grekey = "") {
 		mwexec("/sbin/ifconfig {$greif} inet6 " . escapeshellarg($gre['tunnel-local-addr']) . " " . escapeshellarg($gre['tunnel-remote-addr']) . " prefixlen 128");
 	} else {
 		mwexec("/sbin/ifconfig {$greif} " . escapeshellarg($gre['tunnel-local-addr']) . " " . escapeshellarg($gre['tunnel-remote-addr']) . " netmask " . gen_subnet_mask($gre['tunnel-remote-net']));
-	}
-	if (isset($gre['link0'])) {
-		pfSense_interface_flags($greif, IFF_LINK0);
-	}
-	if (isset($gre['link1'])) {
-		pfSense_interface_flags($greif, IFF_LINK1);
-	}
-	if (isset($gre['link2'])) {
-		pfSense_interface_flags($greif, IFF_LINK2);
 	}
 
 	if ($greif) {
@@ -998,11 +955,11 @@ function interface_gif_configure(&$gif, $gifkey = "") {
 	} else {
 		mwexec("/sbin/ifconfig {$gifif} " . escapeshellarg($gif['tunnel-local-addr']) . " " . escapeshellarg($gif['tunnel-remote-addr']) . " netmask " . gen_subnet_mask($gif['tunnel-remote-net']));
 	}
-	if (isset($gif['link0'])) {
-		pfSense_interface_flags($gifif, IFF_LINK0);
-	}
 	if (isset($gif['link1'])) {
 		pfSense_interface_flags($gifif, IFF_LINK1);
+	}
+	if (isset($gif['link2'])) {
+		pfSense_interface_flags($gifif, IFF_LINK2);
 	}
 	if ($gifif) {
 		interfaces_bring_up($gifif);
@@ -1049,10 +1006,10 @@ function interface_gif_configure(&$gif, $gifkey = "") {
 	}
 
 	if (is_ipaddrv4($realifgw)) {
-		mwexec("/sbin/route change -host " . escapeshellarg($gif['remote-addr']) . " {$realifgw}");
+		route_add_or_change("-host {$gif['remote-addr']} {$realifgw}");
 	}
 	if (is_ipaddrv6($realifgw)) {
-		mwexec("/sbin/route change -host -inet6 " . escapeshellarg($gif['remote-addr']) . " {$realifgw}");
+		route_add_or_change("-host -inet6 {$gif['remote-addr']} {$realifgw}");
 	}
 
 	interfaces_bring_up($gifif);
@@ -1181,7 +1138,7 @@ function interfaces_configure() {
 			log_error(sprintf(gettext("Configuring %s"), $ifname));
 		}
 
-		// bridge interface needs reconfigure, then re-add VIPs, to ensure find_interface_ip is correct. 
+		// bridge interface needs reconfigure, then re-add VIPs, to ensure find_interface_ip is correct.
 		// redmine #3997
 		interface_reconfigure($if, $reload);
 		interfaces_vips_configure($if);
@@ -1201,16 +1158,16 @@ function interfaces_configure() {
 		/* reload IPsec tunnels */
 		vpn_ipsec_configure();
 
+		/* restart dns servers (defering dhcpd reload) */
+		if (isset($config['dnsmasq']['enable'])) {
+			services_dnsmasq_configure(false);
+		}
+		if (isset($config['unbound']['enable'])) {
+			services_unbound_configure(false);
+		}
+
 		/* reload dhcpd (interface enabled/disabled status may have changed) */
 		services_dhcpd_configure();
-
-		if (isset($config['dnsmasq']['enable'])) {
-			services_dnsmasq_configure();
-		}
-
-		if (isset($config['unbound']['enable'])) {
-			services_unbound_configure();
-		}
 	}
 
 	return 0;
@@ -1343,11 +1300,7 @@ function interface_bring_down($interface = "wan", $destroy = false, $ifacecfg = 
 	switch ($ifcfg['ipaddrv6']) {
 		case "slaac":
 		case "dhcp6":
-			$pidv6 = find_dhcp6c_process($realif);
-			if ($pidv6) {
-				posix_kill($pidv6, SIGTERM);
-			}
-			sleep(3);
+			kill_dhcp6client_process($realif);
 			unlink_if_exists("{$g['varetc_path']}/dhcp6c_{$interface}.conf");
 			unlink_if_exists("{$g['varetc_path']}/dhcp6c_{$interface}_script.sh");
 			unlink_if_exists("{$g['varetc_path']}/rtsold_{$realifv6}_script.sh");
@@ -1697,6 +1650,9 @@ function interface_ppps_configure($interface) {
 					log_error(sprintf(gettext("Could not get a Local IP address for PPTP/L2TP link on %s in interfaces_ppps_configure. Using 0.0.0.0 ip!"), $port));
 					$localips[$pid] = "0.0.0.0";
 				}
+				if (!$g['booting'] && !is_ipaddr($gateways[$pid]) && is_hostname($gateways[$pid])) {
+					$gateways[$pid] = gethostbyname($gateways[$pid]);
+				}
 				if (!is_ipaddr($gateways[$pid])) {
 					log_error(sprintf(gettext('Could not get a PPTP/L2TP Remote IP address from %1$s for %2$s in interfaces_ppps_configure.'), $dhcp_gateway, $gway));
 					return 0;
@@ -1806,7 +1762,10 @@ EOD;
 	}
 
 /* Omit this, we maintain the default route by other means, and it causes problems with
- * default gateway switching. See redmine #1837
+ * default gateway switching. See redmine #1837 for original issue
+ * re-enabling this for now to fix issue with missing default gateway with PPPoE in some
+ * edge case. redmine #6495 open to address.
+ */
 	if (($interface == "wan" && $founddefaultgw == false) || $setdefaultgw == true) {
 		$setdefaultgw = true;
 		$mpdconf .= <<<EOD
@@ -1814,7 +1773,6 @@ EOD;
 
 EOD;
 	}
-*/
 	$mpdconf .= <<<EOD
 	set iface {$ondemand} on-demand
 	set iface idle {$ppp['idletimeout']}
@@ -2040,15 +1998,11 @@ EOD;
 	// Create the uptime log if requested and if it doesn't exist already, or delete it if it is no longer requested.
 	if (isset($ppp['uptime'])) {
 		if (!file_exists("/conf/{$pppif}.log")) {
-			conf_mount_rw();
 			file_put_contents("/conf/{$pppif}.log", '');
-			conf_mount_ro();
 		}
 	} else {
 		if (file_exists("/conf/{$pppif}.log")) {
-			conf_mount_rw();
 			@unlink("/conf/{$pppif}.log");
-			conf_mount_ro();
 		}
 	}
 
@@ -2080,8 +2034,9 @@ EOD;
 	}
 
 	/* fire up mpd */
-	mwexec("/usr/local/sbin/mpd5 -b -k -d {$g['varetc_path']} -f mpd_{$interface}.conf -p {$g['varrun_path']}/" .
-		escapeshellarg($ppp['type']) . "_{$interface}.pid -s ppp " . escapeshellarg($ppp['type']) . "client");
+	mwexec("/usr/local/sbin/mpd5 -b -k -d {$g['varetc_path']} -f mpd_{$interface}.conf -p " .
+		escapeshellarg("{$g['varrun_path']}/{$ppp['type']}_{$interface}.pid") . " -s ppp " .
+		escapeshellarg("{$ppp['type']}client"));
 
 	// Check for PPPoE periodic reset request
 	if ($type == "pppoe") {
@@ -2622,8 +2577,6 @@ function interface_wireless_configure($if, &$wl, &$wlcfg) {
 
 	$wlcmd = array();
 	$wl_sysctl = array();
-	/* Make sure it's up */
-	$wlcmd[] = "up";
 	/* Set a/b/g standard */
 	$standard = str_replace(" Turbo", "", $wlcfg['standard']);
 	/* skip mode entirely for "auto" */
@@ -2750,7 +2703,6 @@ function interface_wireless_configure($if, &$wl, &$wlcfg) {
 	mwexec(kill_wpasupplicant("{$if}"));
 
 	/* generate wpa_supplicant/hostap config if wpa is enabled */
-	conf_mount_rw();
 
 	switch ($wlcfg['mode']) {
 		case 'bss':
@@ -2871,7 +2823,7 @@ EOD;
 	/* set ack timers according to users preference (if he/she has any) */
 	if ($distance) {
 		fwrite($fd_set, "# Enable ATH distance settings\n");
-		fwrite($fd_set, "/sbin/athctrl.sh -i {$baseif} -d {$distance}\n");
+		fwrite($fd_set, "/usr/local/sbin/athctrl.sh -i {$baseif} -d {$distance}\n");
 	}
 
 	if (isset($wlcfg['wpa']['enable'])) {
@@ -2882,7 +2834,8 @@ EOD;
 			/* add line to script to restore old mac to make hostapd happy */
 			if (file_exists("{$g['tmp_path']}/{$if}_oldmac")) {
 				$if_oldmac = file_get_contents("{$g['tmp_path']}/{$if}_oldmac");
-				if (is_macaddr($if_oldmac)) {
+				$if_curmac = get_interface_mac($if);
+				if ($if_curmac != $if_oldmac && is_macaddr($if_oldmac)) {
 					fwrite($fd_set, "{$ifconfig} " . escapeshellarg($if) .
 						" link " . escapeshellarg($if_oldmac) . "\n");
 				}
@@ -2891,22 +2844,17 @@ EOD;
 			fwrite($fd_set, "{$hostapd} -B -P {$g['varrun_path']}/hostapd_{$if}.pid {$g['varetc_path']}/hostapd_{$if}.conf\n");
 
 			/* add line to script to restore spoofed mac after running hostapd */
-			if (file_exists("{$g['tmp_path']}/{$if}_oldmac")) {
-				if ($wl['spoofmac']) {
-					$if_curmac = $wl['spoofmac'];
-				} else {
-					$if_curmac = get_interface_mac($if);
-				}
-				if (is_macaddr($if_curmac)) {
+			if ($wl['spoofmac']) {
+				$if_curmac = get_interface_mac($if);
+				if ($wl['spoofmac'] != $if_curmac && is_macaddr($wl['spoofmac'])) {
 					fwrite($fd_set, "{$ifconfig} " . escapeshellarg($if) .
-						" link " . escapeshellarg($if_curmac) . "\n");
+						" link " . escapeshellarg($wl['spoofmac']) . "\n");
 				}
 			}
 		}
 	}
 
 	fclose($fd_set);
-	conf_mount_ro();
 
 	/* Making sure regulatory settings have actually changed
 	 * before applying, because changing them requires bringing
@@ -2994,18 +2942,22 @@ EOD;
 		}
 	}
 
-	/* 20150318 cmb - Note: the below no longer appears to be true on FreeBSD 10.x, so don't set
-	 * mode twice (for now at least). This can be removed entirely in the future if no problems are found
-
-	 * The mode must be specified in a separate command before ifconfig
-	 * will allow the mode and channel at the same time in the next. */
-	//mwexec("/sbin/ifconfig " . escapeshellarg($if) . " mode " . escapeshellarg($standard));
-	//fwrite($wlan_setup_log, "/sbin/ifconfig " . escapeshellarg($if) . " mode " . escapeshellarg($standard) . "\n");
+	/* The mode must be specified in a separate command before ifconfig
+	 * will allow the mode and channel at the same time in the next.
+	 * Only do this for AP mode as this breaks client mode (PR 198680).
+	 */
+	if ($wlcfg['mode'] == "hostap") {
+		mwexec("/sbin/ifconfig " . escapeshellarg($if) . " mode " . escapeshellarg($standard));
+		fwrite($wlan_setup_log, "/sbin/ifconfig " . escapeshellarg($if) . " mode " . escapeshellarg($standard) . "\n");
+	}
 
 	/* configure wireless */
 	$wlcmd_args = implode(" ", $wlcmd);
 	mwexec("/sbin/ifconfig " . escapeshellarg($if) . " " . $wlcmd_args, false);
 	fwrite($wlan_setup_log, "/sbin/ifconfig " . escapeshellarg($if) . " " . "$wlcmd_args \n");
+	/* Bring the interface up only after setting up all the other parameters. */
+	mwexec("/sbin/ifconfig " . escapeshellarg($if) . " up", false);
+	fwrite($wlan_setup_log, "/sbin/ifconfig " . escapeshellarg($if) . " up\n");
 	fclose($wlan_setup_log);
 
 	unset($wlcmd_args, $wlcmd);
@@ -3067,6 +3019,17 @@ function find_dhcp6c_process($interface) {
 	}
 
 	return intval($pid);
+}
+
+function kill_dhcp6client_process($interface) {
+	if (empty($interface) || !does_interface_exist($interface)) {
+		return;
+	}
+
+	if (($pid = find_dhcp6c_process($interface)) != 0) {
+		mwexec("kill -9 {$pid}");
+		sleep(1);
+	}
 }
 
 function interface_virtual_create($interface) {
@@ -3511,8 +3474,8 @@ function interface_track6_configure($interface = "lan", $wancfg, $linkupevent = 
 
 	/* always configure a link-local of fe80::1:1 on the track6 interfaces */
 	$realif = get_real_interface($interface);
-	$linklocal = find_interface_ipv6_ll($realif);
-	if (!empty($linklocal)) {
+	$linklocal = find_interface_ipv6_ll($realif, true);
+	if (!empty($linklocal) && $linklocal != "fe80::1:1%{$realif}") {
 		mwexec("/sbin/ifconfig {$realif} inet6 {$linklocal} delete");
 	}
 	/* XXX: This might break for good on a carp installation using link-local as network ips */
@@ -3560,14 +3523,15 @@ function interface_track6_configure($interface = "lan", $wancfg, $linkupevent = 
 			require_once("services.inc");
 		}
 
+		/* restart dns servers (defering dhcpd reload) */
 		if (isset($config['unbound']['enable'])) {
-			services_unbound_configure();
+			services_unbound_configure(false);
 		}
-
 		if (isset($config['dnsmasq']['enable'])) {
-			services_dnsmasq_configure();
+			services_dnsmasq_configure(false);
 		}
 
+		/* reconfigure dhcpdv6 (leaving dhcpdv4 alone) */
 		services_dhcpd_configure("inet6");
 	}
 
@@ -3728,12 +3692,12 @@ function interface_6rd_configure($interface = "wan", $wancfg) {
 	$rd6prefix = explode("/", $wancfg['prefix-6rd']);
 	$rd6prefixlen = $rd6prefix[1];
 	$brgw = explode('.', $wancfg['gateway-6rd']);
-	$rd6brgw = substr(Net_IPv6::_ip2Bin($rd6prefix[0]), 0, $rd6prefixlen);
+	$rd6brgw = substr(ip6_to_bin($rd6prefix[0]), 0, $rd6prefixlen);
 	$rd6brgw .= str_pad(decbin($brgw[0]), 8, '0', STR_PAD_LEFT) . str_pad(decbin($brgw[1]), 8, '0', STR_PAD_LEFT) . str_pad(decbin($brgw[2]), 8, '0', STR_PAD_LEFT) . str_pad(decbin($brgw[3]), 8, '0', STR_PAD_LEFT);
 	if (strlen($rd6brgw) < 128) {
 		$rd6brgw = str_pad($rd6brgw, 128, '0', STR_PAD_RIGHT);
 	}
-	$rd6brgw = Net_IPv6::compress(Net_IPv6::_bin2Ip($rd6brgw));
+	$rd6brgw = bin_to_compressed_ip6($rd6brgw);
 	unset($brgw);
 	$rd6prefix = Net_IPv6::uncompress($rd6prefix[0]);
 
@@ -3777,7 +3741,7 @@ function interface_6rd_configure($interface = "wan", $wancfg) {
 
 	$ip4gateway = get_interface_gateway($interface);
 	if (is_ipaddrv4($ip4gateway)) {
-		mwexec("/sbin/route change -host " . escapeshellarg($wancfg['gateway-6rd']) . " {$ip4gateway}");
+		route_add_or_change("-host {$wancfg['gateway-6rd']} {$ip4gateway}");
 	}
 
 	/* configure dependent interfaces */
@@ -3884,7 +3848,7 @@ function interface_6to4_configure($interface = "wan", $wancfg) {
 
 	$ip4gateway = get_interface_gateway($interface);
 	if (is_ipaddrv4($ip4gateway)) {
-		mwexec("/sbin/route change -host 192.88.99.1 {$ip4gateway}");
+		route_add_or_change("-host 192.88.99.1 {$ip4gateway}");
 	}
 
 	if (!platform_booting()) {
@@ -3997,14 +3961,25 @@ function interface_dhcpv6_configure($interface = "wan", $wancfg) {
 	$rtsoldscript .= "# This shell script launches dhcp6c and configured gateways for this interface.\n";
 	$rtsoldscript .= "echo $2 > {$g['tmp_path']}/{$wanif}_routerv6\n";
 	$rtsoldscript .= "echo $2 > {$g['tmp_path']}/{$wanif}_defaultgwv6\n";
-	$rtsoldscript .= "/usr/bin/logger -t rtsold \"Recieved RA specifying route \$2 for interface {$interface}({$wanif})\"\n";
-	$rtsoldscript .= "if [ -f {$g['varrun_path']}/dhcp6c_{$wanif}.pid ]; then\n";
-	$rtsoldscript .= "\t/bin/pkill -F {$g['varrun_path']}/dhcp6c_{$wanif}.pid\n";
-	$rtsoldscript .= "\t/bin/sleep 1\n";
-	$rtsoldscript .= "fi\n";
+	$rtsoldscript .= "/usr/bin/logger -t rtsold \"Received RA specifying route \$2 for interface {$interface}({$wanif})\"\n";
+
+	/* non ipoe Process */
+	if (!isset($wancfg['dhcp6withoutra'])) {
+		$rtsoldscript .= "if [ -f {$g['varrun_path']}/dhcp6c_{$wanif}.pid ]; then\n";
+		$rtsoldscript .= "\t/bin/pkill -F {$g['varrun_path']}/dhcp6c_{$wanif}.pid\n";
+		$rtsoldscript .= "\t/bin/sleep 1\n";
+		$rtsoldscript .= "fi\n";
+	} else {
+		$rtsoldscript .= "{$g['varetc_path']}/dhcp6c_{$interface}_script.sh\n";
+		$rtsoldscript .= "/bin/sleep 1\n";
+	}
 	$debugOption = isset($wancfg['dhcp6debug']) ? "-D" : "-d";
-	$rtsoldscript .= "/usr/local/sbin/dhcp6c {$debugOption} -c {$g['varetc_path']}/dhcp6c_{$interface}.conf -p {$g['varrun_path']}/dhcp6c_{$wanif}.pid {$wanif}\n";
-	$rtsoldscript .= "/usr/bin/logger -t rtsold \"Starting dhcp6 client for interface {$interface}({$wanif})\"\n";
+
+	/* add the start of dhcp6c to the rtsold script if we are going to wait for ra */
+	if (!isset($wancfg['dhcp6withoutra'])) {
+		$rtsoldscript .= "/usr/local/sbin/dhcp6c {$debugOption} -c {$g['varetc_path']}/dhcp6c_{$interface}.conf -p {$g['varrun_path']}/dhcp6c_{$wanif}.pid {$wanif}\n";
+		$rtsoldscript .= "/usr/bin/logger -t rtsold \"Starting dhcp6 client for interface {$interface}({$wanif})\"\n";
+	}
 	/* Add wide-dhcp6c shell script here. Because we can not pass a argument to it. */
 	if (!@file_put_contents("{$g['varetc_path']}/rtsold_{$wanif}_script.sh", $rtsoldscript)) {
 		printf("Error: cannot open rtsold_{$wanif}_script.sh in interface_dhcpv6_configure() for writing.\n");
@@ -4023,6 +3998,14 @@ function interface_dhcpv6_configure($interface = "wan", $wancfg) {
 		killbypid("{$g['varrun_path']}/rtsold_{$wanif}.pid");
 		sleep(2);
 	}
+
+	/* start dhcp6c here if we don't want to wait for ra */
+	if (isset($wancfg['dhcp6withoutra'])) {
+		kill_dhcp6client_process($wanif);
+
+		mwexec("/usr/local/sbin/dhcp6c {$debugOption} -c {$g['varetc_path']}/dhcp6c_wan.conf -p {$g['varrun_path']}/dhcp6c_{$wanif}.pid {$wanif}");
+		mwexec("/usr/bin/logger -t info 'Starting dhcp6 client for interface wan({$wanif} in DHCP6 without RA mode)'");
+	}
 	mwexec("/usr/sbin/rtsold -1 -p {$g['varrun_path']}/rtsold_{$wanif}.pid -O {$g['varetc_path']}/rtsold_{$wanif}_script.sh {$wanif}");
 
 	/* NOTE: will be called from rtsold invoked script
@@ -4037,7 +4020,7 @@ function DHCP6_Config_File_Advanced($interface, $wancfg, $wanif) {
 
 	$send_options = "";
 	if ($wancfg['adv_dhcp6_interface_statement_send_options'] != '') {
-		$options = explode(',', $wancfg['adv_dhcp6_interface_statement_send_options']);
+		$options = DHCP_Config_Option_Split($wancfg['adv_dhcp6_interface_statement_send_options']);
 		foreach ($options as $option) {
 			$send_options .= "\tsend " . trim($option) . ";\n";
 		}
@@ -4045,7 +4028,7 @@ function DHCP6_Config_File_Advanced($interface, $wancfg, $wanif) {
 
 	$request_options = "";
 	if ($wancfg['adv_dhcp6_interface_statement_request_options'] != '') {
-		$options = explode(',', $wancfg['adv_dhcp6_interface_statement_request_options']);
+		$options = DHCP_Config_Option_Split($wancfg['adv_dhcp6_interface_statement_request_options']);
 		foreach ($options as $option) {
 			$request_options .= "\trequest " . trim($option) . ";\n";
 		}
@@ -4240,7 +4223,7 @@ retry 15;
 select-timeout 0;
 initial-interval 1;
 	{$dhclientconf_hostname}
-	script "/sbin/dhclient-script";
+	script "/usr/local/sbin/pfSense-dhclient-script";
 EOD;
 
 	if (is_ipaddrv4($wancfg['dhcprejectfrom'])) {
@@ -4315,7 +4298,7 @@ function DHCP_Config_File_Advanced($interface, $wancfg, $wanif) {
 
 	$send_options = "";
 	if ($wancfg['adv_dhcp_send_options'] != '') {
-		$options = explode(',', $wancfg['adv_dhcp_send_options']);
+		$options = DHCP_Config_Option_Split($wancfg['adv_dhcp_send_options']);
 		foreach ($options as $option) {
 			$send_options .= "\tsend " . trim($option) . ";\n";
 		}
@@ -4333,7 +4316,7 @@ function DHCP_Config_File_Advanced($interface, $wancfg, $wanif) {
 
 	$option_modifiers = "";
 	if ($wancfg['adv_dhcp_option_modifiers'] != '') {
-		$modifiers = explode(',', $wancfg['adv_dhcp_option_modifiers']);
+		$modifiers = DHCP_Config_Option_Split($wancfg['adv_dhcp_option_modifiers']);
 		foreach ($modifiers as $modifier) {
 			$option_modifiers .= "\t" . trim($modifier) . ";\n";
 		}
@@ -4356,6 +4339,9 @@ function DHCP_Config_File_Advanced($interface, $wancfg, $wanif) {
 	$dhclientconf .= "{$required_options}";
 	$dhclientconf .= "{$option_modifiers}";
 	$dhclientconf .= "\n";
+	if (is_ipaddrv4($wancfg['dhcprejectfrom'])) {
+		$dhclientconf .= "reject {$wancfg['dhcprejectfrom']};\n";
+	}
 	$dhclientconf .= "\tscript \"/sbin/dhclient-script\";\n";
 	$dhclientconf .= "}\n";
 
@@ -4364,6 +4350,10 @@ function DHCP_Config_File_Advanced($interface, $wancfg, $wanif) {
 	return $dhclientconf;
 }
 
+function DHCP_Config_Option_Split($option_string) {
+	preg_match_all('/[^",]*(?:"[^"]*"[^",]*)+(?:"[^",]*)?|[^,]+/m', $option_string, $matches, PREG_PATTERN_ORDER);
+	return $matches ? $matches[0] : [];
+}
 
 function DHCP_Config_File_Override($wancfg, $wanif) {
 
@@ -4977,6 +4967,7 @@ function interface_find_child_cfgmtu($realiface) {
 
 	$interface = convert_real_interface_to_friendly_interface_name($realiface);
 	$vlans = link_interface_to_vlans($realiface);
+	$qinqs = link_interface_to_qinqs($realiface);
 	$bridge = link_interface_to_bridge($realiface);
 	if (!empty($interface)) {
 		$gifs = link_interface_to_gif($interface);
@@ -4990,6 +4981,19 @@ function interface_find_child_cfgmtu($realiface) {
 	if (is_array($vlans)) {
 		foreach ($vlans as $vlan) {
 			$ifass = convert_real_interface_to_friendly_interface_name($vlan['vlanif']);
+			if (empty($ifass)) {
+				continue;
+			}
+			if (!empty($config['interfaces'][$ifass]['mtu'])) {
+				if (intval($config['interfaces'][$ifass]['mtu']) > $mtu) {
+					$mtu = intval($config['interfaces'][$ifass]['mtu']);
+				}
+			}
+		}
+	}
+	if (is_array($qinqs)) {
+		foreach ($qinqs as $qinq) {
+			$ifass = convert_real_interface_to_friendly_interface_name($qinq['vlanif']);
 			if (empty($ifass)) {
 				continue;
 			}
@@ -5061,26 +5065,56 @@ function link_interface_to_vlans($int, $action = "") {
 	}
 }
 
+function link_interface_to_qinqs($int, $action = "") {
+	global $config;
+
+	if (empty($int)) {
+		return;
+	}
+
+	if (is_array($config['qinqs']['qinqentry'])) {
+		$ifaces = array();
+		foreach ($config['qinqs']['qinqentry'] as $qinq) {
+			if ($int == $qinq['if']) {
+				if ($action == "update") {
+					interfaces_bring_up($int);
+				} else {
+					$ifaces[$qinq['tag']] = $qinq;
+				}
+			}
+		}
+		if (!empty($ifaces)) {
+			return $ifaces;
+		}
+	}
+}
+
 function link_interface_to_vips($int, $action = "", $vhid = '') {
 	global $config;
 
+	$updatevips = false;
 	if (is_array($config['virtualip']['vip'])) {
 		$result = array();
 		foreach ($config['virtualip']['vip'] as $vip) {
-			if (substr($vip['interface'], 0, 4) == "_vip")
+			if (substr($vip['interface'], 0, 4) == "_vip") {
 				$iface = get_configured_vip_interface($vip['interface']);
-			else
+			} else {
 				$iface = $vip['interface'];
-			if ($int != $iface)
+			}
+			if ($int != $iface) {
 				continue;
+			}
 			if ($action == "update") {
-				interfaces_vips_configure($int);
+				$updatevips = true;
 			} else {
 				if (empty($vhid) || ($vhid == $vip['vhid']) ||
 				    substr($vip['interface'], 0, 4) == "_vip") {
 					$result[] = $vip;
 				}
 			}
+		}
+		if ($updatevips === true) {
+			interfaces_vips_configure($int);
 		}
 		return $result;
 	}
@@ -5378,7 +5412,7 @@ function get_interface_ip($interface = "wan") {
 	}
 }
 
-function get_interface_ipv6($interface = "wan", $flush = false) {
+function get_interface_ipv6($interface = "wan", $flush = false, $linklocal_fallback = false) {
 	global $config;
 
 	if (substr($interface, 0, 4) == '_vip') {
@@ -5427,7 +5461,7 @@ function get_interface_ipv6($interface = "wan", $flush = false) {
 		 * NOTE: On the case when only the prefix is requested,
 		 * the communication on WAN will be done over link-local.
 		 */
-		if (is_array($config['interfaces'][$interface]) && isset($config['interfaces'][$interface]['dhcp6prefixonly'])) {
+		if ($linklocal_fallback || (is_array($config['interfaces'][$interface]) && isset($config['interfaces'][$interface]['dhcp6prefixonly']))) {
 			$curip = find_interface_ipv6_ll($realif, $flush);
 			if ($curip && is_ipaddrv6($curip) && ($curip != "::")) {
 				return $curip;
@@ -5608,7 +5642,7 @@ function is_altq_capable($int) {
 	 * 20150328 - removed wireless drivers - ath, awi, bwn, iwi, ipw, ral, rum, run, wi - for now. redmine #4406
 	 */
 	$capable = array("ae", "age", "alc", "ale", "an", "aue", "axe", "bce",
-			"bfe", "bge", "bridge", "cas", "dc", "de", "ed", "em", "ep", "epair", "et", "fxp", "gem",
+			"bfe", "bge", "bridge", "cas", "cxl", "dc", "de", "ed", "em", "ep", "epair", "et", "fxp", "gem",
 			"hme", "hn", "igb", "ix", "jme", "le", "lem", "msk", "mxge", "my", "nfe",
 			"nge", "npe", "nve", "re", "rl", "sf", "sge", "sis", "sk",
 			"ste", "stge", "ti", "txp", "udav", "ural", "vge", "vmx", "vr", "vte", "xl",

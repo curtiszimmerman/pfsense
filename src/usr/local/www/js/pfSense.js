@@ -1,4 +1,24 @@
 /*
+ * pfSense.js
+ *
+ * part of pfSense (https://www.pfsense.org)
+ * Copyright (c) 2004-2016 Rubicon Communications, LLC (Netgate)
+ * All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/*
  * This file should only contain functions that will be used on more than 2 pages
  */
 
@@ -123,10 +143,10 @@ $(function() {
 	// Use element title in the confirmation message, or if not available
 	// the element value
 	$('.btn-danger, .fa-trash').on('click', function(e){
-		if(!($(this).hasClass('no-confirm'))) {
+		if (!($(this).hasClass('no-confirm'))) {
 			var msg = $.trim(this.textContent);
 
-			if(!msg)
+			if (!msg)
 				var msg = $.trim(this.value).toLowerCase();
 
 			var q = 'Are you sure you wish to '+ msg +'?';
@@ -181,7 +201,7 @@ $(function() {
 
 	  originalLeave.call(this, obj);
 
-	  if(self.$tip && self.$tip.length) {
+	  if (self.$tip && self.$tip.length) {
 	    container = self.$tip;
 	    timeout = self.timeout;
 	    container.one('mouseenter', function(){
@@ -207,9 +227,18 @@ $(function() {
 		$( $(this).data('target') ).prop('disabled', true);
 	});
 
+	$('.table-rowdblclickedit>tbody>tr').dblclick(function () {
+		$(this).find(".fa-pencil")[0].click();
+	});
+	
 	// Focus first input
 	$(':input:enabled:visible:first').focus();
 
+	$(".resizable").each(function() {
+		$(this).css('height', 80).resizable({minHeight: 80, minWidth: 200}).parent().css('padding-bottom', 0);
+		$(this).css('height', 78);
+	});
+		
 	// Run in-page defined events
 	while (func = window.events.shift())
 		func();

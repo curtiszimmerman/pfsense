@@ -1,61 +1,27 @@
 <?php
 /*
-	interfaces_ppps_edit.php
-*/
-/* ====================================================================
- *	Copyright (c)  2004-2015  Electric Sheep Fencing, LLC. All rights reserved.
- *	Copyright (c)  2003-2004 Manuel Kasper <mk@neon1.net>
- *	Copyright (c)  2010 Gabriel B. <gnoahb@gmail.com>
+ * interfaces_ppps_edit.php
  *
- *	Some or all of this file is based on the m0n0wall project which is
- *	Copyright (c)  2004 Manuel Kasper (BSD 2 clause)
+ * part of pfSense (https://www.pfsense.org)
+ * Copyright (c) 2004-2016 Rubicon Communications, LLC (Netgate)
+ * Copyright (c) 2010 Gabriel B. <gnoahb@gmail.com>
+ * All rights reserved.
  *
- *	Redistribution and use in source and binary forms, with or without modification,
- *	are permitted provided that the following conditions are met:
+ * originally based on m0n0wall (http://m0n0.ch/wall)
+ * Copyright (c) 2003-2004 Manuel Kasper <mk@neon1.net>.
+ * All rights reserved.
  *
- *	1. Redistributions of source code must retain the above copyright notice,
- *		this list of conditions and the following disclaimer.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *	2. Redistributions in binary form must reproduce the above copyright
- *		notice, this list of conditions and the following disclaimer in
- *		the documentation and/or other materials provided with the
- *		distribution.
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *	3. All advertising materials mentioning features or use of this software
- *		must display the following acknowledgment:
- *		"This product includes software developed by the pfSense Project
- *		 for use in the pfSense software distribution. (http://www.pfsense.org/).
- *
- *	4. The names "pfSense" and "pfSense Project" must not be used to
- *		 endorse or promote products derived from this software without
- *		 prior written permission. For written permission, please contact
- *		 coreteam@pfsense.org.
- *
- *	5. Products derived from this software may not be called "pfSense"
- *		nor may "pfSense" appear in their names without prior written
- *		permission of the Electric Sheep Fencing, LLC.
- *
- *	6. Redistributions of any form whatsoever must retain the following
- *		acknowledgment:
- *
- *	"This product includes software developed by the pfSense Project
- *	for use in the pfSense software distribution (http://www.pfsense.org/).
- *
- *	THIS SOFTWARE IS PROVIDED BY THE pfSense PROJECT ``AS IS'' AND ANY
- *	EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- *	IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- *	PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE pfSense PROJECT OR
- *	ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *	SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- *	NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- *	LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- *	HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- *	STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- *	ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
- *	OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *	====================================================================
- *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 ##|+PRIV
@@ -65,8 +31,8 @@
 ##|*MATCH=interfaces_ppps_edit.php*
 ##|-PRIV
 
-require("guiconfig.inc");
-require("functions.inc");
+require_once("guiconfig.inc");
+require_once("functions.inc");
 
 define("CRON_MONTHLY_PATTERN", "0 0 1 * *");
 define("CRON_WEEKLY_PATTERN", "0 0 * * 0");
@@ -97,7 +63,9 @@ if (isset($_POST['id']) && is_numericint($_POST['id'])) {
 
 if (isset($id) && $a_ppps[$id]) {
 	$pconfig['ptpid'] = $a_ppps[$id]['ptpid'];
-	$pconfig['type'] = $a_ppps[$id]['type'];
+	if (!isset($_REQUEST['type'])) {
+		$pconfig['type'] = $a_ppps[$id]['type'];
+	}
 	$pconfig['interfaces'] = explode(",", $a_ppps[$id]['ports']);
 	$pconfig['username'] = $a_ppps[$id]['username'];
 	$pconfig['password'] = base64_decode($a_ppps[$id]['password']);
@@ -147,6 +115,9 @@ if (isset($id) && $a_ppps[$id]) {
 			$pconfig['connect-timeout'] = $a_ppps[$id]['connect-timeout'];
 			$pconfig['localip'] = explode(",", $a_ppps[$id]['localip']);
 			$pconfig['gateway'] = explode(",", $a_ppps[$id]['gateway']);
+			$pconfig['country'] = $a_ppps[$id]['country'];
+			$pconfig['provider'] = $a_ppps[$id]['provider'];
+			$pconfig['providerplan'] = $a_ppps[$id]['providerplan'];
 			break;
 		case "l2tp":
 		case "pptp":
@@ -209,6 +180,7 @@ if (isset($id) && $a_ppps[$id]) {
 }
 
 if (isset($_POST) && is_array($_POST) && count($_POST) > 0) {
+
 	unset($input_errors);
 	$pconfig = $_POST;
 
@@ -341,6 +313,7 @@ if (isset($_POST) && is_array($_POST) && count($_POST) > 0) {
 				}
 			}
 		}
+
 	}
 
 	if (!$input_errors) {
@@ -354,6 +327,7 @@ if (isset($_POST) && is_array($_POST) && count($_POST) > 0) {
 		$ppp['if'] = $ppp['type'].$ppp['ptpid'];
 		$ppp['ports'] = implode(',', $_POST['interfaces']);
 		$ppp['username'] = $_POST['username'];
+
 		if ($_POST['passwordfld'] != DMYPWD) {
 			$ppp['password'] = base64_encode($_POST['passwordfld']);
 		} else {
@@ -372,8 +346,21 @@ if (isset($_POST) && is_array($_POST) && count($_POST) > 0) {
 			unset($ppp['descr']);
 		}
 
+		// Loop through fields associated with an individual link/port and make an array of the data
+		$port_fields = array("localip", "gateway", "subnet", "bandwidth", "mtu", "mru", "mrru");
+		foreach ($_POST['interfaces'] as $iface) {
+			foreach ($port_fields as $field_label) {
+				if (isset($_POST[$field_label][$iface])) {
+					$port_data[$field_label][] = $_POST[$field_label][$iface];
+				}
+			}
+		}
+
 		switch ($_POST['type']) {
 			case "ppp":
+				$ppp['country'] = $_POST['country'];
+				$ppp['provider'] = $_POST['provider'];
+				$ppp['providerplan'] = $_POST['providerplan'];
 				if (!empty($_POST['initstr'])) {
 					$ppp['initstr'] = base64_encode($_POST['initstr']);
 				} else {
@@ -401,6 +388,7 @@ if (isset($_POST) && is_array($_POST) && count($_POST) > 0) {
 				} else {
 					unset($ppp['connect-timeout']);
 				}
+
 				break;
 			case "pppoe":
 				if (!empty($_POST['provider'])) {
@@ -650,17 +638,17 @@ if ($pconfig['type'] == 'pptp' || $pconfig['type'] == 'l2tp') {
 		$group = new Form_Group('IP/Gateway (' . $ifnm . ')');
 
 		$group->add(new Form_IpAddress(
-			'localiplabel' . $j,
+			'localip[' . $ifnm . ']',
 			null,
 			$pconfig['localip'][$j]
-		))->addMask('subnet' . $j, $pconfig['subnet'][$j], 31)->setHelp('IP Address');
+		))->addMask('subnet[' . $ifnm . ']', $pconfig['subnet'][$j], 31)->setHelp('Local IP Address');
 
 		$group->add(new Form_Input(
-			'gateway' . $j,
+			'gateway[' . $ifnm . ']',
 			null,
 			'text',
 			$pconfig['gateway'][$j]
-		))->setHelp('IP or Hostname');
+		))->setHelp('Gateway IP or Hostname');
 
 		$j++;
 
@@ -728,27 +716,29 @@ $section->addInput(new Form_Checkbox(
 	isset($pconfig['uptime'])
 ))->setHelp(sprintf('Causes cumulative uptime to be recorded and displayed on the %sStatus->Interfaces%s page.', '<a href="status_interfaces.php">', '</a>'));
 
-$group = new Form_Group('Service name');
-$group->addClass('pppoe');
+if ($pconfig['type'] == 'pppoe') {
+	$group = new Form_Group('Service name');
+	$group->addClass('pppoe');
 
-$group->add(new Form_Input(
-	'provider',
-	null,
-	'text',
-	$pconfig['provider']
-));
+	$group->add(new Form_Input(
+		'provider',
+		null,
+		'text',
+		$pconfig['provider']
+	));
 
-$group->add(new Form_Checkbox(
-	'null_service',
-	null,
-	'Configure NULL service name',
-	$pconfig['null_service']
-));
+	$group->add(new Form_Checkbox(
+		'null_service',
+		null,
+		'Configure NULL service name',
+		$pconfig['null_service']
+	));
 
-$group->setHelp('This field can usually be left empty. Service name will not be configured if this field is empty. ' .
-				'Check the "Configure NULL" box to configure a blank Service name.');
+	$group->setHelp('This field can usually be left empty. Service name will not be configured if this field is empty. ' .
+					'Check the "Configure NULL" box to configure a blank Service name.');
 
-$section->add($group);
+	$section->add($group);
+}
 
 $section->addInput(new Form_Select(
 	'pppoe-reset-type',
@@ -913,28 +903,28 @@ foreach ($linklist['list'] as $ifnm => $nm) {
 	$group = new Form_Group('Link Parameters (' . $ifnm . ')');
 
 	$group->add(new Form_Input(
-		'bandwidth' . $ifnm,
+		'bandwidth[' . $ifnm . ']',
 		null,
 		'text',
 		$pconfig['bandwidth'][$ifnm]
 	))->setHelp('Bandwidth');
 
 	$group->add(new Form_Input(
-		'mtu' . $ifnm,
+		'mtu[' . $ifnm . ']',
 		null,
 		'text',
 		$pconfig['mtu'][$ifnm]
 	))->setHelp('MTU');
 
 	$group->add(new Form_Input(
-		'mru' . $ifnm,
+		'mru[' . $ifnm . ']',
 		null,
 		'text',
 		$pconfig['mru'][$ifnm]
 	))->setHelp('MRU');
 
 	$group->add(new Form_Input(
-		'mrru' . $ifnm,
+		'mrru[' . $ifnm . ']',
 		null,
 		'text',
 		$pconfig['mrru'][$ifnm]
@@ -1075,6 +1065,7 @@ events.push(function() {
 		hideClass('linkparam', true);
 		hideInput('linkparamhelp', true);
 
+		<?php if ($pconfig['type'] != 'ppp') : ?>
 		var selected = $(".interfaces").val();
 		var length = $(".interfaces :selected").length;
 		for (var i=0; i<length; i++) {
@@ -1085,6 +1076,7 @@ events.push(function() {
 				hideInput('linkparamhelp', false);
 			}
 		}
+		<?php endif; ?>
 	}
 
 	function hideProviders(hide) {
@@ -1110,6 +1102,9 @@ events.push(function() {
 						$('#provider').append(new Option(value, value));
 					}
 				}
+				$("#provider").val("<?=$pconfig['provider'];?>");
+				// select option simulates the provider to populate the Plan
+				$("#provider").trigger("change");
 			}
 		});
 	}
@@ -1132,6 +1127,7 @@ events.push(function() {
 											  providerplan[1]));
 					}
 				}
+				$("#providerplan").val("<?=$pconfig['providerplan'];?>");
 			}
 		});
 	}
@@ -1199,6 +1195,13 @@ events.push(function() {
 
 	if ($('providerplan').size() == 0) {
 		hideInput('providerplan', true);
+	}
+
+	$('#pppoe_resetdate').datepicker();
+
+	if ($("#type").val() == "ppp") {
+		providers_list();
+		hideInput('provider', false);
 	}
 });
 //]]>

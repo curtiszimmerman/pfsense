@@ -1,57 +1,24 @@
 <?php
 /*
-	traffic_shaper_wizard_multi_all.inc
-*/
-/* ====================================================================
- *	Copyright (c)  2004-2015  Electric Sheep Fencing, LLC. All rights reserved.
+ * traffic_shaper_wizard_multi_all.inc
  *
- *	Redistribution and use in source and binary forms, with or without modification,
- *	are permitted provided that the following conditions are met:
+ * part of pfSense (https://www.pfsense.org)
+ * Copyright (c) 2004-2016 Rubicon Communications, LLC (Netgate)
+ * All rights reserved.
  *
- *	1. Redistributions of source code must retain the above copyright notice,
- *		this list of conditions and the following disclaimer.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *	2. Redistributions in binary form must reproduce the above copyright
- *		notice, this list of conditions and the following disclaimer in
- *		the documentation and/or other materials provided with the
- *		distribution.
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *	3. All advertising materials mentioning features or use of this software
- *		must display the following acknowledgment:
- *		"This product includes software developed by the pfSense Project
- *		 for use in the pfSense software distribution. (http://www.pfsense.org/).
- *
- *	4. The names "pfSense" and "pfSense Project" must not be used to
- *		 endorse or promote products derived from this software without
- *		 prior written permission. For written permission, please contact
- *		 coreteam@pfsense.org.
- *
- *	5. Products derived from this software may not be called "pfSense"
- *		nor may "pfSense" appear in their names without prior written
- *		permission of the Electric Sheep Fencing, LLC.
- *
- *	6. Redistributions of any form whatsoever must retain the following
- *		acknowledgment:
- *
- *	"This product includes software developed by the pfSense Project
- *	for use in the pfSense software distribution (http://www.pfsense.org/).
- *
- *	THIS SOFTWARE IS PROVIDED BY THE pfSense PROJECT ``AS IS'' AND ANY
- *	EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- *	IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- *	PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE pfSense PROJECT OR
- *	ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *	SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- *	NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- *	LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- *	HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- *	STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- *	ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
- *	OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *	====================================================================
- *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
+
 
 function step1_stepbeforeformdisplay() {
 	global $stepid, $savemsg, $pkg;
@@ -188,16 +155,16 @@ function step2_stepbeforeformdisplay() {
 		$field['typehint'] = "Queueing discipline to apply on this local interface.";
 		$field['options']['option'] = array();
 		$opts = array();
+		$opts['name'] = "PRIQ";
+		$opts['value'] = "PRIQ";
+		$field['options']['option'][] = $opts;
+		$opts = array();
 		$opts['name'] = "HFSC";
 		$opts['value'] = "HFSC";
 		$field['options']['option'][] = $opts;
 		$opts = array();
 		$opts['name'] = "CBQ";
 		$opts['value'] = "CBQ";
-		$field['options']['option'][] = $opts;
-		$opts = array();
-		$opts['name'] = "PRIQ";
-		$opts['value'] = "PRIQ";
 		$field['options']['option'][] = $opts;
 		$field['bindstofield'] = "ezshaper->step2->local{$i}downloadscheduler";
 		$fields[] = $field;
@@ -242,16 +209,16 @@ function step2_stepbeforeformdisplay() {
 		$field['typehint'] = "Queueing discipline to apply on the upload of this connection.";
 		$field['options']['option'] = array();
 		$opts = array();
+		$opts['name'] = "PRIQ";
+		$opts['value'] = "PRIQ";
+		$field['options']['option'][] = $opts;
+		$opts = array();
 		$opts['name'] = "HFSC";
 		$opts['value'] = "HFSC";
 		$field['options']['option'][] = $opts;
 		$opts = array();
 		$opts['name'] = "CBQ";
 		$opts['value'] = "CBQ";
-		$field['options']['option'][] = $opts;
-		$opts = array();
-		$opts['name'] = "PRIQ";
-		$opts['value'] = "PRIQ";
 		$field['options']['option'][] = $opts;
 		$field['bindstofield'] = "ezshaper->step2->conn{$i}uploadscheduler";
 		$fields[] = $field;
@@ -562,8 +529,8 @@ function step3_stepsubmitphpaction() {
 	if (!$_POST['enable'])
 		return;
 
-	if($_POST['upstream_sip_server']) {
-		if(!is_ipaddroralias($_POST['upstream_sip_server'])) {
+	if ($_POST['upstream_sip_server']) {
+		if (!is_ipaddroralias($_POST['upstream_sip_server'])) {
 			/* item is not an ip or alias.  error out */
 			$savemsg=gettext("Address must be a valid IP address or Firewall Alias.  Please correct this value to continue.");
 			$stepid--;
@@ -659,13 +626,13 @@ function step4_stepsubmitphpaction() {
 	global $stepid, $savemsg;
 
 	if ( $_POST['enable'] ) {
-		if(!$_POST['bandwidth']) {
+		if (!$_POST['bandwidth']) {
 			$savemsg="A value for bandwidth must be specified.";
 
 			$stepid--;
 			return;
 		}
-		if(!is_numeric($_POST['bandwidth'])) {
+		if (!is_numeric($_POST['bandwidth'])) {
 			$savemsg="The posted value is not a valid bandwidth.";
 			$stepid--;
 			return;
@@ -676,12 +643,12 @@ function step4_stepsubmitphpaction() {
 			return;
 		}
 		$bw = $_POST['bandwidth'];
-		if($bw > 15 || $bw < 2) {
+		if ($bw > 15 || $bw < 2) {
 			$savemsg="Values should be between 2% and 15%!";
 			$stepid--;
 			return;
 		}
-		if($_POST['address'] <> "" && !is_ipaddroralias($_POST['address'])) {
+		if ($_POST['address'] <> "" && !is_ipaddroralias($_POST['address'])) {
 			/* item is not an ip or alias.  error out */
 			$savemsg=gettext("Address must be a valid IP address or Firewall Alias.  Please correct this value to continue.");
 			$stepid--;
@@ -693,7 +660,7 @@ function step5_stepsubmitphpaction() {
 	global $stepid, $savemsg;
 	if ( $_POST['enable'] ) {
 		if ($_POST['p2pcatchall']) {
-			if(!is_numeric($_POST['bandwidth'])) {
+			if (!is_numeric($_POST['bandwidth'])) {
 				$savemsg="Posted value is not a valid bandwidth.";
 				$stepid--;
 			}
@@ -703,7 +670,7 @@ function step5_stepsubmitphpaction() {
 				return;
 			}
 			$bw = $_POST['bandwidth'];
-			if($bw > 15 || $bw < 2) {
+			if ($bw > 15 || $bw < 2) {
 				$savemsg="Values should be between 2% and 15%!";
 				$stepid--;
 				return;
@@ -744,10 +711,10 @@ function apply_all_chosen_items() {
 	 * Doing it here makes sense since we can wipe the previous config only after
 	 * the user decides to do so, finishing the wizard.
 	 */
-	if(isset($config['shaper']['queue']))
+	if (isset($config['shaper']['queue']))
 		unset($config['shaper']['queue']);
 	/* XXX: This is redundant, because this should be handled by converter at startup. */
-	if(isset($config['shaper']['rule']))
+	if (isset($config['shaper']['rule']))
 		unset($config['shaper']['rule']);
 	foreach ($config['filter']['rule'] as $key => $rule)
 		if ($rule['wizard'] == "yes")
@@ -795,7 +762,7 @@ function apply_all_chosen_items() {
 		$upfactor = wizard_get_bandwidthtype_scale($config['ezshaper']['step2']["conn{$i}uploadspeed"]);
 		$upbw = floatval($config['ezshaper']['step2']["conn{$i}upload"]) * $upfactor;
 
-		if ($config['ezshaper']['step3']['enable']) {
+		if ($sched != "PRIQ" && $config['ezshaper']['step3']['enable']) {
 			$voip = true;
 			$voipbw = $config['ezshaper']['step3']["conn{$i}upload"];
 			$voipbwunit = $config['ezshaper']['step3']["conn{$i}uploadspeed"];
@@ -805,7 +772,7 @@ function apply_all_chosen_items() {
 				$factor = wizard_get_bandwidthtype_scale($voipbwunit);
 			$remainbw += $voipbw * $factor;
 		}
-		if ($config['ezshaper']['step4']['enable']) {
+		if ($sched != "PRIQ" && $config['ezshaper']['step4']['enable']) {
 			$penalty = true;
 			$penaltybw = $config['ezshaper']['step4']['bandwidth'];
 			$penaltybwunit = $config['ezshaper']['step4']['bandwidthunit'];
@@ -818,7 +785,7 @@ function apply_all_chosen_items() {
 			$penalty = false;
 			$penaltybw = 0;
 		}
-		if ($config['ezshaper']['step5']['enable']) {
+		if ($sched != "PRIQ" && $config['ezshaper']['step5']['enable']) {
 			$p2p = true;
 			if ($config['ezshaper']['step5']['p2pcatchall']) {
 				$p2pcatchall = true;
@@ -850,17 +817,17 @@ function apply_all_chosen_items() {
 			$otherpriority = false;
 		}
 
-		$remainbw = round($remainbw / $upbw * 100, 2);
-
-		if (intval($remainbw) > 0 && intval($remainbw) > 30) {
-			$savemsg=gettext("Custom Bandwidths are greater than 30%. Please lower them for the wizard to continue.");
-			header("Location: wizard.php?xml=traffic_shaper_wizard_multi_all.xml&stepid=2&message={$savemsg}");
-			exit;
-		} else {
-			$remainbw = 100 - $remainbw;
-		}
-
 		if ($sched != "PRIQ") {
+			$remainbw = round($remainbw / $upbw * 100, 2);
+
+			if (intval($remainbw) > 0 && intval($remainbw) > 30) {
+				$savemsg=gettext("Custom Bandwidths are greater than 30%. Please lower them for the wizard to continue.");
+				header("Location: wizard.php?xml=traffic_shaper_wizard_multi_all.xml&stepid=2&message={$savemsg}");
+				exit;
+			} else {
+				$remainbw = 100 - $remainbw;
+			}
+
 			if ($sched == "CBQ")
 				$q =& new cbq_queue();
 			else if ($sched == "HFSC")
@@ -909,14 +876,14 @@ function apply_all_chosen_items() {
 		$tmpcf['enabled'] = "on";
 		If ($sched == "CBQ") {
 			$tmpcf['borrow'] = "on";
-			$tmpcf['bandwidth'] = $remainbw * 0.2;
+			$tmpcf['bandwidth'] = intval($remainbw * 0.2);
 			$tmpcf['bandwidthtype'] = "%";
 		}
 		else if ($sched == "HFSC") {
 			$lkbw = 0.20 * $remainbw;
-			$tmpcf['linkshare3'] = "{$lkbw}%";
+			$tmpcf['linkshare3'] = intval($lkbw) . "%";
 			$tmpcf['linkshare'] = "on";
-			$tmpcf['bandwidth'] = $lkbw;
+			$tmpcf['bandwidth'] = intval($lkbw);
 			$tmpcf['bandwidthtype'] = "%";
 		}
 		array_push($tmppath, "qACK");
@@ -1191,8 +1158,7 @@ function apply_all_chosen_items() {
 		$otherpriority = false;
 		$remainbw = 0;
 
-
-		if ($config['ezshaper']['step3']['enable']) {
+		if ($sched != "PRIQ" && $config['ezshaper']['step3']['enable']) {
 			$voip = true;
 			$voipbw = $config['ezshaper']['step3']["local{$i}download"];
 			$voipbwunit = $config['ezshaper']['step3']["local{$i}downloadspeed"];
@@ -1205,7 +1171,7 @@ function apply_all_chosen_items() {
 			} else
 				$remainbw += 32000; /* 32Kbit/s reserved for HFSC link sharing */
 		}
-		if ($config['ezshaper']['step4']['enable']) {
+		if ($sched != "PRIQ" && $config['ezshaper']['step4']['enable']) {
 			$penalty = true;
 			$penaltybw = $config['ezshaper']['step4']['bandwidth'];
 			$penaltybwunit = $config['ezshaper']['step4']['bandwidthunit'];
@@ -1218,7 +1184,7 @@ function apply_all_chosen_items() {
 			$penalty = false;
 			$penaltybw = 0;
 		}
-		if ($config['ezshaper']['step5']['enable']) {
+		if ($sched != "PRIQ" && $config['ezshaper']['step5']['enable']) {
 			$p2p = true;
 			if ($config['ezshaper']['step5']['p2pcatchall']) {
 				$p2pcatchall = true;
@@ -1249,17 +1215,19 @@ function apply_all_chosen_items() {
 		} else  {
 			$otherpriority = false;
 		}
-		$remainbw = round($remainbw / $lanbw * 100, 2);
+		if ($sched != "PRIQ") {
+			$remainbw = round($remainbw / $lanbw * 100, 2);
 
-		if (intval($remainbw) > 0 && intval($remainbw) > 40) {
-			$savemsg=gettext("Custom Bandwidths are greater than 40%. Please lower them for the wizard to continue.");
-			header("Location: wizard.php?xml=traffic_shaper_wizard_multi_all.xml&stepid=2&message={$savemsg}");
-			exit;
-		} else {
-			$remainbw = 100 - $remainbw;
+			if (intval($remainbw) > 0 && intval($remainbw) > 40) {
+				$savemsg=gettext("Custom Bandwidths are greater than 40%. Please lower them for the wizard to continue.");
+				header("Location: wizard.php?xml=traffic_shaper_wizard_multi_all.xml&stepid=2&message={$savemsg}");
+				exit;
+			} else {
+				$remainbw = 100 - $remainbw;
+			}
+
+			$lanqbw = $lanbw;
 		}
-
-		$lanqbw = $lanbw;
 		if (!$p2pcatchall) {
 			if ($sched == "PRIQ")
 				$q =& new priq_queue();
@@ -1289,7 +1257,8 @@ function apply_all_chosen_items() {
 			//var_dump($input_errors);
 			$qtmp->wconfig();
 
-			$lanqbw *= 0.8; /* lanqbw - 20% */
+			if ($sched != "PRIQ")
+				$lanqbw *= 0.8; /* lanqbw - 20% */
 		}
 
 		if ($sched != "PRIQ") {
@@ -1559,7 +1528,7 @@ function apply_all_chosen_items() {
 
 	/* Rules */
 	if ($penalty) {
-		if( is_ipaddr($config['ezshaper']['step4']['address']) || is_alias($config['ezshaper']['step4']['address'])) {
+		if (is_ipaddr($config['ezshaper']['step4']['address']) || is_alias($config['ezshaper']['step4']['address'])) {
 			$rule = array();
 			$rule['type'] = "match";
 			$rule['interface'] = $interfacelist;
@@ -1578,7 +1547,7 @@ function apply_all_chosen_items() {
 
 			/* If user specifies an IP, we don't bother with providers */
 			if ($voip) {
-				if( is_ipaddr($config['ezshaper']['step3']['address']) || is_alias($config['ezshaper']['step3']['address'])) {
+				if (is_ipaddr($config['ezshaper']['step3']['address']) || is_alias($config['ezshaper']['step3']['address'])) {
 					/* create VOIP rules */
 					$rule = array();
 					$rule['type'] = "match";
@@ -1608,7 +1577,7 @@ function apply_all_chosen_items() {
 					$rule['created'] = make_config_revision_entry(null, gettext("Traffic Shaper Wizard"));
 					$config['filter']['rule'][] = $rule;
 
-				} elseif( $config['ezshaper']['step3']['provider'] == "Generic" ) {
+				} elseif ($config['ezshaper']['step3']['provider'] == "Generic") {
 					/* create VOIP rules */
 					$rule = array();
 					$rule['type'] = "match";
@@ -1639,7 +1608,7 @@ function apply_all_chosen_items() {
 						$rule['wizard'] = "yes";
 						$rule['enabled'] = "on";
 						$rule['destination']['port'] = $voip[2]."-".$voip[3];
-						if($voip[1] != '')
+						if ($voip[1] != '')
 							$rule['protocol'] = $voip[1];
 						$rule['created'] = make_config_revision_entry(null, gettext("Traffic Shaper Wizard"));
 						$config['filter']['rule'][] = $rule;
@@ -1649,7 +1618,7 @@ function apply_all_chosen_items() {
 
 			/* loop through p2plist[] */
 			if ($p2p) {
-				foreach($config['ezshaper']['step5'] as $key => $val) {
+				foreach ($config['ezshaper']['step5'] as $key => $val) {
 					if (!is_array($p2plist[$key]))
 						continue;
 					foreach ($p2plist[$key] as $p2pclient) {
@@ -1663,7 +1632,7 @@ function apply_all_chosen_items() {
 						$rule['floating'] = "yes";
 						$rule['wizard'] = "yes";
 						$rule['destination']['port'] = $p2pclient[2]."-".$p2pclient[3];
-						if($p2pclient[1] != '')
+						if ($p2pclient[1] != '')
 							$rule['protocol'] = $p2pclient[1];
 						$rule['created'] = make_config_revision_entry(null, gettext("Traffic Shaper Wizard"));
 						$config['filter']['rule'][] = $rule;
@@ -1673,7 +1642,7 @@ function apply_all_chosen_items() {
 
 			/* loop through gamesplist[] */
 			if ($games) {
-				foreach($config['ezshaper']['step6'] as $key => $val) {
+				foreach ($config['ezshaper']['step6'] as $key => $val) {
 					if (!is_array($gamesplist[$key]))
 										continue;
 					foreach ($gamesplist[$key] as $Gameclient) {
@@ -1690,7 +1659,7 @@ function apply_all_chosen_items() {
 						$rule['enabled'] = "on";
 						$rule['descr'] = "m_Game {$Gameclient[0]} outbound";
 						$rule['destination']['port'] = $Gameclient[2]."-".$Gameclient[3];
-						if($Gameclient[1] != '')
+						if ($Gameclient[1] != '')
 							$rule['protocol'] = $Gameclient[1];
 						$rule['created'] = make_config_revision_entry(null, gettext("Traffic Shaper Wizard"));
 						$config['filter']['rule'][] = $rule;
@@ -1700,7 +1669,7 @@ function apply_all_chosen_items() {
 
 	/* loop through othersplist[] */
 	if ($otherpriority) {
-		foreach($config['ezshaper']['step7'] as $key => $val) {
+		foreach ($config['ezshaper']['step7'] as $key => $val) {
 			if (!is_array($othersplist[$key]))
 				continue;
 			foreach ($othersplist[$key] as $otherclient) {
@@ -1740,10 +1709,10 @@ function apply_all_chosen_items() {
 					$rule['enabled'] = "on";
 					$rule['descr'] = "m_Other {$otherclient[0]} outbound";
 
-					if($otherclient[2] or $otherclient[3]) {
+					if ($otherclient[2] or $otherclient[3]) {
 						$rule['destination']['port'] = $otherclient[2]."-".$otherclient[3];
 					}
-					if($otherclient[1] != '')
+					if ($otherclient[1] != '')
 						$rule['protocol'] = $otherclient[1];
 					$rule['created'] = make_config_revision_entry(null, gettext("Traffic Shaper Wizard"));
 					$config['filter']['rule'][] = $rule;

@@ -1,11 +1,26 @@
 #!/bin/sh
-
-# /etc/rc.initial
-# part of pfSense by Scott Ullrich
-# Copyright (C) 2004-2011 Scott Ullrich, All rights reserved.
-# originally based on m0n0wall (http://neon1.net/m0n0wall)
-# Copyright (C) 2003-2004 Manuel Kasper <mk@neon1.net>.
+#
+# rc.initial
+#
+# part of pfSense (https://www.pfsense.org)
+# Copyright (c) 2004-2016 Rubicon Communications, LLC (Netgate)
 # All rights reserved.
+#
+# originally based on m0n0wall (http://neon1.net/m0n0wall)
+# Copyright (c) 2003-2004 Manuel Kasper <mk@neon1.net>.
+# All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 # make sure the user can't kill us by pressing Ctrl-C,
 # ctrl-z, etc.
@@ -43,9 +58,6 @@ done
 CONFIG="/cf/conf/config.xml"
 WORD="https"
 
-# Set our operating platform
-PLATFORM=`cat /etc/platform`
-
 # endless loop
 while : ; do
 
@@ -73,26 +85,18 @@ for i in /var/db/pfi/capable_*; do
 	fi
 done
 
-if [ "$PLATFORM" = "cdrom" ]; then
-	option99="99) Install ${product} to a hard drive, etc."
-fi
-
 # display a cheap menu
 echo ""
 echo " 0) Logout (SSH only)                  9) pfTop"
 echo " 1) Assign Interfaces                 10) Filter Logs"
 echo " 2) Set interface(s) IP address       11) Restart webConfigurator"
-echo " 3) Reset webConfigurator password    12) ${product} Developer Shell"
+echo " 3) Reset webConfigurator password    12) PHP shell + ${product} tools"
 echo " 4) Reset to factory defaults         13) Update from console"
 echo " 5) Reboot system                     ${sshd_option}"
 echo " 6) Halt system                       15) Restore recent configuration"
 echo " 7) Ping host                         16) Restart PHP-FPM"
 echo " 8) Shell"
 echo " ${option98} "
-
-if [ "${option99}" != "" ]; then
-	/bin/echo "${option99}"
-fi
 
 echo
 read -p "Enter an option: " opmode
@@ -154,13 +158,6 @@ case ${opmode} in
 98)
 	if [ ! -f /tmp/config_moved ]; then
 		/etc/rc.initial.store_config_to_removable_device
-	fi
-	;;
-99)
-	if [ -e /dev/ukbd0 ]; then
-		env TERM=cons25 /scripts/lua_installer
-	else
-		/scripts/lua_installer
 	fi
 	;;
 100)

@@ -1,61 +1,29 @@
 <?php
 /*
-	filter.inc
-
-	part of pfSense (https://www.pfsense.org)
-	Copyright (c) 2005 Bill Marquette
-	Copyright (c) 2006 Peter Allgeyer
-	Copyright (c) 2008-2016 Electric Sheep Fencing, LLC. All rights reserved.
-
-	originally part of m0n0wall (http://m0n0.ch/wall)
-	Copyright (C) 2003-2004 Manuel Kasper <mk@neon1.net>.
-	All rights reserved.
-
-	Redistribution and use in source and binary forms, with or without
-	modification, are permitted provided that the following conditions are met:
-
-	1. Redistributions of source code must retain the above copyright notice,
-	   this list of conditions and the following disclaimer.
-
-	2. Redistributions in binary form must reproduce the above copyright
-	   notice, this list of conditions and the following disclaimer in
-	   the documentation and/or other materials provided with the
-	   distribution.
-
-	3. All advertising materials mentioning features or use of this software
-	   must display the following acknowledgment:
-	   "This product includes software developed by the pfSense Project
-	   for use in the pfSense® software distribution. (http://www.pfsense.org/).
-
-	4. The names "pfSense" and "pfSense Project" must not be used to
-	   endorse or promote products derived from this software without
-	   prior written permission. For written permission, please contact
-	   coreteam@pfsense.org.
-
-	5. Products derived from this software may not be called "pfSense"
-	   nor may "pfSense" appear in their names without prior written
-	   permission of the Electric Sheep Fencing, LLC.
-
-	6. Redistributions of any form whatsoever must retain the following
-	   acknowledgment:
-
-	"This product includes software developed by the pfSense Project
-	for use in the pfSense software distribution (http://www.pfsense.org/).
-
-	THIS SOFTWARE IS PROVIDED BY THE pfSense PROJECT ``AS IS'' AND ANY
-	EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-	IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-	PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE pfSense PROJECT OR
-	ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-	SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
-	NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-	LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-	HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-	STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-	ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
-	OF THE POSSIBILITY OF SUCH DAMAGE.
-*/
-
+ * filter.inc
+ *
+ * part of pfSense (https://www.pfsense.org)
+ * Copyright (c) 2005 Bill Marquette
+ * Copyright (c) 2006 Peter Allgeyer
+ * Copyright (c) 2008-2016 Rubicon Communications, LLC (Netgate)
+ * All rights reserved.
+ *
+ * originally part of m0n0wall (http://m0n0.ch/wall)
+ * Copyright (c) 2003-2004 Manuel Kasper <mk@neon1.net>.
+ * All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 /* holds the items that will be executed *AFTER* the filter is fully loaded */
 $after_filter_configure_run = array();
@@ -762,14 +730,12 @@ function filter_generate_aliases() {
 	$aliases .= "table <snort2c>\n";
 	$aliases .= "table <virusprot>\n";
 	if (!file_exists("/etc/bogons") || !file_exists("/etc/bogonsv6")) {
-		conf_mount_rw();
 		if (!file_exists("/etc/bogons")) {
 			@file_put_contents("/etc/bogons", "");
 		}
 		if (!file_exists("/etc/bogonsv6")) {
 			@file_put_contents("/etc/bogonsv6", "");
 		}
-		conf_mount_ro();
 	}
 	$aliases .= "table <bogons> persist file \"/etc/bogons\"\n";
 	if (is_bogonsv6_used()) {
@@ -850,7 +816,8 @@ function filter_generate_aliases() {
 				// TODO: Change it when pf supports tables with ports
 				$urlfn = alias_expand_urltable($aliased['name']);
 				if ($urlfn) {
-					$aliases .= "{$aliased['name']} = \"{ " . preg_replace("/\n/", " ", file_get_contents($urlfn)) . " }\"\n";
+					$ports_tmp = parse_aliases_file($urlfn, "urltable_ports", "-1", false);
+					$aliases .= "{$aliased['name']} = \"{ " . preg_replace("/\n/", " ", implode("\n", $ports_tmp)) . " }\"\n";
 				}
 				break;
 			case "port":
@@ -2066,6 +2033,11 @@ function filter_nat_rules_generate() {
 				$obtarget = ($obent['target'] == "other-subnet") ? $obent['targetip'] . '/' . $obent['targetip_subnet']: $obent['target'];
 				$poolopts = (is_subnet($obtarget) || is_alias($obtarget)) ? $obent['poolopts'] : "";
 
+				/* pool option source-hash allows specification of an optional source-hash key */
+				if ($poolopts == "source-hash" && !empty($obent['source_hash_key'])) {
+					$poolopts = "source-hash ".$obent['source_hash_key'];
+				}
+
 				$natrules .= filter_nat_rules_generate_if($obent['interface'],
 					$src,
 					$obent['sourceport'],
@@ -2569,6 +2541,7 @@ function filter_generate_address(& $rule, $target = "source", $isnat = false) {
 						$src = "(self)";
 						break;
 					case 'pppoe':
+						/* XXX: This needs to be fixed somehow! */
 						if (is_array($FilterIflist['pppoe'])) {
 							$pppoesav6 = gen_subnetv6($FilterIflist['pppoe'][0]['ipv6'], $FilterIflist['pppoe'][0]['snv6']);
 							$pppoesnv6 = $FilterIflist['pppoe'][0]['snv6'];
@@ -2608,7 +2581,7 @@ function filter_generate_address(& $rule, $target = "source", $isnat = false) {
 					case 'pppoe':
 						/* XXX: This needs to be fixed somehow! */
 						if (is_array($FilterIflist['pppoe'])) {
-							$pppoesa = gen_subnet($FilterIflist['pppoe'][0]['ip'], $FilterIflist['pppoe'][0]['sn']);
+							$pppoesa = gen_subnet($FilterIflist['pppoe'][0]['sa'], $FilterIflist['pppoe'][0]['sn']);
 							$pppoesn = $FilterIflist['pppoe'][0]['sn'];
 							$src = "{$pppoesa}/{$pppoesn}";
 						}
@@ -2666,7 +2639,11 @@ function filter_generate_user_rule($rule) {
 			$ifliste = "";
 			foreach ($interfaces as $iface) {
 				if (array_key_exists($iface, $FilterIflist)) {
-					$ifliste .= " " . $FilterIflist[$iface]['if'] . " ";
+					if (isset($FilterIflist[$iface]['if'])) {
+						$ifliste .= " " . $FilterIflist[$iface]['if'] . " ";
+					} else if (isset($FilterIflist[$iface][0]['if'])) {
+						$ifliste .= " " . $FilterIflist[$iface][0]['if'] . " ";
+					}
 				}
 			}
 			if ($ifliste <> "") {
@@ -3131,6 +3108,11 @@ block out {$log['block']} inet all tracker {$increment_tracker($tracker)} label 
 block in {$log['block']} inet6 all tracker {$increment_tracker($tracker)} label "Default deny rule IPv6"
 block out {$log['block']} inet6 all tracker {$increment_tracker($tracker)} label "Default deny rule IPv6"
 
+EOD;
+
+	if (isset($config['system']['ipv6allow'])) {
+		$ipfrules .= <<<EOD
+
 # IPv6 ICMP is not auxilary, it is required for operation
 # See man icmp6(4)
 # 1    unreach         Destination unreachable
@@ -3150,11 +3132,22 @@ pass in {$log['pass']} quick inet6 proto ipv6-icmp from fe80::/10 to fe80::/10 i
 pass in {$log['pass']} quick inet6 proto ipv6-icmp from ff02::/16 to fe80::/10 icmp6-type {128,133,134,135,136} tracker {$increment_tracker($tracker)} keep state
 pass in {$log['pass']} quick inet6 proto ipv6-icmp from fe80::/10 to ff02::/16 icmp6-type {128,133,134,135,136} tracker {$increment_tracker($tracker)} keep state
 
+EOD;
+	}
+	$ipfrules .= <<<EOD
 # We use the mighty pf, we cannot be fooled.
 block {$log['block']} quick inet proto { tcp, udp } from any port = 0 to any tracker {$increment_tracker($tracker)} label "Block traffic from port 0"
 block {$log['block']} quick inet proto { tcp, udp } from any to any port = 0 tracker {$increment_tracker($tracker)} label "Block traffic to port 0"
+
+EOD;
+	if (isset($config['system']['ipv6allow'])) {
+		$ipfrules .= <<<EOD
 block {$log['block']} quick inet6 proto { tcp, udp } from any port = 0 to any tracker {$increment_tracker($tracker)} label "Block traffic from port 0"
 block {$log['block']} quick inet6 proto { tcp, udp } from any to any port = 0 tracker {$increment_tracker($tracker)} label "Block traffic to port 0"
+
+EOD;
+	}
+	$ipfrules .= <<<EOD
 
 # Snort package
 block {$log['block']} quick from <snort2c> to any tracker {$increment_tracker($tracker)} label "Block snort2c hosts"
@@ -3495,13 +3488,27 @@ EOD;
 # loopback
 pass in {$log['pass']} on \$loopback inet all tracker {$increment_tracker($tracker)} label "pass IPv4 loopback"
 pass out {$log['pass']} on \$loopback inet all tracker {$increment_tracker($tracker)} label "pass IPv4 loopback"
+
+EOD;
+	if (isset($config['system']['ipv6allow'])) {
+		$ipfrules .= <<<EOD
 pass in {$log['pass']} on \$loopback inet6 all tracker {$increment_tracker($tracker)} label "pass IPv6 loopback"
 pass out {$log['pass']} on \$loopback inet6 all tracker {$increment_tracker($tracker)} label "pass IPv6 loopback"
+
+EOD;
+	}
+	$ipfrules .= <<<EOD
 # let out anything from the firewall host itself and decrypted IPsec traffic
 pass out {$log['pass']} inet all keep state allow-opts tracker {$increment_tracker($tracker)} label "let out anything IPv4 from firewall host itself"
+
+EOD;
+	if (isset($config['system']['ipv6allow'])) {
+		$ipfrules .= <<<EOD
 pass out {$log['pass']} inet6 all keep state allow-opts tracker {$increment_tracker($tracker)} label "let out anything IPv6 from firewall host itself"
 
 EOD;
+	}
+	$ipfrules .= "\n";
 
 	$saved_tracker += 100;
 	$tracker = $saved_tracker;
@@ -4251,7 +4258,7 @@ function ifridx($if, $ridx) {
 	if ($ridx < 0) {
 		return $ridx;
 	}
-	
+
 	$i = $ifridx = 0;
 	if (is_array($config['filter']['rule'])) {
 		foreach ($config['filter']['rule'] as $rulen => $filterent) {

@@ -1,60 +1,27 @@
 <?php
 /*
-	services_captiveportal_mac.php
-*/
-/* ====================================================================
- *	Copyright (c)  2004-2015  Electric Sheep Fencing, LLC. All rights reserved.
- *	Copyright (c)  2004 Dinesh Nair <dinesh@alphaque.com>
+ * services_captiveportal_mac.php
  *
- *	Some or all of this file is based on the m0n0wall project which is
- *	Copyright (c)  2004 Manuel Kasper (BSD 2 clause)
+ * part of pfSense (https://www.pfsense.org)
+ * Copyright (c) 2004-2016 Rubicon Communications, LLC (Netgate)
+ * Copyright (c) 2004 Dinesh Nair <dinesh@alphaque.com>
+ * All rights reserved.
  *
- *	Redistribution and use in source and binary forms, with or without modification,
- *	are permitted provided that the following conditions are met:
+ * originally based on m0n0wall (http://m0n0.ch/wall)
+ * Copyright (c) 2003-2004 Manuel Kasper <mk@neon1.net>.
+ * All rights reserved.
  *
- *	1. Redistributions of source code must retain the above copyright notice,
- *		this list of conditions and the following disclaimer.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *	2. Redistributions in binary form must reproduce the above copyright
- *		notice, this list of conditions and the following disclaimer in
- *		the documentation and/or other materials provided with the
- *		distribution.
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *	3. All advertising materials mentioning features or use of this software
- *		must display the following acknowledgment:
- *		"This product includes software developed by the pfSense Project
- *		 for use in the pfSense software distribution. (http://www.pfsense.org/).
- *
- *	4. The names "pfSense" and "pfSense Project" must not be used to
- *		 endorse or promote products derived from this software without
- *		 prior written permission. For written permission, please contact
- *		 coreteam@pfsense.org.
- *
- *	5. Products derived from this software may not be called "pfSense"
- *		nor may "pfSense" appear in their names without prior written
- *		permission of the Electric Sheep Fencing, LLC.
- *
- *	6. Redistributions of any form whatsoever must retain the following
- *		acknowledgment:
- *
- *	"This product includes software developed by the pfSense Project
- *	for use in the pfSense software distribution (http://www.pfsense.org/).
- *
- *	THIS SOFTWARE IS PROVIDED BY THE pfSense PROJECT ``AS IS'' AND ANY
- *	EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- *	IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- *	PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE pfSense PROJECT OR
- *	ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *	SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- *	NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- *	LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- *	HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- *	STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- *	ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
- *	OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *	====================================================================
- *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 ##|+PRIV
@@ -64,11 +31,11 @@
 ##|*MATCH=services_captiveportal_mac.php*
 ##|-PRIV
 
-require("guiconfig.inc");
-require("functions.inc");
+require_once("guiconfig.inc");
+require_once("functions.inc");
 require_once("filter.inc");
-require("shaper.inc");
-require("captiveportal.inc");
+require_once("shaper.inc");
+require_once("captiveportal.inc");
 
 global $cpzone;
 global $cpzoneid;
@@ -77,7 +44,7 @@ $cpzone = $_GET['zone'];
 if (isset($_POST['zone'])) {
 	$cpzone = $_POST['zone'];
 }
-$cpzone = strtolower($cpzone);
+$cpzone = strtolower(htmlspecialchars($cpzone));
 
 if (empty($cpzone) || empty($config['captiveportal'][$cpzone])) {
 	header("Location: services_captiveportal_zones.php");
@@ -92,8 +59,8 @@ $a_cp =& $config['captiveportal'];
 $pgtitle = array(gettext("Services"), gettext("Captive Portal"), $a_cp[$cpzone]['zone'], gettext("MACs"));
 $shortcut_section = "captiveportal";
 
-$actsmbl = array('pass' => '<font color="green" size="4">&#x2714;</font>&nbsp;' . gettext("Pass"),
-				 'block' => '<font color="red" size="4">&#x2718;</font>&nbsp;' . gettext("Block"));
+$actsmbl = array('pass' => '<i class="fa fa-check text-success"></i>&nbsp;' . gettext("Pass"),
+	'block' => '<i class="fa fa-times text-danger"></i>&nbsp;' . gettext("Block"));
 
 if ($_POST) {
 	$pconfig = $_POST;
@@ -106,7 +73,7 @@ if ($_POST) {
 			$rules = captiveportal_passthrumac_configure();
 			if (!empty($rules)) {
 				@file_put_contents("{$g['tmp_path']}/passthrumac_gui", $rules);
-				mwexec("/sbin/ipfw -x {$cpzoneid} {$g['tmp_path']}/passthrumac_gui");
+				mwexec("/sbin/ipfw {$g['tmp_path']}/passthrumac_gui");
 				@unlink("{$g['tmp_path']}/passthrumac_gui");
 			}
 			$savemsg = get_std_save_message($retval);
@@ -153,7 +120,7 @@ if ($_POST) {
 				$rules = captiveportal_passthrumac_delete_entry($a_passthrumacs[$idx]);
 				$uniqid = uniqid("{$cpzone}_mac");
 				file_put_contents("{$g['tmp_path']}/{$uniqid}_tmp", $rules);
-				mwexec("/sbin/ipfw -x {$cpzoneid} -q {$g['tmp_path']}/{$uniqid}_tmp");
+				mwexec("/sbin/ipfw -q {$g['tmp_path']}/{$uniqid}_tmp");
 				@unlink("{$g['tmp_path']}/{$uniqid}_tmp");
 				unset($a_passthrumacs[$idx]);
 				write_config();
@@ -174,7 +141,7 @@ if ($_GET['act'] == "del") {
 		$rules = captiveportal_passthrumac_delete_entry($a_passthrumacs[$_GET['id']]);
 		$uniqid = uniqid("{$cpzone}_mac");
 		file_put_contents("{$g['tmp_path']}/{$uniqid}_tmp", $rules);
-		mwexec("/sbin/ipfw -x {$cpzoneid} -q {$g['tmp_path']}/{$uniqid}_tmp");
+		mwexec("/sbin/ipfw -q {$g['tmp_path']}/{$uniqid}_tmp");
 		@unlink("{$g['tmp_path']}/{$uniqid}_tmp");
 		unset($a_passthrumacs[$_GET['id']]);
 		write_config();
@@ -203,7 +170,7 @@ $tab_array[] = array(gettext("File Manager"), false, "services_captiveportal_fil
 display_top_tabs($tab_array, true);
 ?>
 <div class="table-responsive">
-	<table class="table table-hover table-striped table-condensed">
+	<table class="table table-hover table-striped table-condensed sortable-theme-bootstrap table-rowdblclickedit" data-sortable>
 		<thead>
 			<tr>
 				<th><?=gettext('Action')?></th>
@@ -237,7 +204,7 @@ foreach ($a_cp[$cpzone]['passthrumac'] as $mac): ?>
 <?php
 $i++;
 endforeach; ?>
-		<tbody>
+		</tbody>
 	</table>
 <?php
 else:

@@ -1,52 +1,21 @@
-/* ====================================================================
- *	Copyright (c)  2004-2015  Electric Sheep Fencing, LLC. All rights reserved.
+/*
+ * pfSenseHelpers.js
  *
- *	Redistribution and use in source and binary forms, with or without modification,
- *	are permitted provided that the following conditions are met:
+ * part of pfSense (https://www.pfsense.org)
+ * Copyright (c) 2004-2016 Rubicon Communications, LLC (Netgate)
+ * All rights reserved.
  *
- *	1. Redistributions of source code must retain the above copyright notice,
- *		this list of conditions and the following disclaimer.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *	2. Redistributions in binary form must reproduce the above copyright
- *		notice, this list of conditions and the following disclaimer in
- *		the documentation and/or other materials provided with the
- *		distribution.
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *	3. All advertising materials mentioning features or use of this software
- *		must display the following acknowledgment:
- *		"This product includes software developed by the pfSense Project
- *		 for use in the pfSense software distribution. (http://www.pfsense.org/).
- *
- *	4. The names "pfSense" and "pfSense Project" must not be used to
- *		 endorse or promote products derived from this software without
- *		 prior written permission. For written permission, please contact
- *		 coreteam@pfsense.org.
- *
- *	5. Products derived from this software may not be called "pfSense"
- *		nor may "pfSense" appear in their names without prior written
- *		permission of the Electric Sheep Fencing, LLC.
- *
- *	6. Redistributions of any form whatsoever must retain the following
- *		acknowledgment:
- *
- *	"This product includes software developed by the pfSense Project
- *	for use in the pfSense software distribution (http://www.pfsense.org/).
- *
- *	THIS SOFTWARE IS PROVIDED BY THE pfSense PROJECT ``AS IS'' AND ANY
- *	EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- *	IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- *	PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE pfSense PROJECT OR
- *	ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *	SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- *	NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- *	LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- *	HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- *	STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- *	ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
- *	OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *	====================================================================
- *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 // These helper functions are used on many/most UI pages to hide/show/disable/enable form elements where required
@@ -89,14 +58,6 @@ function hideClass(s_class, hide) {
 		$('.' + s_class).show();
 }
 
-// Hides all elements of the specified class assigned to a group. This will usually be a group
-function hideGroupClass(s_class, hide) {
-	if (hide)
-		$('.' + s_class).parent().parent().parent().hide();
-	else
-		$('.' + s_class).parent().parent().parent().show();
-}
-
 function hideSelect(id, hide) {
 	if (hide)
 		$('#' + id).parent('div').parent('div').addClass('hidden');
@@ -111,7 +72,7 @@ function hideMultiCheckbox(id, hide) {
 		$("[name=" + id + "]").parent().removeClass('hidden');
 }
 
-// Hides the <div> in which the specified IP address element lives so that the input, its label and help text are hidden
+// Hides the <div> in which the specified IP address element lives so that the input, any mask selector, its label and help text are hidden
 function hideIpAddress(id, hide) {
 	if (hide)
 		$('#' + id).parent().parent().parent('div').addClass('hidden');
@@ -140,7 +101,7 @@ function hideLabel(text, hide) {
 
 // Hides the '/' and the subnet mask of an Ip_Address/subnet_mask group
 function hideMask(name, hide) {
-	if(hide) {
+	if (hide) {
 		$('[id^=' + name + ']').hide();
 		$('[id^=' + name + ']').prev('span').hide();
 		$('[id^=' + name + ']').parent('div').removeClass('input-group');
@@ -220,10 +181,12 @@ function setMasks() {
 // Complicated function to move all help text associated with this input id to the same id
 // on the row above. That way if you delete the last row, you don't lose the help
 function moveHelpText(id) {
-	$('#' + id).parent('div').parent('div').find('input, select, checkbox').each(function() {	 // For each <span></span>
+
+	$('#' + id).parent('div').parent('div').find('input, select, checkbox, button').each(function() {	 // For each <span></span>
 		var fromId = this.id;
 		var toId = decrStringInt(fromId);
 		var helpSpan;
+
 
 		if (!$(this).hasClass('pfIpMask') && !$(this).hasClass('btn')) {
 			if ($('#' + decrStringInt(fromId)).parent('div').hasClass('input-group')) {
@@ -231,6 +194,7 @@ function moveHelpText(id) {
 			} else {
 				helpSpan = $('#' + fromId).parent('div').find('span:last').clone();
 			}
+
 			if ($(helpSpan).hasClass('help-block')) {
 				if ($('#' + decrStringInt(fromId)).parent('div').hasClass('input-group')) {
 					$('#' + decrStringInt(fromId)).parent('div').after(helpSpan);
@@ -279,6 +243,11 @@ function renumber() {
 			$(this).prop("name", this.name.replace(/\d+$/, "") + idx);
 		});
 
+		$(this).find('button').each(function() {
+			$(this).prop("id", this.id.replace(/\d+$/, "") + idx);
+			$(this).prop("name", this.name.replace(/\d+$/, "") + idx);
+		});
+
 //		$(this).find('label').attr('for', $(this).find('label').attr('for').replace(/\d+$/, "") + idx);
 
 		idx++;
@@ -294,6 +263,7 @@ function delete_row(rowDelBtn) {
 	}
 
 	$('#' + rowDelBtn).parent('div').parent('div').remove();
+
 	renumber();
 	checkLastRow();
 
@@ -316,6 +286,7 @@ function add_row() {
 
 	// Clone it
 	var newGroup = lastRepeatableGroup.clone();
+
 	// Increment the suffix number for each input element in the new group
 	$(newGroup).find('input').each(function() {
 		$(this).prop("id", bumpStringInt(this.id));
@@ -350,7 +321,7 @@ function add_row() {
 	// And for "for" tags
 //	$(newGroup).find('label').attr('for', bumpStringInt($(newGroup).find('label').attr('for')));
 
-	$(newGroup).find('label').text(""); // Clear the label. We only want it on the very first row
+	$(newGroup).find('label:first').text(""); // Clear the label. We only want it on the very first row
 
 	// Insert the updated/cloned row
 	$(lastRepeatableGroup).after(newGroup);

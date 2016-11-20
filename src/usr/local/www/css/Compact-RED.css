@@ -1,10 +1,29 @@
-
-/* Compact-RED theme for pfSense by PiBa-NL */
+/*
+ * Compact-RED.css
+ *
+ * part of pfSense (https://www.pfsense.org)
+ * Copyright (c) 2016 PiBa-NL
+ * Copyright (c) 2016 Rubicon Communications, LLC (Netgate)
+ * All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 @import url("/css/pfSense.css");
 
 body {
     font-size: 12px;
+    font-family: sans-serif;
 }
 
 .form-control {
@@ -65,6 +84,11 @@ body {
 
 .dropdown-menu>li>a {
     padding: 0px 20px;
+    line-height: 26px;
+}
+
+.dropdown-menu>li>a:focus, .dropdown-menu>li>a:hover {
+    background-color: rgb(224, 224, 224);
 }
 
 .navbar-right>li>a {
@@ -77,6 +101,14 @@ body {
 }
 .panel-default>.panel-heading {
     background-color: #900;
+    padding: 2px 5px 2px 15px;
+}
+
+.panel-title {
+    line-height: 18px;
+    font-size: 12px;
+    font-family: sans-serif;
+    font-weight: bold;
 }
 
 .form-control {
@@ -88,6 +120,10 @@ body {
 }
 .table>tbody>tr>td,.table>tbody>tr>th,.table>tfoot>tr>td,.table>tfoot>tr>th,.table>thead>tr>td,.table>thead>tr>th {
      padding:2px;
+}
+
+.table-striped>tbody>tr:hover {
+    background-color: rgb(224, 224, 224);
 }
 
 .header .context-links {

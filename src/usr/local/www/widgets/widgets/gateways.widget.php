@@ -1,60 +1,27 @@
 <?php
 /*
-	gateways.widget.php
-*/
-/* ====================================================================
- *	Copyright (c)  2004-2015  Electric Sheep Fencing, LLC. All rights reserved.
- *  Copyright (c)  2008 Seth Mos
+ * gateways.widget.php
  *
- *  Some or all of this file is based on the m0n0wall project which is
- *  Copyright (c)  2004 Manuel Kasper (BSD 2 clause)
+ * part of pfSense (https://www.pfsense.org)
+ * Copyright (c) 2008 Seth Mos
+ * Copyright (c) 2004-2016 Rubicon Communications, LLC (Netgate)
+ * All rights reserved.
  *
- *	Redistribution and use in source and binary forms, with or without modification,
- *	are permitted provided that the following conditions are met:
+ * originally part of m0n0wall (http://m0n0.ch/wall)
+ * Copyright (c) 2003-2004 Manuel Kasper <mk@neon1.net>.
+ * All rights reserved.
  *
- *	1. Redistributions of source code must retain the above copyright notice,
- *		this list of conditions and the following disclaimer.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *	2. Redistributions in binary form must reproduce the above copyright
- *		notice, this list of conditions and the following disclaimer in
- *		the documentation and/or other materials provided with the
- *		distribution.
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *	3. All advertising materials mentioning features or use of this software
- *		must display the following acknowledgment:
- *		"This product includes software developed by the pfSense Project
- *		 for use in the pfSense software distribution. (http://www.pfsense.org/).
- *
- *	4. The names "pfSense" and "pfSense Project" must not be used to
- *		 endorse or promote products derived from this software without
- *		 prior written permission. For written permission, please contact
- *		 coreteam@pfsense.org.
- *
- *	5. Products derived from this software may not be called "pfSense"
- *		nor may "pfSense" appear in their names without prior written
- *		permission of the Electric Sheep Fencing, LLC.
- *
- *	6. Redistributions of any form whatsoever must retain the following
- *		acknowledgment:
- *
- *	"This product includes software developed by the pfSense Project
- *	for use in the pfSense software distribution (http://www.pfsense.org/).
- *
- *	THIS SOFTWARE IS PROVIDED BY THE pfSense PROJECT ``AS IS'' AND ANY
- *	EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- *	IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- *	PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE pfSense PROJECT OR
- *	ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *	SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- *	NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- *	LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- *	HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- *	STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- *	ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
- *	OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *	====================================================================
- *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 $nocsrf = true;
@@ -71,16 +38,18 @@ if ($_REQUEST && $_REQUEST['ajax']) {
 }
 
 if ($_POST) {
-	if (!is_array($config["widgets"]["gateways_widget"])) {
-		$config["widgets"]["gateways_widget"] = array();
+	if (!is_array($user_settings["widgets"]["gateways_widget"])) {
+		$user_settings["widgets"]["gateways_widget"] = array();
 	}
 	if (isset($_POST["display_type"])) {
-		$config["widgets"]["gateways_widget"]["display_type"] = $_POST["display_type"];
+		$user_settings["widgets"]["gateways_widget"]["display_type"] = $_POST["display_type"];
 	}
-	write_config(gettext("Updated gateways widget settings via dashboard."));
+	save_widget_settings($_SESSION['Username'], $user_settings["widgets"], gettext("Updated gateways widget settings via dashboard."));
 	header("Location: /");
 	exit(0);
 }
+
+$widgetperiod = isset($config['widgets']['period']) ? $config['widgets']['period'] * 1000 : 10000;
 ?>
 
 <div class="table-responsive">
@@ -114,8 +83,8 @@ if ($_POST) {
 				$display_type_gw_ip = "checked";
 				$display_type_monitor_ip = "";
 				$display_type_both_ip = "";
-				if (isset($config["widgets"]["gateways_widget"]["display_type"])) {
-					$selected_radio = $config["widgets"]["gateways_widget"]["display_type"];
+				if (isset($user_settings["widgets"]["gateways_widget"]["display_type"])) {
+					$selected_radio = $user_settings["widgets"]["gateways_widget"]["display_type"];
 					if ($selected_radio == "gw_ip") {
 						$display_type_gw_ip = "checked";
 						$display_type_monitor_ip = "";
@@ -166,19 +135,21 @@ if ($_POST) {
 		ajaxRequest.done(function (response, textStatus, jqXHR) {
 			$('#gwtblbody').html(response);
 			// and do it again
-			setTimeout(get_gw_stats, 5000);
+			setTimeout(get_gw_stats, "<?=$widgetperiod?>");
 		});
 	}
 
 	events.push(function(){
-		get_gw_stats();
+		// Start polling for updates some small random number of seconds from now (so that all the widgets don't
+		// hit the server at exactly the same time)
+		setTimeout(get_gw_stats, Math.floor((Math.random() * 10000) + 1000));
 	});
 //]]>
 </script>
 
 <?php
 function compose_table_body_contents() {
-	global $config;
+	global $user_settings;
 
 	$rtnstr = '';
 
@@ -186,8 +157,8 @@ function compose_table_body_contents() {
 	$gateways_status = array();
 	$gateways_status = return_gateways_status(true);
 
-	if (isset($config["widgets"]["gateways_widget"]["display_type"])) {
-		$display_type = $config["widgets"]["gateways_widget"]["display_type"];
+	if (isset($user_settings["widgets"]["gateways_widget"]["display_type"])) {
+		$display_type = $user_settings["widgets"]["gateways_widget"]["display_type"];
 	} else {
 		$display_type = "gw_ip";
 	}

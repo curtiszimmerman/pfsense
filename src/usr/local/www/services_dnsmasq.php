@@ -1,60 +1,27 @@
 <?php
 /*
-	services_dnsmasq.php
-*/
-/* ====================================================================
- *	Copyright (c)  2004-2015  Electric Sheep Fencing, LLC. All rights reserved.
- *	Copyright (c)  2003-2004 Bob Zoller <bob@kludgebox.com> and Manuel Kasper <mk@neon1.net
+ * services_dnsmasq.php
  *
- *	Some or all of this file is based on the m0n0wall project which is
- *	Copyright (c)  2004 Manuel Kasper (BSD 2 clause)
+ * part of pfSense (https://www.pfsense.org)
+ * Copyright (c) 2004-2016 Rubicon Communications, LLC (Netgate)
+ * Copyright (c) 2003-2004 Bob Zoller <bob@kludgebox.com>
+ * All rights reserved.
  *
- *	Redistribution and use in source and binary forms, with or without modification,
- *	are permitted provided that the following conditions are met:
+ * originally based on m0n0wall (http://m0n0.ch/wall)
+ * Copyright (c) 2003-2004 Manuel Kasper <mk@neon1.net>.
+ * All rights reserved.
  *
- *	1. Redistributions of source code must retain the above copyright notice,
- *		this list of conditions and the following disclaimer.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *	2. Redistributions in binary form must reproduce the above copyright
- *		notice, this list of conditions and the following disclaimer in
- *		the documentation and/or other materials provided with the
- *		distribution.
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *	3. All advertising materials mentioning features or use of this software
- *		must display the following acknowledgment:
- *		"This product includes software developed by the pfSense Project
- *		 for use in the pfSense software distribution. (http://www.pfsense.org/).
- *
- *	4. The names "pfSense" and "pfSense Project" must not be used to
- *		 endorse or promote products derived from this software without
- *		 prior written permission. For written permission, please contact
- *		 coreteam@pfsense.org.
- *
- *	5. Products derived from this software may not be called "pfSense"
- *		nor may "pfSense" appear in their names without prior written
- *		permission of the Electric Sheep Fencing, LLC.
- *
- *	6. Redistributions of any form whatsoever must retain the following
- *		acknowledgment:
- *
- *	"This product includes software developed by the pfSense Project
- *	for use in the pfSense software distribution (http://www.pfsense.org/).
- *
- *	THIS SOFTWARE IS PROVIDED BY THE pfSense PROJECT ``AS IS'' AND ANY
- *	EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- *	IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- *	PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE pfSense PROJECT OR
- *	ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *	SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- *	NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- *	LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- *	HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- *	STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- *	ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
- *	OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *	====================================================================
- *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 ##|+PRIV
@@ -64,11 +31,41 @@
 ##|*MATCH=services_dnsmasq.php*
 ##|-PRIV
 
-require("guiconfig.inc");
+require_once("guiconfig.inc");
 require_once("functions.inc");
 require_once("filter.inc");
 require_once("shaper.inc");
 require_once("system.inc");
+
+// Sort host entries for display in alphabetical order
+function hostcmp($a, $b) {
+	return strcasecmp($a['host'], $b['host']);
+}
+
+function hosts_sort() {
+	global $a_hosts;
+
+	if (!is_array($a_hosts)) {
+		return;
+	}
+
+	usort($a_hosts, "hostcmp");
+}
+
+// Sort domain entries for display in alphabetical order
+function domaincmp($a, $b) {
+	return strcasecmp($a['domain'], $b['domain']);
+}
+
+function domains_sort() {
+	global $a_domainOverrides;
+
+	if (!is_array($a_domainOverrides)) {
+		return;
+	}
+
+	usort($a_domainOverrides, "domaincmp");
+}
 
 $pconfig['enable'] = isset($config['dnsmasq']['enable']);
 $pconfig['regdhcp'] = isset($config['dnsmasq']['regdhcp']);
@@ -79,8 +76,8 @@ $pconfig['domain_needed'] = isset($config['dnsmasq']['domain_needed']);
 $pconfig['no_private_reverse'] = isset($config['dnsmasq']['no_private_reverse']);
 $pconfig['port'] = $config['dnsmasq']['port'];
 $pconfig['custom_options'] = $config['dnsmasq']['custom_options'];
-
 $pconfig['strictbind'] = isset($config['dnsmasq']['strictbind']);
+
 if (!empty($config['dnsmasq']['interface'])) {
 	$pconfig['interface'] = explode(",", $config['dnsmasq']['interface']);
 } else {
@@ -96,7 +93,22 @@ if (!is_array($config['dnsmasq']['domainoverrides'])) {
 }
 
 $a_hosts = &$config['dnsmasq']['hosts'];
+
+// Add a temporary index so we don't lose the order after sorting
+for ($idx=0; $idx<count($a_hosts); $idx++) {
+	$a_hosts[$idx]['idx'] = $idx;
+}
+
+hosts_sort();
+
 $a_domainOverrides = &$config['dnsmasq']['domainoverrides'];
+
+// Add a temporary index so we don't lose the order after sorting
+for ($idx=0; $idx<count($a_domainOverrides); $idx++) {
+	$a_domainOverrides[$idx]['idx'] = $idx;
+}
+
+domains_sort();
 
 if ($_POST) {
 	if ($_POST['apply']) {
@@ -346,7 +358,7 @@ print($form);
 <div class="panel panel-default">
 	<div class="panel-heading"><h2 class="panel-title"><?=gettext("Host Overrides")?></h2></div>
 	<div class="panel-body table-responsive">
-		<table class="table table-striped table-hover table-condensed sortable-theme-bootstrap" data-sortable>
+		<table class="table table-striped table-hover table-condensed sortable-theme-bootstrap table-rowdblclickedit" data-sortable>
 			<thead>
 				<tr>
 					<th><?=gettext("Host")?></th>
@@ -374,8 +386,8 @@ foreach ($a_hosts as $i => $hostent):
 						<?=htmlspecialchars($hostent['descr'])?>
 					</td>
 					<td>
-						<a class="fa fa-pencil"	title="<?=gettext('Edit host override')?>" 	href="services_dnsmasq_edit.php?id=<?=$i?>"></a>
-						<a class="fa fa-trash"	title="<?=gettext('Delete host override')?>"	href="services_dnsmasq.php?type=host&amp;act=del&amp;id=<?=$i?>"></a>
+						<a class="fa fa-pencil"	title="<?=gettext('Edit host override')?>" 	href="services_dnsmasq_edit.php?id=<?=$hostent['idx']?>"></a>
+						<a class="fa fa-trash"	title="<?=gettext('Delete host override')?>"	href="services_dnsmasq.php?type=host&amp;act=del&amp;id=<?=$hostent['idx']?>"></a>
 					</td>
 				</tr>
 
@@ -421,7 +433,7 @@ endforeach;
 <div class="panel panel-default">
 	<div class="panel-heading"><h2 class="panel-title"><?=gettext("Domain Overrides")?></h2></div>
 	<div class="panel-body table-responsive">
-		<table class="table table-striped table-hover table-condensed sortable-theme-bootstrap" data-sortable>
+		<table class="table table-striped table-hover table-condensed sortable-theme-bootstrap table-rowdblclickedit" data-sortable>
 			<thead>
 				<tr>
 					<th><?=gettext("Domain")?></th>
@@ -446,8 +458,8 @@ foreach ($a_domainOverrides as $i => $doment):
 						<?=htmlspecialchars($doment['descr'])?>
 					</td>
 					<td>
-						<a class="fa fa-pencil"	title="<?=gettext('Edit domain override')?>" href="services_dnsmasq_domainoverride_edit.php?id=<?=$i?>"></a>
-						<a class="fa fa-trash"	title="<?=gettext('Delete domain override')?>" href="services_dnsmasq.php?act=del&amp;type=doverride&amp;id=<?=$i?>"></a>
+						<a class="fa fa-pencil"	title="<?=gettext('Edit domain override')?>" href="services_dnsmasq_domainoverride_edit.php?id=<?=$doment['idx']?>"></a>
+						<a class="fa fa-trash"	title="<?=gettext('Delete domain override')?>" href="services_dnsmasq.php?act=del&amp;type=doverride&amp;id=<?=$doment['idx']?>"></a>
 					</td>
 				</tr>
 <?php

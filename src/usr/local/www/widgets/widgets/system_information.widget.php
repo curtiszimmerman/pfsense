@@ -1,63 +1,33 @@
 <?php
 /*
-	system_information.widget.php
-*/
-/*
- *	Copyright (c)  2004-2015  Electric Sheep Fencing, LLC. All rights reserved.
- *	Copyright (c)  2007 Scott Dale
+ * system_information.widget.php
  *
- *	Some or all of this file is based on the m0n0wall project which is
- *	Copyright (c)  2004 Manuel Kasper (BSD 2 clause)
+ * part of pfSense (https://www.pfsense.org)
+ * Copyright (c) 2004-2016 Rubicon Communications, LLC (Netgate)
+ * Copyright (c) 2007 Scott Dale
+ * All rights reserved.
  *
- *	Redistribution and use in source and binary forms, with or without modification,
- *	are permitted provided that the following conditions are met:
+ * originally part of m0n0wall (http://m0n0.ch/wall)
+ * Copyright (c) 2003-2004 Manuel Kasper <mk@neon1.net>.
+ * All rights reserved.
  *
- *	1. Redistributions of source code must retain the above copyright notice,
- *		this list of conditions and the following disclaimer.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *	2. Redistributions in binary form must reproduce the above copyright
- *		notice, this list of conditions and the following disclaimer in
- *		the documentation and/or other materials provided with the
- *		distribution.
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *	3. All advertising materials mentioning features or use of this software
- *		must display the following acknowledgment:
- *		"This product includes software developed by the pfSense Project
- *		 for use in the pfSense software distribution. (http://www.pfsense.org/).
- *
- *	4. The names "pfSense" and "pfSense Project" must not be used to
- *		 endorse or promote products derived from this software without
- *		 prior written permission. For written permission, please contact
- *		 coreteam@pfsense.org.
- *
- *	5. Products derived from this software may not be called "pfSense"
- *		nor may "pfSense" appear in their names without prior written
- *		permission of the Electric Sheep Fencing, LLC.
- *
- *	6. Redistributions of any form whatsoever must retain the following
- *		acknowledgment:
- *
- *	"This product includes software developed by the pfSense Project
- *	for use in the pfSense software distribution (http://www.pfsense.org/).
- *
- *	THIS SOFTWARE IS PROVIDED BY THE pfSense PROJECT ``AS IS'' AND ANY
- *	EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- *	IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- *	PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE pfSense PROJECT OR
- *	ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *	SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- *	NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- *	LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- *	HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- *	STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- *	ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
- *	OF THE POSSIBILITY OF SUCH DAMAGE.
- *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 require_once("functions.inc");
 require_once("guiconfig.inc");
 require_once('notices.inc');
+require_once('system.inc');
 include_once("includes/functions.inc.php");
 
 if ($_REQUEST['getupdatestatus']) {
@@ -108,6 +78,12 @@ if ($_REQUEST['getupdatestatus']) {
 	exit;
 }
 
+/*   Adding one second to the system widet update period
+ *   will ensure that we update the GUI right after the stats are updated.
+ */
+$widgetperiod = isset($config['widgets']['period']) ? $config['widgets']['period'] * 1000 : 10000;
+$widgetperiod += 1000;
+
 $filesystems = get_mounted_filesystems();
 ?>
 
@@ -116,6 +92,21 @@ $filesystems = get_mounted_filesystems();
 		<tr>
 			<th><?=gettext("Name");?></th>
 			<td><?php echo htmlspecialchars($config['system']['hostname'] . "." . $config['system']['domain']); ?></td>
+		</tr>
+		<tr>
+			<th><?=gettext("System");?></th>
+			<td>
+			<?php
+				$platform = system_identify_specific_platform();
+				if (isset($platform['descr'])) {
+					echo $platform['descr'];
+				} else {
+					echo gettext('Unknown system');
+				}
+			?>
+			<br />
+			<?=gettext("Serial: ");?><strong><?=system_get_serial();?></strong>
+			</td>
 		</tr>
 		<tr>
 			<th><?=gettext("Version");?></th>
@@ -134,36 +125,6 @@ $filesystems = get_mounted_filesystems();
 			<?php endif; ?>
 			</td>
 		</tr>
-		<?php if (!$g['hideplatform']): ?>
-		<tr>
-			<th><?=gettext("Platform");?></th>
-			<td>
-				<?=htmlspecialchars($g['platform']);?>
-				<?php if (($g['platform'] == "nanobsd") && (file_exists("/etc/nanosize.txt"))) {
-					echo " (" . htmlspecialchars(trim(file_get_contents("/etc/nanosize.txt"))) . ")";
-				} ?>
-			</td>
-		</tr>
-		<?php endif; ?>
-		<?php if ($g['platform'] == "nanobsd"): ?>
-			<?php
-			global $SLICE, $OLDSLICE, $TOFLASH, $COMPLETE_PATH, $COMPLETE_BOOT_PATH;
-			global $GLABEL_SLICE, $UFS_ID, $OLD_UFS_ID, $BOOTFLASH;
-			global $BOOT_DEVICE, $REAL_BOOT_DEVICE, $BOOT_DRIVE, $ACTIVE_SLICE;
-			nanobsd_detect_slice_info();
-			$rw = is_writable("/") ? "(rw)" : "(ro)";
-			?>
-		<tr>
-			<th><?=gettext("NanoBSD Boot Slice");?></th>
-			<td>
-				<?=htmlspecialchars(nanobsd_friendly_slice_name($BOOT_DEVICE));?> / <?=htmlspecialchars($BOOTFLASH);?><?=$rw;?>
-				<?php if ($BOOTFLASH != $ACTIVE_SLICE): ?>
-				<br /><br /><?=gettext('Next Boot')?>:<br />
-				<?=htmlspecialchars(nanobsd_friendly_slice_name($GLABEL_SLICE));?> / <?=htmlspecialchars($ACTIVE_SLICE);?>
-				<?php endif; ?>
-			</td>
-		</tr>
-		<?php endif; ?>
 		<tr>
 			<th><?=gettext("CPU Type");?></th>
 			<td><?=htmlspecialchars(get_single_sysctl("hw.model"))?>
@@ -197,7 +158,7 @@ $filesystems = get_mounted_filesystems();
 				<ul style="margin-bottom:0px">
 				<?php
 					$dns_servers = get_dns_servers();
-					foreach($dns_servers as $dns) {
+					foreach ($dns_servers as $dns) {
 						echo "<li>{$dns}</li>";
 					}
 				?>
@@ -351,13 +312,7 @@ events.push(function(){
 });
 <?php endif; ?>
 
-/*   Most widgets update their backend data every 10 seconds.  11 seconds
- *   will ensure that we update the GUI right after the stats are updated.
- *   Seconds * 1000 = value
- */
-
-var Seconds = 11;
-var update_interval = (Math.abs(Math.ceil(Seconds))-1)*1000 + 990;
+var update_interval = "<?=$widgetperiod?>";
 
 function setProgress(barName, percent) {
 	$('#' + barName).css('width', percent + '%').attr('aria-valuenow', percent);
@@ -369,7 +324,7 @@ function setTimer() {
 
 function stats(x) {
 	var values = x.split("|");
-	if ($.each(values,function(key,value){
+	if ($.each(values,function(key,value) {
 		if (value == 'undefined' || value == null)
 			return true;
 		else
@@ -501,7 +456,7 @@ function updateInterfaces(x) {
 			} else {
 				ipv4_details = details[2] + '<br />';
 			}
-			switch(details[1]) {
+			switch (details[1]) {
 				case "up":
 					$('#' + details[0] + '-up').css("display","inline");
 					$('#' + details[0] + '-down').css("display","none");

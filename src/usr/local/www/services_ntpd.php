@@ -1,57 +1,23 @@
 <?php
 /*
-	services_ntpd.php
-*/
-/* ====================================================================
- *	Copyright (c)  2004-2015  Electric Sheep Fencing, LLC. All rights reserved.
- *	Copyright (c)  2013 Dagorlad
+ * services_ntpd.php
  *
- *	Redistribution and use in source and binary forms, with or without modification,
- *	are permitted provided that the following conditions are met:
+ * part of pfSense (https://www.pfsense.org)
+ * Copyright (c) 2004-2016 Rubicon Communications, LLC (Netgate)
+ * Copyright (c) 2013 Dagorlad
+ * All rights reserved.
  *
- *	1. Redistributions of source code must retain the above copyright notice,
- *		this list of conditions and the following disclaimer.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *	2. Redistributions in binary form must reproduce the above copyright
- *		notice, this list of conditions and the following disclaimer in
- *		the documentation and/or other materials provided with the
- *		distribution.
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *	3. All advertising materials mentioning features or use of this software
- *		must display the following acknowledgment:
- *		"This product includes software developed by the pfSense Project
- *		 for use in the pfSense software distribution. (http://www.pfsense.org/).
- *
- *	4. The names "pfSense" and "pfSense Project" must not be used to
- *		 endorse or promote products derived from this software without
- *		 prior written permission. For written permission, please contact
- *		 coreteam@pfsense.org.
- *
- *	5. Products derived from this software may not be called "pfSense"
- *		nor may "pfSense" appear in their names without prior written
- *		permission of the Electric Sheep Fencing, LLC.
- *
- *	6. Redistributions of any form whatsoever must retain the following
- *		acknowledgment:
- *
- *	"This product includes software developed by the pfSense Project
- *	for use in the pfSense software distribution (http://www.pfsense.org/).
- *
- *	THIS SOFTWARE IS PROVIDED BY THE pfSense PROJECT ``AS IS'' AND ANY
- *	EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- *	IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- *	PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE pfSense PROJECT OR
- *	ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *	SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- *	NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- *	LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- *	HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- *	STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- *	ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
- *	OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *	====================================================================
- *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 ##|+PRIV
@@ -62,7 +28,7 @@
 ##|-PRIV
 
 define('NUMTIMESERVERS', 10);		// The maximum number of configurable time servers
-require("guiconfig.inc");
+require_once("guiconfig.inc");
 require_once('rrd.inc');
 require_once("shaper.inc");
 
@@ -102,6 +68,7 @@ if ($_POST) {
 
 		unset($config['ntpd']['prefer']);
 		unset($config['ntpd']['noselect']);
+		unset($config['ntpd']['ispool']);
 		$timeservers = '';
 
 		for ($i = 0; $i < NUMTIMESERVERS; $i++) {
@@ -113,6 +80,9 @@ if ($_POST) {
 				}
 				if (!empty($_POST["servselect{$i}"])) {
 					$config['ntpd']['noselect'] .= "{$tserver} ";
+				}
+				if (!empty($_POST["servispool{$i}"])) {
+					$config['ntpd']['ispool'] .= "{$tserver} ";
 				}
 			}
 		}
@@ -234,6 +204,7 @@ $tab_array[] = array(gettext("PPS"), false, "services_ntpd_pps.php");
 display_top_tabs($tab_array);
 
 $form = new Form;
+$form->setMultipartEncoding();	// Allow file uploads
 
 $section = new Form_Section('NTP Server Configuration');
 
@@ -251,6 +222,7 @@ $section->addInput(new Form_Select(
 
 $timeservers = explode(' ', $config['system']['timeservers']);
 $maxrows = max(count($timeservers), 1);
+$auto_pool_suffix = "pool.ntp.org";
 for ($counter=0; $counter < $maxrows; $counter++) {
 	$group = new Form_Group($counter == 0 ? 'Time Servers':'');
 	$group->addClass('repeatable');
@@ -277,6 +249,14 @@ for ($counter=0; $counter < $maxrows; $counter++) {
 		isset($config['ntpd']['noselect']) && isset($timeservers[$counter]) && substr_count($config['ntpd']['noselect'], $timeservers[$counter])
 	 ))->sethelp('No Select');
 
+	$group->add(new Form_Checkbox(
+		'servispool' . $counter,
+		null,
+		null,
+		(substr_compare($timeservers[$counter], $auto_pool_suffix, strlen($timeservers[$counter]) - strlen($auto_pool_suffix), strlen($auto_pool_suffix)) === 0)
+		 || (isset($config['ntpd']['ispool']) && isset($timeservers[$counter]) && substr_count($config['ntpd']['ispool'], $timeservers[$counter]))
+	 ))->sethelp('Is a Pool');
+
 	$group->add(new Form_Button(
 		'deleterow' . $counter,
 		'Delete',
@@ -297,9 +277,10 @@ $section->addInput(new Form_Button(
 $section->addInput(new Form_StaticText(
 	null,
 	$btnaddrow
-))->setHelp('For best results three to five servers should be configured here.' . '<br />' .
-			'The prefer option indicates that NTP should favor the use of this server more than all others.' . '<br />' .
-			'The no select option indicates that NTP should not use this server for time, but stats for this server will be collected and displayed.');
+))->setHelp('For best results three to five servers should be configured here, or at least one pool.' . '<br />' .
+			'The <b>Prefer</b> option indicates that NTP should favor the use of this server more than all others.' . '<br />' .
+			'The <b>No Select</b> option indicates that NTP should not use this server for time, but stats for this server will be collected and displayed.' . '<br />' .
+			'The <b>Is a Pool</b> option indicates this entry is a pool of NTP servers and not a single address. This is assumed for *.pool.ntp.org.');
 
 $section->addInput(new Form_Input(
 	'ntporphan',

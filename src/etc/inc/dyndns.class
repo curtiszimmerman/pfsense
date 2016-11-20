@@ -1,4 +1,24 @@
 <?php
+/*
+ * dyndns.class
+ *
+ * part of pfSense (https://www.pfsense.org)
+ * Copyright (c) 2004-2016 Rubicon Communications, LLC (Netgate)
+ * All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 	/*
 	 * PHP.updateDNS (pfSense version)
 	 *
@@ -12,6 +32,7 @@
 	 *    - DynS (dyns.org)
 	 *    - ZoneEdit (zoneedit.com)
 	 *    - FreeDNS (freedns.afraid.org)
+	 *    - FreeDNS IPv6 (freedns.afraid.org)
 	 *    - Loopia (loopia.se)
 	 *    - StaticCling (staticcling.org)
 	 *    - DNSexit (dnsexit.com)
@@ -26,6 +47,7 @@
 	 *    - Custom DDNS (any URL)
 	 *    - Custom DDNS IPv6 (any URL)
 	 *    - CloudFlare (www.cloudflare.com)
+	 *    - CloudFlare IPv6 (www.cloudflare.com)
 	 *    - Eurodns (eurodns.com)
 	 *    - GratisDNS (gratisdns.dk)
 	 *    - City Network (citynetwork.se)
@@ -33,8 +55,8 @@
 	 *    - DNSimple (dnsimple.com)
 	 *    - Google Domains (domains.google.com)
 	 *    - DNS Made Easy (www.dnsmadeeasy.com)
-	 *    - SPDNS (spdns.de)
-	 *    - SPDNS IPv6 (spdns.de)
+	 *    - SPDYN (spdyn.de)
+	 *    - SPDYN IPv6 (spdyn.de)
 	 * +----------------------------------------------------+
 	 *  Requirements:
 	 *    - PHP version 4.0.2 or higher with the CURL Library and the PCRE Library
@@ -60,7 +82,8 @@
 	 *  ZoneEdit        - Last Tested: NEVER
 	 *  Dyns            - Last Tested: NEVER
 	 *  ODS             - Last Tested: 02 August 2005
-	 *  FreeDNS         - Last Tested: 23 Feb 2011
+	 *  FreeDNS         - Last Tested: 01 May 2016
+	 *  FreeDNS IPv6    - Last Tested: 01 May 2016
 	 *  Loopia          - Last Tested: NEVER
 	 *  StaticCling     - Last Tested: 27 April 2006
 	 *  DNSexit         - Last Tested: 20 July 2008
@@ -72,7 +95,8 @@
 	 *  SelfHost        - Last Tested: 26 December 2011
 	 *  Amazon Route 53 - Last tested: 01 April 2012
 	 *  DNS-O-Matic     - Last Tested: 9 September 2010
-	 *  CloudFlare      - Last Tested: 30 May 2013
+	 *  CloudFlare      - Last Tested: 17 July 2016
+	 *  CloudFlare IPv6 - Last Tested: 17 July 2016
 	 *  Eurodns         - Last Tested: 27 June 2013
 	 *  GratisDNS       - Last Tested: 15 August 2012
 	 *  OVH DynHOST     - Last Tested: NEVER
@@ -81,8 +105,8 @@
 	 *  DNSimple        - Last Tested: 09 February 2015
 	 *  Google Domains  - Last Tested: 27 April 2015
 	 *  DNS Made Easy   - Last Tested: 27 April 2015
-	 *  SPDNS           - Last Tested: 04 December 2015
-	 *  SPDNS IPv6      - Last Tested: 04 December 2015
+	 *  SPDYN           - Last Tested: 02 July 2016
+	 *  SPDYN IPv6      - Last Tested: 02 July 2016
 	 * +====================================================+
 	 *
 	 * @author 	E.Kristensen
@@ -99,7 +123,7 @@
 		var $_cacheFile;
 		var $_cacheFile_v6;
 		var $_debugFile;
-		var $_UserAgent = 'User-Agent: phpDynDNS/0.7';
+		var $_UserAgent = 'phpDynDNS/0.7';
 		var $_errorVerbosity = 0;
 		var $_dnsService;
 		var $_dnsUser;
@@ -145,9 +169,8 @@
 					$dnsZoneID ='', $dnsTTL='', $dnsResultMatch = '', $dnsRequestIf = '',
 					$dnsID = '', $dnsVerboseLog = false, $curlIpresolveV4 = false, $curlSslVerifypeer = true) {
 
-			global $config, $g;
-
-			if ($dnsService == "namecheap") {
+			global $config, $g, $dyndns_split_domain_types;
+			if (in_array($dnsService, $dyndns_split_domain_types)) {
 				$this->_FQDN = $dnsHost . "." . $dnsDomain;
 			} else {
 				$this->_FQDN = $dnsHost;
@@ -169,9 +192,18 @@
 			if (!$dnsService) $this->_error(2);
 			switch ($dnsService) {
 			case 'freedns':
+			case 'freedns-v6':
 				if (!$dnsHost) $this->_error(5);
 				break;
-			case 'namecheap':
+			case "namecheap":
+				if (!$dnsPass) $this->_error(4);
+				if (!$dnsHost) $this->_error(5);
+				if (!$dnsDomain) $this->_error(5);
+				break;
+			case "cloudflare-v6":
+			case "cloudflare":
+			case "gratisdns":
+				if (!$dnsUser) $this->_error(3);
 				if (!$dnsPass) $this->_error(4);
 				if (!$dnsHost) $this->_error(5);
 				if (!$dnsDomain) $this->_error(5);
@@ -192,7 +224,9 @@
 			switch ($dnsService) {
 				case 'he-net-v6':
 				case 'custom-v6':
-				case 'spdns-v6':
+				case 'spdyn-v6':
+				case 'freedns-v6':
+				case 'cloudflare-v6':
 					$this->_useIPv6 = true;
 					break;
 				default:
@@ -200,7 +234,7 @@
 			}
 			$this->_dnsService = strtolower($dnsService);
 			$this->_dnsUser = $dnsUser;
-			$this->_dnsPass = $dnsPass;
+			$this->_dnsPass = base64_decode($dnsPass);
 			$this->_dnsHost = $dnsHost;
 			$this->_dnsDomain = $dnsDomain;
 			$this->_dnsServer = $dnsServer;
@@ -249,6 +283,7 @@
 					case 'dyns':
 					case 'ods':
 					case 'freedns':
+					case 'freedns-v6':
 					case 'loopia':
 					case 'staticcling':
 					case 'dnsexit':
@@ -262,6 +297,7 @@
 					case 'he-net-tunnelbroker':
 					case 'route53':
 					case 'cloudflare':
+					case 'cloudflare-v6':
 					case 'eurodns':
 					case 'gratisdns':
 					case 'ovh-dynhost':
@@ -269,8 +305,8 @@
 					case 'dnsimple':
 					case 'googledomains':
 					case 'dnsmadeeasy':
-					case 'spdns':
-					case 'spdns-v6':
+					case 'spdyn':
+					case 'spdyn-v6':
 						$this->_update();
 						if ($this->_dnsDummyUpdateDone == true) {
 							// If a dummy update was needed, then sleep a while and do the update again to put the proper address back.
@@ -314,7 +350,7 @@
 			}
 
 			if ($this->_dnsService != 'ods' and $this->_dnsService != 'route53 ') {
-				curl_setopt($ch, CURLOPT_HEADER, 0);
+				curl_setopt($ch, CURLOPT_HEADER, 1);
 				curl_setopt($ch, CURLOPT_USERAGENT, $this->_UserAgent);
 				curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
 				curl_setopt($ch, CURLOPT_INTERFACE, 'if!' . $realparentif);
@@ -494,6 +530,7 @@
 					$this->_checkStatus(0, $code);
 					break;
 				case 'freedns':
+				case 'freedns-v6':
 					$needIP = FALSE;
 					curl_setopt($ch, CURLOPT_URL, 'https://freedns.afraid.org/dynamic/update.php?' . $this->_dnsPass);
 					break;
@@ -666,12 +703,13 @@
 					}
 					curl_setopt($ch, CURLOPT_URL, $server);
 					break;
+				case 'cloudflare-v6':
 				case 'cloudflare':
+					$isv6 = ($this->_dnsService === 'cloudflare-v6');
+					$recordType = $isv6 ? "AAAA" : "A";
 					$needsIP = TRUE;
 					$dnsServer ='api.cloudflare.com';
 					$dnsHost = str_replace(' ', '', $this->_dnsHost);
-					$host_names = explode(".", $dnsHost);
-					$bottom_host_name = $host_names[count($host_names)-2] . "." . $host_names[count($host_names)-1];
 
 					curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
 					curl_setopt($ch, CURLOPT_HTTPHEADER, array(
@@ -681,19 +719,19 @@
 					));
 
 					// Get zone ID
-					$getZoneId = "https://{$dnsServer}/client/v4/zones/?name={$bottom_host_name}";
+					$getZoneId = "https://{$dnsServer}/client/v4/zones/?name={$this->_dnsDomain}";
 					curl_setopt($ch, CURLOPT_URL, $getZoneId);
 					$output = json_decode(curl_exec($ch));
 					$zone = $output->result[0]->id;
 					if ($zone) { // If zone ID was found get host ID
-						$getHostId = "https://{$dnsServer}/client/v4/zones/{$zone}/dns_records?name={$this->_dnsHost}";
+						$getHostId = "https://{$dnsServer}/client/v4/zones/{$zone}/dns_records?name={$this->_FQDN}&type={$recordType}";
 						curl_setopt($ch, CURLOPT_URL, $getHostId);
 						$output = json_decode(curl_exec($ch));
 						$host = $output->result[0]->id;
 						if ($host) { // If host ID was found update host
 							$hostData = array(
 								"content" => "{$this->_dnsIP}",
-								"type" => "A",
+								"type" => "{$recordType}",
 								"name" => "{$this->_dnsHost}"
 							);
 							$data_json = json_encode($hostData);
@@ -717,15 +755,7 @@
 				case 'gratisdns':
 					$needsIP = TRUE;
 					$server = "https://ssl.gratisdns.dk/ddns.phtml";
-					$host = trim($this->_dnsHost);
-					$hostnames = explode(".", $host);
-					$hostnames_count = count($hostnames);
-					if ($hostnames_count > 2) {
-						$domain = $hostnames[$hostnames_count-2] . "." . $hostnames[$hostnames_count-1];
-					} else {
-						$domain = $host;
-					}
-					curl_setopt($ch, CURLOPT_URL, $server . '?u=' . $this->_dnsUser . '&p=' . $this->_dnsPass . '&h=' . $host . '&d=' . $domain . '&i=' . $this->_dnsIP);
+					curl_setopt($ch, CURLOPT_URL, $server . '?u=' . $this->_dnsUser . '&p=' . $this->_dnsPass . '&h=' . $this->_dnsHost . '&d=' . $this->_dnsDomain . '&i=' . $this->_dnsIP);
 					break;
 				case 'ovh-dynhost':
 					$needsIP = FALSE;
@@ -786,11 +816,11 @@
 					$server = "https://cp.dnsmadeeasy.com/servlet/updateip";
 					curl_setopt($ch, CURLOPT_URL, $server . '?username=' . $this->_dnsUser . '&password=' . $this->_dnsPass . '&id=' . $this->_dnsHost . '&ip=' . $this->_dnsIP);
 					break;
-				case 'spdns':
-				case 'spdns-v6':
+				case 'spdyn':
+				case 'spdyn-v6':
 					$needsIP = FALSE;
 					curl_setopt($ch, CURLOPT_USERPWD, $this->_dnsUser.':'.$this->_dnsPass);
-					$server = "https://update.spdns.de/nic/update";
+					$server = "https://update.spdyn.de/nic/update";
 					$port = "";
 					if ($this->_dnsServer) {
 						$server = $this->_dnsServer;
@@ -804,8 +834,11 @@
 					break;
 			}
 			if ($this->_dnsService != 'ods' and $this->_dnsService != 'route53') {
-				$data = curl_exec($ch);
-				$this->_checkStatus($ch, $data);
+				$response = curl_exec($ch);
+				$header_size = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+				$header = substr($response, 0, $header_size);
+				$data = substr($response, $header_size);
+				$this->_checkStatus($ch, $data, $header);
 				@curl_close($ch);
 			}
 		}
@@ -1069,6 +1102,7 @@
 					}
 					break;
 				case 'freedns':
+				case 'freedns-v6':
 					if (preg_match("/has not changed./i", $data)) {
 						$status = $status_intro . $success_str . gettext("No Change In IP Address");
 						$successful_update = true;
@@ -1261,6 +1295,7 @@
 						$status = $status_intro . $error_str . gettext("Result did not match.") . " [" . $data . "]";
 					}
 					break;
+				case 'cloudflare-v6':
 				case 'cloudflare':
 					$output = json_decode($data);
 					if ($output->result->content === $this->_dnsIP) {
@@ -1314,14 +1349,12 @@
 					/* Responds with HTTP 200 on success.
 					   Responds with HTTP 4xx on error.
 					   Returns JSON data as body */
-					$header_size = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-					$header = substr($data, 0, $header_size);
-					$body = substr($data, $header_size);
-					if (preg_match("/Status: 200\s/i", $header)) {
+;
+					if (preg_match("/\s200\sOK/i", $header)) {
 						$status = $status_intro . $success_str . gettext("IP Address Updated Successfully!");
 						$successful_update = true;
-					} else if (preg_match("/Status: 4\d\d\s/i", $header)) {
-						$arrbody = json_decode($body, true);
+					} else if (preg_match("/\s4\d\d\s/i", $header)) {
+						$arrbody = json_decode($data, true);
 						$message = $arrbody['message'] . ".";
 						if (isset($arrbody['errors']['content'])) {
 							foreach ($arrbody['errors']['content'] as $key => $content) {
@@ -1331,8 +1364,8 @@
 						$status = $status_intro . $error_str . $message;
 					} else {
 						$status = $status_intro . "(" . gettext("Unknown Response") . ")";
-						log_error($status_intro . gettext("PAYLOAD:") . " " . $body);
-						$this->_debug($body);
+						log_error($status_intro . gettext("PAYLOAD:") . " " . $data);
+						$this->_debug($data);
 					}
 					break;
 				case 'googledomains':
@@ -1398,8 +1431,8 @@
 							break;
 					}
 					break;
-				case 'spdns':
-				case 'spdns-v6':
+				case 'spdyn':
+				case 'spdyn-v6':
 					if (preg_match('/notfqdn/i', $data)) {
 						$status = $status_intro . $error_str . gettext("Not A FQDN!");
 					} else if (preg_match('/nohost/i', $data)) {
@@ -1423,7 +1456,6 @@
 			if ($successful_update == true) {
 				/* Write WAN IP to cache file */
 				$wan_ip = $this->_checkIP();
-				conf_mount_rw();
 				if ($this->_useIPv6 == false && $wan_ip > 0) {
 					$currentTime = time();
 					notify_all_remote(sprintf(gettext('DynDNS updated IP Address on %1$s (%2$s) to %3$s'), convert_real_interface_to_friendly_descr($this->_if), $this->_if, $wan_ip));
@@ -1440,7 +1472,6 @@
 				} else {
 					@unlink($this->_cacheFile_v6);
 				}
-				conf_mount_ro();
 			}
 			$this->status = $status;
 			log_error($status);
@@ -1523,10 +1554,8 @@
 					$initial = false;
 					$log_error .= sprintf(gettext("Cached IPv6: %s"), $cacheIP);
 				} else {
-					conf_mount_rw();
 					$cacheIP = '::';
 					@file_put_contents($this->_cacheFile, "::|{$currentTime}");
-					conf_mount_ro();
 					$cacheTime = $currentTime;
 					$initial = true;
 					$log_error .= gettext("No Cached IPv6 found.");
@@ -1539,10 +1568,8 @@
 					$initial = false;
 					$log_error .= sprintf(gettext("Cached IP: %s"), $cacheIP);
 				} else {
-					conf_mount_rw();
 					$cacheIP = '0.0.0.0';
 					@file_put_contents($this->_cacheFile, "0.0.0.0:{$currentTime}");
-					conf_mount_ro();
 					$cacheTime = $currentTime;
 					$initial = true;
 					$log_error .= gettext("No Cached IP found.");
@@ -1599,11 +1626,9 @@
 				return;
 			}
 			$string = date('m-d-y h:i:s').' - ('.$this->_debugID.') - ['.$this->_dnsService.'] - '.$data."\n";
-			conf_mount_rw();
 			$file = fopen($this->_debugFile, 'a');
 			fwrite($file, $string);
 			fclose($file);
-			conf_mount_ro();
 		}
 		function _checkIP() {
 			global $debug;

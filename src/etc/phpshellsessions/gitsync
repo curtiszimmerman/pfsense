@@ -1,8 +1,22 @@
-/*   cvs_sync
- *   Written by Scott Ullrich
- *   (C)2005-2007 Scott Ullrich
- *   (C)2010-2012 Erik Fonnesbeck
- *   Part of the pfSense project pfSsh.php subsystem
+/*
+ * gitsync
+ *
+ * part of pfSense (https://www.pfsense.org)
+ * Copyright (c) 2010-2012 Erik Fonnesbeck
+ * Copyright (c) 2004-2016 Rubicon Communications, LLC (Netgate)
+ * All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 require_once("globals.inc");
@@ -35,9 +49,16 @@ if (is_array($command_split)) {
 }
 
 $valid_args = array(
-	"--minimal" => "\tPerform a minimal copy of only the updated files.\n" .
+	"--minimal" => "\tPerform a copy of only the updated files.\n" .
 	    "\tNot recommended if the system has files modified by any method other\n" .
 	    "\tthan gitsync.\n",
+	"--diff" => "\tPerform a copy of only the different and missing files.\n" .
+	    "\tRecommended for SSD if system has files modified by any method other\n" .
+	    "\tthan gitsync.\n",
+	"--show-files" => "\tShow the updated, different and missing files.\n" .
+	    "\t(when used with --minimal and --diff options)\n",
+	"--show-command" => "\tShow the constructed command.\n",
+	"--dry-run" => "\tDry-run only.  No files copied.\n",
 	"--help" => "\tDisplay this help list.\n"
 	);
 $args = array();
@@ -68,8 +89,70 @@ while (!empty($temp_args)) {
 	}
 }
 
+if (!function_exists('post_cvssync_commands')) {
+function post_cvssync_commands() {
+	echo "===> Removing FAST-CGI temporary files...\n";
+	exec("find /tmp -name \"php-fastcgi.socket*\" -exec rm -rf {} \;");
+	exec("find /tmp -name \"*.tmp\" -exec rm -rf {} \;");
+
+	exec("rm -rf /tmp/xcache/* 2>/dev/null");
+
+	echo "===> Upgrading configuration (if needed)...\n";
+	convert_config();
+
+	echo "===> Configuring filter...";
+	exec("/etc/rc.filter_configure_sync");
+	exec("pfctl -f /tmp/rules.debug");
+	echo "\n";
+
+	if (file_exists("/etc/rc.php_ini_setup")) {
+		echo "===> Running /etc/rc.php_ini_setup...";
+		exec("/etc/rc.php_ini_setup >/dev/null 2>&1");
+		echo "\n";
+	}
+
+	/* lock down console if necessary */
+	echo "===> Locking down the console if needed...\n";
+	reload_ttys();
+
+	echo "===> Signaling PHP and nginx restart...";
+	$fd = fopen("/tmp/restart_nginx", "w");
+	fwrite($fd, "#!/bin/sh\n");
+	fwrite($fd, "sleep 5\n");
+	fwrite($fd, "/usr/local/sbin/pfSctl -c 'service restart webgui'\n");
+	fclose($fd);
+	mwexec_bg("sh /tmp/restart_nginx");
+	echo "\n";
+}
+}
+
+if (!function_exists('isUrl')) {
+function isUrl($url = "") {
+	if ($url) {
+		if (strstr($url, "rcs.pfsense.org") or
+			strstr($url, "mainline") or
+			strstr($url, ".git") or
+			strstr($url, "git://")) {
+			return true;
+		}
+	}
+	return false;
+}
+}
+
+if (!function_exists('run_cmds')) {
+function run_cmds($cmds) {
+	global $debug;
+	foreach ($cmds as $cmd) {
+		if ($debug) {
+			echo "Running $cmd";
+		}
+		exec($cmd);
+	}
+}
+}
+
 unlink_if_exists("/tmp/config.cache");
-conf_mount_rw();
 
 if (!file_exists($GIT_BIN)) {
 	require_once("pkg-utils.inc");
@@ -174,7 +257,6 @@ if (!$found) {
 	}
 	if (!$found) {
 		echo "\nNo valid branch found.  Exiting.\n\n";
-		conf_mount_ro();
 		exit;
 	}
 }
@@ -218,16 +300,14 @@ if (!$args[0] && !$upgrading) {
 	} while (!empty($merge_repo));
 }
 
-if ($branch == "RESTORE" && $g['platform'] == $g['product_name']) {
+if ($branch == "RESTORE") {
 	if (!file_exists("/root/cvssync_backup.tgz")) {
 		echo "Sorry, we could not find a previous CVSSync backup file.\n";
-		conf_mount_ro();
 		exit();
 	}
 	echo "===> Restoring previous CVSSync backup... Please wait...\n";
 	exec("tar Uxpf /root/cvssync_backup.tgz -C /");
 	post_cvssync_commands();
-	conf_mount_ro();
 	exit();
 } else {
 	$nobackup = true; // do not backup embedded
@@ -286,24 +366,34 @@ foreach ($merge_repos as $merge_repo) {
 	if ($ret <> 0) {
 		echo "\nMerge failed.  Aborting sync.\n\n";
 		run_cmds($git_cmd);
-		conf_mount_ro();
 		exit;
 	}
 }
 
+$updated_files_array[1] = array();
 if (isset($args["--minimal"])) {
 	if (file_exists("/etc/version.gitsync")) {
 		$old_revision = trim(file_get_contents("/etc/version.gitsync"));
 	} else if (file_exists("/etc/version.lastcommit")) {
 		$old_revision = trim(file_get_contents("/etc/version.lastcommit"));
 	}
-	$files_to_copy = strtr(shell_exec("cd $CODIR/pfSenseGITREPO/pfSenseGITREPO && {$GIT_BIN} diff --name-only --relative=src " . escapeshellarg($old_revision)), "\n", " ");
-} else {
-	$files_to_copy = '-C ./src .';
+
+	# Find updated files.
+	$updated_files = shell_exec("cd $CODIR/pfSenseGITREPO/pfSenseGITREPO && {$GIT_BIN} diff --name-only --relative=src " . escapeshellarg($old_revision));
+
+	# Get the path of each updated file.
+	preg_match_all('@(?:^(.+?)$)@sim', $updated_files, $updated_files_array, PREG_PATTERN_ORDER);
+
+	if(isset($args["--show-files"])) {
+		echo "===> Updated Files: \n";
+		print_r($updated_files_array[1]);
+	}
 }
 
 // Save new commit ID for later minimal file copies
-exec("cd $CODIR/pfSenseGITREPO/pfSenseGITREPO && {$GIT_BIN} rev-parse -q --verify HEAD > /etc/version.gitsync");
+if(!isset($args["--dry-run"])) {
+	exec("cd $CODIR/pfSenseGITREPO/pfSenseGITREPO && {$GIT_BIN} rev-parse -q --verify HEAD > /etc/version.gitsync");
+}
 
 // Remove files that we do not want to overwrite the system with
 @unlink("{$CODIR}/pfSenseGITREPO/pfSenseGITREPO/src/etc/crontab");
@@ -324,16 +414,81 @@ exec("rm -rf {$CODIR}/pfSenseGITREPO/pfSenseGITREPO/src/conf*");
 exec("rm -rf {$CODIR}/pfSenseGITREPO/pfSenseGITREPO/src/cf 2>/dev/null");
 @chmod("{$CODIR}/pfSenseGITREPO/pfSenseGITREPO/src/tmp", 01777);
 
-echo "===> Installing new files...\n";
+$different_files_array[1] = array();
+$missing_files_array[1] = array();
+if(isset($args["--diff"])) {
+	# Find different and missing files.
+	$different_missing_files = shell_exec("/usr/bin/diff -qr / $CODIR/pfSenseGITREPO/pfSenseGITREPO/src/ | /usr/bin/grep -E '^(Files .*? and $CODIR/pfSenseGITREPO/pfSenseGITREPO/src/.*? differ)|(Only in $CODIR/pfSenseGITREPO/pfSenseGITREPO/src/)'");
 
-if ($g['platform'] == $g['product_name']) {
-	$command = "cd $CODIR/pfSenseGITREPO/pfSenseGITREPO ; tar -cpf - {$files_to_copy} | (cd / ; tar -Uxpf -)";
-} else {
-	$command = "cd $CODIR/pfSenseGITREPO/pfSenseGITREPO ; tar -cpf - {$files_to_copy} | (cd / ; tar -xpf -) 2>/dev/null";
+	# Get the path of each different or missing file.
+	preg_match_all('@(?:^Files .*? and '.$CODIR.'/pfSenseGITREPO/pfSenseGITREPO/src/(.+?) differ.*?$)@sim', $different_missing_files, $different_files_array, PREG_PATTERN_ORDER);
+	preg_match_all('@(?:^Only in '.$CODIR.'/pfSenseGITREPO/pfSenseGITREPO/src/(.+?)$)@sim', $different_missing_files, $missing_files_array, PREG_PATTERN_ORDER);
+
+	# Deal with diff's output format of missing files (path: missing_file).
+	foreach ($missing_files_array[1] as $key => $file) {
+
+		# Most of the time there will be only the one ': ' injected by diff output.  So global replace with dir delimiter (/) is fine.
+		$tmp = str_replace(": ", "/", $file, $count);
+		if ($count == 1)
+			$file = ltrim($tmp, "/");
+
+		# For the very rare case a path component (dir or file) contains ': ' as well, then need to find and replace only the ': ' injected by diff output.
+		else {
+			$tmp = $file;
+			do {
+				$pos = strrpos($tmp, ": ");
+				if ($pos) {
+					$tmp = substr($tmp, 0, $pos);
+					$res = is_dir("$CODIR/pfSenseGITREPO/pfSenseGITREPO/src/$tmp/");
+				}
+			} while (!$res && $pos);
+
+			if ($res)
+				$file = ltrim($tmp . "/" . substr($file, $pos+2), "/");
+		}
+
+		$missing_files_array[1][$key] = $file;
+	}
+
+	if(isset($args["--show-files"])) {
+		echo "===> Different Files: \n";
+		print_r($different_files_array[1]);
+		echo "===> Missing Files: \n";
+		print_r($missing_files_array[1]);
+	}
 }
 
+# Files to be copied.
+if(isset($args["--minimal"]) || isset($args["--diff"])) {
+	$files_to_copy_array = array_merge($updated_files_array[1], $different_files_array[1], $missing_files_array[1]);
+	$files_to_copy_array = array_unique($files_to_copy_array);
+
+	unset($updated_files_array, $different_files_array, $missing_files_array);
+
+	# Convert the list from an array to a space separated quoted string.  Quoted for white space file name support.
+	if (count($files_to_copy_array) > 0) {	# Leave the string empty/unset if there is nothing to copy.
+		$files_to_copy = '"' . implode('" "', $files_to_copy_array) . '"';
+	}
+	$qty_files_to_copy = count($files_to_copy_array);
+	unset($files_to_copy_array);
+} else {
+	$files_to_copy = '.';
+	$qty_files_to_copy = chr(8);
+}
+
+$tar_options = '-C ./src';
+
+echo "===> Installing $qty_files_to_copy new files...\n";
+
+$command = "cd $CODIR/pfSenseGITREPO/pfSenseGITREPO ; tar -cpf - {$tar_options} {$files_to_copy} | (cd / ; tar -Uxpf -)";
+
 if (!empty($files_to_copy)) {
-	exec($command);
+	if(isset($args["--show-command"])) {
+		echo "===> Command: \n$command\n";
+	}
+	if(!isset($args["--dry-run"])) {
+		exec($command);
+	}
 } else {
 	echo "Already up-to-date.\n";
 	$upgrading = true;
@@ -362,62 +517,3 @@ if (!$upgrading) {
 	echo "Your system is now sync'd.\n\n";
 }
 
-function post_cvssync_commands() {
-	echo "===> Removing FAST-CGI temporary files...\n";
-	exec("find /tmp -name \"php-fastcgi.socket*\" -exec rm -rf {} \;");
-	exec("find /tmp -name \"*.tmp\" -exec rm -rf {} \;");
-
-	exec("rm -rf /tmp/xcache/* 2>/dev/null");
-
-	echo "===> Upgrading configuration (if needed)...\n";
-	convert_config();
-
-	echo "===> Configuring filter...";
-	exec("/etc/rc.filter_configure_sync");
-	exec("pfctl -f /tmp/rules.debug");
-	echo "\n";
-
-	if (file_exists("/etc/rc.php_ini_setup")) {
-		echo "===> Running /etc/rc.php_ini_setup...";
-		exec("/etc/rc.php_ini_setup >/dev/null 2>&1");
-		echo "\n";
-	}
-
-	/* lock down console if necessary */
-	echo "===> Locking down the console if needed...\n";
-	reload_ttys();
-
-	echo "===> Signaling PHP and nginx restart...";
-	$fd = fopen("/tmp/restart_nginx", "w");
-	fwrite($fd, "#!/bin/sh\n");
-	fwrite($fd, "sleep 5\n");
-	fwrite($fd, "/usr/local/sbin/pfSctl -c 'service restart webgui'\n");
-	fclose($fd);
-	mwexec_bg("sh /tmp/restart_nginx");
-	echo "\n";
-
-}
-
-function isUrl($url = "") {
-	if ($url) {
-		if (strstr($url, "rcs.pfsense.org") or
-			strstr($url, "mainline") or
-			strstr($url, ".git") or
-			strstr($url, "git://")) {
-			return true;
-		}
-	}
-	return false;
-}
-
-function run_cmds($cmds) {
-	global $debug;
-	foreach ($cmds as $cmd) {
-		if ($debug) {
-			echo "Running $cmd";
-		}
-		exec($cmd);
-	}
-}
-
-conf_mount_ro();

@@ -1,59 +1,26 @@
 <?php
 /*
-	diag_backup.php
-*/
-/* ====================================================================
- *	Copyright (c)  2004-2015  Electric Sheep Fencing, LLC. All rights reserved.
+ * diag_backup.php
  *
- *  Some or all of this file is based on the m0n0wall project which is
- *  Copyright (c)  2004 Manuel Kasper (BSD 2 clause)
+ * part of pfSense (https://www.pfsense.org)
+ * Copyright (c) 2004-2016 Rubicon Communications, LLC (Netgate)
+ * All rights reserved.
  *
- *	Redistribution and use in source and binary forms, with or without modification,
- *	are permitted provided that the following conditions are met:
+ * originally based on m0n0wall (http://m0n0.ch/wall)
+ * Copyright (c) 2003-2004 Manuel Kasper <mk@neon1.net>.
+ * All rights reserved.
  *
- *	1. Redistributions of source code must retain the above copyright notice,
- *		this list of conditions and the following disclaimer.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *	2. Redistributions in binary form must reproduce the above copyright
- *		notice, this list of conditions and the following disclaimer in
- *		the documentation and/or other materials provided with the
- *		distribution.
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *	3. All advertising materials mentioning features or use of this software
- *		must display the following acknowledgment:
- *		"This product includes software developed by the pfSense Project
- *		 for use in the pfSense software distribution. (http://www.pfsense.org/).
- *
- *	4. The names "pfSense" and "pfSense Project" must not be used to
- *		 endorse or promote products derived from this software without
- *		 prior written permission. For written permission, please contact
- *		 coreteam@pfsense.org.
- *
- *	5. Products derived from this software may not be called "pfSense"
- *		nor may "pfSense" appear in their names without prior written
- *		permission of the Electric Sheep Fencing, LLC.
- *
- *	6. Redistributions of any form whatsoever must retain the following
- *		acknowledgment:
- *
- *	"This product includes software developed by the pfSense Project
- *	for use in the pfSense software distribution (http://www.pfsense.org/).
- *
- *	THIS SOFTWARE IS PROVIDED BY THE pfSense PROJECT ``AS IS'' AND ANY
- *	EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- *	IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- *	PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE pfSense PROJECT OR
- *	ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *	SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- *	NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- *	LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- *	HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- *	STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- *	ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
- *	OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *	====================================================================
- *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 ##|+PRIV
@@ -69,7 +36,7 @@ ini_set('max_input_time', '0');
 
 /* omit no-cache headers because it confuses IE with file downloads */
 $omit_nocacheheaders = true;
-require("guiconfig.inc");
+require_once("guiconfig.inc");
 require_once("functions.inc");
 require_once("filter.inc");
 require_once("shaper.inc");
@@ -197,9 +164,7 @@ function check_and_returnif_section_exists($section) {
 if ($_POST['apply']) {
 	ob_flush();
 	flush();
-	conf_mount_rw();
 	clear_subsystem_dirty("restore");
-	conf_mount_ro();
 	exit;
 }
 
@@ -344,7 +309,6 @@ if ($_POST) {
 									write_config();
 									add_base_packages_menu_items();
 									convert_config();
-									conf_mount_ro();
 								}
 								filter_configure();
 								$savemsg = gettext("The configuration area has been restored. The firewall may need to be rebooted.");
@@ -358,7 +322,6 @@ if ($_POST) {
 							file_put_contents($_FILES['conffile']['tmp_name'], $data);
 							if (config_install($_FILES['conffile']['tmp_name']) == 0) {
 								/* this will be picked up by /index.php */
-								conf_mount_rw();
 								mark_subsystem_dirty("restore");
 								touch("/conf/needs_package_sync_after_reboot");
 								/* remove cache, we will force a config reboot */
@@ -382,7 +345,6 @@ if ($_POST) {
 									write_config();
 									add_base_packages_menu_items();
 									convert_config();
-									conf_mount_ro();
 								}
 								if ($m0n0wall_upgrade == true) {
 									if ($config['system']['gateway'] <> "") {
@@ -434,56 +396,16 @@ if ($_POST) {
 									}
 									// Convert icmp types
 									// http://www.openbsd.org/cgi-bin/man.cgi?query=icmp&sektion=4&arch=i386&apropos=0&manpath=OpenBSD+Current
-									for ($i = 0; isset($config["filter"]["rule"][$i]); $i++) {
-										if ($config["filter"]["rule"][$i]['icmptype']) {
-											switch ($config["filter"]["rule"][$i]['icmptype']) {
-												case "echo":
-													$config["filter"]["rule"][$i]['icmptype'] = "echoreq";
-													break;
-												case "unreach":
-													$config["filter"]["rule"][$i]['icmptype'] = "unreach";
-													break;
-												case "echorep":
-													$config["filter"]["rule"][$i]['icmptype'] = "echorep";
-													break;
-												case "squench":
-													$config["filter"]["rule"][$i]['icmptype'] = "squench";
-													break;
-												case "redir":
-													$config["filter"]["rule"][$i]['icmptype'] = "redir";
-													break;
-												case "timex":
-													$config["filter"]["rule"][$i]['icmptype'] = "timex";
-													break;
-												case "paramprob":
-													$config["filter"]["rule"][$i]['icmptype'] = "paramprob";
-													break;
-												case "timest":
-													$config["filter"]["rule"][$i]['icmptype'] = "timereq";
-													break;
-												case "timestrep":
-													$config["filter"]["rule"][$i]['icmptype'] = "timerep";
-													break;
-												case "inforeq":
-													$config["filter"]["rule"][$i]['icmptype'] = "inforeq";
-													break;
-												case "inforep":
-													$config["filter"]["rule"][$i]['icmptype'] = "inforep";
-													break;
-												case "maskreq":
-													$config["filter"]["rule"][$i]['icmptype'] = "maskreq";
-													break;
-												case "maskrep":
-													$config["filter"]["rule"][$i]['icmptype'] = "maskrep";
-													break;
-											}
+									$convert = array('echo' => 'echoreq', 'timest' => 'timereq', 'timestrep' => 'timerep');
+									foreach ($config["filter"]["rule"] as $ruleid => &$ruledata) {
+										if ($convert[$ruledata['icmptype']]) {
+											$ruledata['icmptype'] = $convert[$ruledata['icmptype']];
 										}
 									}
 									$config['diag']['ipv6nat'] = true;
 									write_config();
 									add_base_packages_menu_items();
 									convert_config();
-									conf_mount_ro();
 									$savemsg = gettext("The m0n0wall configuration has been restored and upgraded to pfSense.");
 									mark_subsystem_dirty("restore");
 								}

@@ -1,59 +1,26 @@
 <?php
 /*
-	firewall_nat_out_edit.php
-*/
-/* ====================================================================
- *  Copyright (c)  2004-2015  Electric Sheep Fencing, LLC. All rights reserved.
+ * firewall_nat_out_edit.php
  *
- *  Some or all of this file is based on the m0n0wall project which is
- *  Copyright (c)  2004 Manuel Kasper (BSD 2 clause)
+ * part of pfSense (https://www.pfsense.org)
+ * Copyright (c) 2004-2016 Rubicon Communications, LLC (Netgate)
+ * All rights reserved.
  *
- *  Redistribution and use in source and binary forms, with or without modification,
- *  are permitted provided that the following conditions are met:
+ * originally based on m0n0wall (http://m0n0.ch/wall)
+ * Copyright (c) 2003-2004 Manuel Kasper <mk@neon1.net>.
+ * All rights reserved.
  *
- *  1. Redistributions of source code must retain the above copyright notice,
- *      this list of conditions and the following disclaimer.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *  2. Redistributions in binary form must reproduce the above copyright
- *      notice, this list of conditions and the following disclaimer in
- *      the documentation and/or other materials provided with the
- *      distribution.
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *  3. All advertising materials mentioning features or use of this software
- *      must display the following acknowledgment:
- *      "This product includes software developed by the pfSense Project
- *       for use in the pfSense software distribution. (http://www.pfsense.org/).
- *
- *  4. The names "pfSense" and "pfSense Project" must not be used to
- *       endorse or promote products derived from this software without
- *       prior written permission. For written permission, please contact
- *       coreteam@pfsense.org.
- *
- *  5. Products derived from this software may not be called "pfSense"
- *      nor may "pfSense" appear in their names without prior written
- *      permission of the Electric Sheep Fencing, LLC.
- *
- *  6. Redistributions of any form whatsoever must retain the following
- *      acknowledgment:
- *
- *  "This product includes software developed by the pfSense Project
- *  for use in the pfSense software distribution (http://www.pfsense.org/).
- *
- *  THIS SOFTWARE IS PROVIDED BY THE pfSense PROJECT ``AS IS'' AND ANY
- *  EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- *  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- *  PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE pfSense PROJECT OR
- *  ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- *  NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- *  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- *  HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- *  STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- *  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
- *  OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *  ====================================================================
- *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 ##|+PRIV
@@ -63,10 +30,10 @@
 ##|*MATCH=firewall_nat_out_edit.php*
 ##|-PRIV
 
-require("guiconfig.inc");
+require_once("guiconfig.inc");
 require_once("ipsec.inc");
 require_once("filter.inc");
-require("shaper.inc");
+require_once("shaper.inc");
 
 if (!is_array($config['nat']['outbound'])) {
 	$config['nat']['outbound'] = array();
@@ -130,6 +97,7 @@ if (isset($id) && $a_out[$id]) {
 	$pconfig['targetip'] = $a_out[$id]['targetip'];
 	$pconfig['targetip_subnet'] = $a_out[$id]['targetip_subnet'];
 	$pconfig['poolopts'] = $a_out[$id]['poolopts'];
+	$pconfig['source_hash_key'] = $a_out[$id]['source_hash_key'];
 	$pconfig['interface'] = $a_out[$id]['interface'];
 
 	if (!$pconfig['interface']) {
@@ -260,6 +228,7 @@ if ($_POST) {
 
 	/* Verify Pool Options */
 	$poolopts = "";
+	$source_hash_key = "";
 	if ($_POST['poolopts']) {
 		if (is_subnet($_POST['target']) || ($_POST['target'] == "other-subnet")) {
 			$poolopts = $_POST['poolopts'];
@@ -268,6 +237,18 @@ if ($_POST) {
 				$poolopts = $_POST['poolopts'];
 			} else {
 				$input_errors[] = gettext("Only Round Robin pool options may be chosen when selecting an alias.");
+			}
+		}
+		/* If specified, verify valid source-hash key or generate a valid key using md5 */
+		if ($_POST['source_hash_key']) {
+			if (substr($_POST['source_hash_key'],0,2) == "0x") {
+				if (ctype_xdigit(substr($_POST['source_hash_key'],2)) && strlen($_POST['source_hash_key']) == 34) {
+					$source_hash_key = $_POST['source_hash_key'];
+				} else {
+					$input_errors[] = gettext("Incorrect format for source-hash key, \"0x\" must be followed by exactly 32 hexadecimal characters.");
+				}
+			} else {
+				$source_hash_key = "0x".md5($_POST['source_hash_key']);
 			}
 		}
 	}
@@ -312,6 +293,7 @@ if ($_POST) {
 		$natent['targetip_subnet'] = (!isset($_POST['nonat'])) ? $_POST['targetip_subnet'] : "";
 		$natent['interface'] = $_POST['interface'];
 		$natent['poolopts'] = $poolopts;
+		$natent['source_hash_key'] = $source_hash_key;
 
 		/* static-port */
 		if (isset($_POST['staticnatport']) && $protocol_uses_ports && !isset($_POST['nonat'])) {
@@ -493,7 +475,7 @@ $section->addInput(new Form_Select(
 	'Interface',
 	$pconfig['interface'],
 	$interfaces
-))->setHelp('Choose which interface this rule applies to. In most cases "WAN" is specified.');
+))->setHelp('The interface on which traffic is matched as it exits the firewall. In most cases this is "WAN" or another externally-connected interface.');
 
 $protocols = "any TCP UDP TCP/UDP ICMP ESP AH GRE IPV6 IGMP carp pfsync";
 
@@ -517,14 +499,14 @@ $group->add(new Form_IpAddress(
 	'source',
 	null,
 	$pconfig['source']
-))->addMask('source_subnet', $pconfig['source_subnet'])->setHelp('Source network for the outbound NAT mapping.')->setPattern('[a-zA-Z0-9\_\.\:]+');
+))->addMask('source_subnet', $pconfig['source_subnet'])->setHelp('Source network for the outbound NAT mapping.')->setPattern('[a-zA-Z0-9_.:]+');
 
 $group->add(new Form_Input(
 	'sourceport',
 	null,
 	'text',
 	$pconfig['sourceport']
-))->setHelp('Port')->setWidth('2');
+))->setHelp('Port or Range')->setWidth('2');
 
 $section->add($group);
 
@@ -541,14 +523,14 @@ $group->add(new Form_IpAddress(
 	'destination',
 	null,
 	$pconfig['destination'] == "any" ? "":$pconfig['destination']
-))->addMask('destination_subnet', $pconfig['destination_subnet'])->setHelp('Destination network for the outbound NAT mapping.')->setPattern('[a-zA-Z0-9\_\.\:]+');
+))->addMask('destination_subnet', $pconfig['destination_subnet'])->setHelp('Destination network for the outbound NAT mapping.')->setPattern('[a-zA-Z0-9_.:]+');
 
 $group->add(new Form_Input(
 	'dstport',
 	null,
 	'text',
 	$pconfig['dstport']
-))->setHelp('Port')->setWidth('2');
+))->setHelp('Port or Range')->setWidth('2');
 
 $section->add($group);
 
@@ -569,18 +551,17 @@ $section->addInput(new Form_Select(
 	'Address',
 	$pconfig['target'],
 	build_target_list()
-));
+))->setHelp(	'Connections matching this rule will be mapped to the specified <b>Address</b>.' . '<br />' .
+		'The <b>Address</b> can be an Interface, a Host-type Alias, or a ' .
+		'<a href="firewall_virtual_ip.php">' . gettext("Virtual IP") . '</a> ' . ' address.');
 
 $section->addInput(new Form_IpAddress(
 	'targetip',
 	'Other subnet',
 	$pconfig['targetip']
-))->addMask('targetip_subnet', $pconfig['targetip_subnet'])->addClass('othersubnet')->setHelp(
-		'Packets matching this rule will be mapped to the IP address given here.' . '<br />' .
-		'To apply this rule to a different IP address than the IP address of the interface chosen above, ' .
-		'select it here (' .
-		'<a href="firewall_virtual_ip.php">' . gettext("Virtual IP") . '</a> ' .
-		'addresses need to be defined on the interface first)');
+))->addMask('targetip_subnet', $pconfig['targetip_subnet'])->setHelp(
+		'This subnet must be routed to the firewall or each address in the subnet must be defined in one or more ' .
+		'<a href="firewall_virtual_ip.php">' . gettext("Virtual IP") . '</a> ' . ' addresses.');
 
 $section->addInput(new Form_Select(
 	'poolopts',
@@ -604,7 +585,14 @@ $section->addInput(new Form_Select(
 				'<li>' . 'Sticky Address: The Sticky Address option can be used with the Random and Round Robin pool types to ensure that a particular source address is always mapped to the same translation address.' . '</li>' .
 			'</ul><span class="help-block">');
 
-$group = new Form_Group('Port');
+$section->addInput(new Form_Input(
+	'source_hash_key',
+	'Source Hash Key',
+	'text',
+	$pconfig['source_hash_key']
+))->setHelp('The key that is fed to the hashing algorithm in hex format, preceeded by "0x", or any string. A non-hex string is hashed using md5 to a hexadecimal key. Defaults to a randomly generated value.')->setWidth(10);
+
+$group = new Form_Group('Port or Range');
 $group->addClass('natportgrp');
 
 $group->add(new Form_Input(
@@ -612,12 +600,15 @@ $group->add(new Form_Input(
 	null,
 	'text',
 	$pconfig['natport']
-))->setHelp('Enter the source port or range for the outbound NAT mapping.');
+))->setHelp('Enter the external source <b>Port or Range</b> used for remapping '.
+		'the original source port on connections matching the rule. <br/><br/>'.
+		'Port ranges are a low port and high port number separated by ":".<br/>'.
+		'Leave blank when <b>Static Port</b> is checked.');
 
 $group->add(new Form_Checkbox(
 	'staticnatport',
 	null,
-	'Static port',
+	'Static Port',
 	$pconfig['staticnatport']
 ));
 
@@ -747,17 +738,25 @@ events.push(function() {
 	function poolopts_change() {
 		if ($('#target option:selected').text().trim().substring(0,4) == "Host") {
 			hideInput('poolopts', false);
-			hideGroupClass('othersubnet', true);
+			hideInput('source_hash_key', true);
+			hideIpAddress('targetip', true);
 		} else if ($('#target option:selected').text().trim().substring(0,6) == "Subnet") {
 			hideInput('poolopts', false);
-			hideGroupClass('othersubnet', true);
+			hideInput('source_hash_key', true);
+			hideIpAddress('targetip', true);
 		} else if ($('#target option:selected').text().trim().substring(0,5) == "Other") {
 			hideInput('poolopts', false);
-			hideGroupClass('othersubnet', false);
+			hideIpAddress('targetip', false);
+			if ($('#poolopts option:selected').text().trim().substring(0,6) == "Source") {
+				hideInput('source_hash_key', false);
+			}else {
+				hideInput('source_hash_key', true);
+			}
 		} else {
 			$('#poolopts').prop('selectedIndex',0);
 			hideInput('poolopts', true);
-			hideGroupClass('othersubnet', true);
+			hideInput('source_hash_key', true);
+			hideIpAddress('targetip', true);
 			$('#targetip').val('');
 			$('#targetip_subnet').val('0');
 		}
@@ -788,6 +787,10 @@ events.push(function() {
 		poolopts_change();
 	});
 
+	$('#poolopts').on('change', function() {
+		poolopts_change();
+	});
+
 	// Set initial states
 	staticportchange();
 	sourcesel_change();
@@ -804,7 +807,7 @@ events.push(function() {
         source: addressarray
     });
 
-    $('#dstbeginport_cust, #sourceport, #destination, #dstport').autocomplete({
+    $('#sourceport, #dstport').autocomplete({
         source: customarray
     });
 });

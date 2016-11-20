@@ -26,7 +26,7 @@
 			<fieldname>enable</fieldname>
 			<type>checkbox</type>
 			<enablefields>enable_upnp,enable_natpmp,ext_iface,iface_array,download,upload,overridewanip,upnpqueue,logpackets,sysuptime,permdefault</enablefields>
-			<sethelp>Enable UPnP &amp; NAT-PMP</sethelp>
+			<description>Enable UPnP &amp; NAT-PMP</description>
 		</field>
 		<field>
 			<fielddescr>UPnP Port Mapping</fielddescr>
@@ -126,6 +126,18 @@
 					<size>60</size>
 				</rowhelperfield>
 			</rowhelper>
+		</field>
+		<field>
+			<fielddescr>Custom presentation URL</fielddescr>
+			<fieldname>presentationurl</fieldname>
+			<type>input</type>
+			<description>If left blank the default value of the WebGUI of this firewall will be used.</description>
+		</field>
+		<field>
+			<fielddescr>Custom model number</fielddescr>
+			<fieldname>modelnumber</fieldname>
+			<type>input</type>
+			<description>If left blank the default value of the firmware version of pfSense will be used.</description>
 		</field>
 	</fields>
 	<custom_php_command_before_form>

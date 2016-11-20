@@ -2,13 +2,8 @@
 #
 # builder_common.sh
 #
-# Copyright (c) 2004-2015 Electric Sheep Fencing, LLC
-# Copyright (C) 2014 Ermal Luçi
-# All rights reserved.
-#
-# NanoBSD portions of the code
-# Copyright (c) 2005 Poul-Henning Kamp.
-# and copied from nanobsd.sh
+# part of pfSense (https://www.pfsense.org)
+# Copyright (c) 2004-2016 Rubicon Communications, LLC (Netgate)
 # All rights reserved.
 #
 # FreeSBIE portions of the code
@@ -16,39 +11,24 @@
 # and copied from FreeSBIE project
 # All rights reserved.
 #
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions
-# are met:
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-# 1. Redistributions of source code must retain the above copyright
-#    notice, this list of conditions and the following disclaimer.
+# http://www.apache.org/licenses/LICENSE-2.0
 #
-# 2. Redistributions in binary form must reproduce the above copyright
-#    notice, this list of conditions and the following disclaimer in the
-#    documentation and/or other materials provided with the distribution.
-#
-# THIS SOFTWARE IS PROVIDED BY THE pfSense PROJECT ``AS IS'' AND ANY
-# EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE pfSense PROJECT OR
-# ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-# SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
-# NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-# HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-# STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
-# OF THE POSSIBILITY OF SUCH DAMAGE.
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are met:
-#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-if [ -n "${IMAGES_FINAL_DIR}" -a "${IMAGES_FINAL_DIR}" != "/" ]; then
-	mkdir -p ${IMAGES_FINAL_DIR}
-else
+if [ -z "${IMAGES_FINAL_DIR}" -o "${IMAGES_FINAL_DIR}" = "/" ]; then
 	echo "IMAGES_FINAL_DIR is not defined"
 	print_error_pfS
 fi
+
+kldload filemon >/dev/null 2>&1
 
 lc() {
 	echo "${1}" | tr '[[:upper:]]' '[[:lower:]]'
@@ -85,7 +65,7 @@ core_pkg_create_repo() {
 	# Use the same directory structure as poudriere does to avoid
 	# breaking snapshot repositories during rsync
 	ln -sf $(basename ${CORE_PKG_REAL_PATH}) ${CORE_PKG_PATH}/.latest
-	ln -sf .latest/All ${CORE_PKG_PATH}/All
+	ln -sf .latest/All ${CORE_PKG_ALL_PATH}
 	ln -sf .latest/digests.txz ${CORE_PKG_PATH}/digests.txz
 	ln -sf .latest/meta.txz ${CORE_PKG_PATH}/meta.txz
 	ln -sf .latest/packagesite.txz ${CORE_PKG_PATH}/packagesite.txz
@@ -99,84 +79,16 @@ core_pkg_create() {
 	local _root="${4}"
 	local _filter="${5}"
 
-	[ -d "${CORE_PKG_TMP}" ] \
-		&& rm -rf ${CORE_PKG_TMP}
+	local _template_path=${BUILDER_TOOLS}/templates/core_pkg/${_template}
 
-	local _templates_path=${BUILDER_TOOLS}/templates/core_pkg/${_template}
-	local _template_metadir=${_templates_path}/metadir
-	local _metadir=${CORE_PKG_TMP}/${_template}_metadir
-
-	if [ ! -d ${_template_metadir} ]; then
-		echo "ERROR: Template dir not found for pkg ${_template}"
-		exit
-	fi
-
-	mkdir -p ${CORE_PKG_TMP}
-
-	cp -r ${_template_metadir} ${_metadir}
-
-	local _manifest=${_metadir}/+MANIFEST
-	local _plist=${CORE_PKG_TMP}/${_template}_plist
-	local _exclude_plist=${CORE_PKG_TMP}/${_template}_exclude_plist
-
-	if [ -f "${_templates_path}/pkg-plist" ]; then
-		cp ${_templates_path}/pkg-plist ${_plist}
-	else
-		if [ -n "${_filter}" ]; then
-			_filter="-name ${_filter}"
-		fi
-		(cd ${_root} && find . ${_filter} -type f -or -type l | sed 's,^.,,' | sort -u) > ${_plist}
-	fi
-
-	if [ -f "${_templates_path}/exclude_plist" ]; then
-		cp ${_templates_path}/exclude_plist ${_exclude_plist}
-	else
-		touch ${_exclude_plist}
-	fi
-
-	sed \
-		-i '' \
-		-e "s,%%PRODUCT_NAME%%,${PRODUCT_NAME},g" \
-		-e "s,%%PRODUCT_URL%%,${PRODUCT_URL},g" \
-		-e "s,%%FLAVOR%%,${_flavor:+-}${_flavor},g" \
-		-e "s,%%FLAVOR_DESC%%,${_flavor:+ (${_flavor})},g" \
-		-e "s,%%VERSION%%,${_version},g" \
-		${_metadir}/* \
-		${_plist} \
-		${exclude_plist}
-
-	if [ -f "${_exclude_plist}" ]; then
-		sort -u ${_exclude_plist} > ${_plist}.exclude
-		mv ${_plist} ${_plist}.tmp
-		comm -23 ${_plist}.tmp ${_plist}.exclude > ${_plist}
-		rm -f ${_plist}.tmp ${plist}.exclude
-	fi
-
-	# Add license information
-	local _portname=$(sed '/^name: /!d; s,^[^"]*",,; s,",,' ${_metadir}/+MANIFEST)
-	local _licenses_dir="/usr/local/share/licenses/${_portname}-${_version}"
-	mkdir -p ${_root}${_licenses_dir}
-	cp ${BUILDER_ROOT}/license.txt ${_root}${_licenses_dir}/ESF
-	echo "This package has a single license: ESF (Electric Sheep Fencing License)." \
-		> ${_root}${_licenses_dir}/LICENSE
-	cat <<EOF >${_root}${_licenses_dir}/catalog.mk
-_LICENSE=ESF
-_LICENSE_NAME=Electric Sheep Fencing License
-_LICENSE_PERMS=dist-mirror dist-sell pkg-mirror pkg-sell auto-accept
-_LICENSE_GROUPS=
-_LICENSE_DISTFILES=
-EOF
-	cat <<EOF >>${_plist}
-${_licenses_dir}/catalog.mk
-${_licenses_dir}/LICENSE
-${_licenses_dir}/ESF
-EOF
-
-	mkdir -p ${CORE_PKG_REAL_PATH}/All
-	if ! pkg create -o ${CORE_PKG_REAL_PATH}/All -p ${_plist} -r ${_root} -m ${_metadir}; then
-		echo ">>> ERROR: Error building package ${_template} ${_flavor}"
-		print_error_pfS
-	fi
+	${BUILDER_SCRIPTS}/create_core_pkg.sh \
+		-t "${_template_path}" \
+		-f "${_flavor}" \
+		-v "${_version}" \
+		-r "${_root}" \
+		-F "${_filter}" \
+		-d "${CORE_PKG_REAL_PATH}/All" \
+		|| print_error_pfS
 }
 
 # This routine will output that something went wrong
@@ -188,71 +100,11 @@ print_error_pfS() {
 	echo
 	echo "NOTE: a lot of times you can run './build.sh --clean-builder' to resolve."
 	echo
-	if [ "$1" != "" ]; then
-		echo $1
-	fi
 	[ -n "${LOGFILE}" -a -f "${LOGFILE}" ] && \
 		echo "Log saved on ${LOGFILE}" && \
-		tail -n20 ${LOGFILE} >&2
 	echo
 	kill $$
 	exit 1
-}
-
-prestage_on_ram_setup() {
-	# Do not use memory disks for release build
-	if [ -n "${_IS_RELEASE}" ]; then
-		return
-	fi
-
-	[ -d "${STAGE_CHROOT_DIR}" ] \
-		|| mkdir -p ${STAGE_CHROOT_DIR}
-	[ -d "${FINAL_CHROOT_DIR}" ] \
-		|| mkdir -p ${FINAL_CHROOT_DIR}
-
-	_AVAIL_MEM=$(($(sysctl -n hw.usermem) / 1024 / 1024))
-	if [ $_AVAIL_MEM -lt 2000 ]; then
-		echo ">>> Builder has less than 2GiB RAM skipping memory disks"
-		return
-	else
-		echo "######################################################################################"
-		echo
-		echo ">>> Builder has more than 2GiB RAM enabling memory disks"
-		echo ">>> WARNING: Remember to remove these memory disks by running $0 --disable-memorydisks"
-		echo
-		echo "######################################################################################"
-	fi
-
-	if df /dev/ufs/prestagebacking >/dev/null 2>&1; then
-		echo ">>> Detected preexisting memory disk enabled for ${STAGE_CHROOT_DIR}."
-	else
-		mdconfig -a -t swap -u 10001 -s ${MEMORYDISK_SIZE}
-		newfs -L prestagebacking -U /dev/md10001
-		mount /dev/ufs/prestagebacking ${STAGE_CHROOT_DIR}
-	fi
-
-	if df /dev/ufs/finalstagebacking >/dev/null 2>&1; then
-		echo ">>> Detected preexisting memory disk enabled for ${FINAL_CHROOT_DIR}."
-	else
-		mdconfig -a -t swap -u 10002 -s ${MEMORYDISK_SIZE}
-		newfs -L finalstagebacking -U /dev/md10002
-		mount /dev/ufs/finalstagebacking ${FINAL_CHROOT_DIR}
-	fi
-}
-
-prestage_on_ram_cleanup() {
-	if [ -c /dev/md10001 ]; then
-		if [ -d ${STAGE_CHROOT_DIR} ]; then
-			umount ${STAGE_CHROOT_DIR}
-		fi
-		mdconfig -d -u 10001
-	fi
-	if [ -c /dev/md10002 ]; then
-		if [ -d ${FINAL_CHROOT_DIR} ]; then
-			umount ${FINAL_CHROOT_DIR}
-		fi
-		mdconfig -d -u 10002
-	fi
 }
 
 # This routine will verify that the kernel has been
@@ -288,27 +140,19 @@ build_all_kernels() {
 	for BUILD_KERNEL in $BUILD_KERNELS; do
 		unset KERNCONF
 		unset KERNEL_DESTDIR
-		unset KERNELCONF
 		unset KERNEL_NAME
 		export KERNCONF=$BUILD_KERNEL
 		export KERNEL_DESTDIR="$KERNEL_BUILD_PATH/$BUILD_KERNEL"
-		export KERNELCONF="${FREEBSD_SRC_DIR}/sys/${TARGET}/conf/$BUILD_KERNEL"
 		export KERNEL_NAME=${BUILD_KERNEL}
 
 		LOGFILE="${BUILDER_LOGS}/kernel.${KERNCONF}.${TARGET}.log"
 		echo ">>> Building $BUILD_KERNEL kernel."  | tee -a ${LOGFILE}
 
-		if [ ! -e "${FREEBSD_SRC_DIR}/sys/${TARGET}/conf/${BUILD_KERNEL}" ]; then
-			echo ">>> ERROR: Could not find $KERNELCONF"
-			print_error_pfS
-		fi
-
-		if [ -n "${NO_BUILDKERNEL}" -a -f "${CORE_PKG_REAL_PATH}/All/$(get_pkg_name kernel-${KERNEL_NAME}).txz" ]; then
+		if [ -n "${NO_BUILDKERNEL}" -a -f "${CORE_PKG_ALL_PATH}/$(get_pkg_name kernel-${KERNEL_NAME}).txz" ]; then
 			echo ">>> NO_BUILDKERNEL set, skipping build" | tee -a ${LOGFILE}
 			continue
 		fi
 
-		export SRC_CONF=${SRC_CONF}
 		buildkernel
 
 		echo ">>> Staging $BUILD_KERNEL kernel..." | tee -a ${LOGFILE}
@@ -316,17 +160,14 @@ build_all_kernels() {
 
 		ensure_kernel_exists $KERNEL_DESTDIR
 
-		echo -n ">>> Creating pkg of $KERNEL_NAME-debug kernel to staging area... "  | tee -a ${LOGFILE}
+		echo ">>> Creating pkg of $KERNEL_NAME-debug kernel to staging area..."  | tee -a ${LOGFILE}
 		core_pkg_create kernel-debug ${KERNEL_NAME} ${CORE_PKG_VERSION} ${KERNEL_DESTDIR} \*.symbols
 		find ${KERNEL_DESTDIR} -name '*.symbols' -type f -delete
-		echo " Done" | tee -a ${LOGFILE}
 
-		echo -n ">>> Creating pkg of $KERNEL_NAME kernel to staging area... "  | tee -a ${LOGFILE}
+		echo ">>> Creating pkg of $KERNEL_NAME kernel to staging area..."  | tee -a ${LOGFILE}
 		core_pkg_create kernel ${KERNEL_NAME} ${CORE_PKG_VERSION} ${KERNEL_DESTDIR}
 
 		rm -rf $KERNEL_DESTDIR 2>&1 1>/dev/null
-
-		echo " Done" | tee -a ${LOGFILE}
 	done
 }
 
@@ -355,10 +196,10 @@ install_default_kernel() {
 	fi
 	mkdir -p $FINAL_CHROOT_DIR/pkgs
 	if [ -z "${2}" -o -n "${INSTALL_EXTRA_KERNELS}" ]; then
-		cp ${CORE_PKG_REAL_PATH}/All/$(get_pkg_name kernel-${KERNEL_NAME}).txz $FINAL_CHROOT_DIR/pkgs
+		cp ${CORE_PKG_ALL_PATH}/$(get_pkg_name kernel-${KERNEL_NAME}).txz $FINAL_CHROOT_DIR/pkgs
 		if [ -n "${INSTALL_EXTRA_KERNELS}" ]; then
 			for _EXTRA_KERNEL in $INSTALL_EXTRA_KERNELS; do
-				_EXTRA_KERNEL_PATH=${CORE_PKG_REAL_PATH}/All/$(get_pkg_name kernel-${_EXTRA_KERNEL}).txz
+				_EXTRA_KERNEL_PATH=${CORE_PKG_ALL_PATH}/$(get_pkg_name kernel-${_EXTRA_KERNEL}).txz
 				if [ -f "${_EXTRA_KERNEL_PATH}" ]; then
 					echo -n ". adding ${_EXTRA_KERNEL_PATH} on image /pkgs folder"
 					cp ${_EXTRA_KERNEL_PATH} $FINAL_CHROOT_DIR/pkgs
@@ -374,487 +215,53 @@ install_default_kernel() {
 	unset KERNEL_NAME
 }
 
-# Creates a full update file
-create_Full_update_tarball() {
-	mkdir -p $UPDATESDIR
-
-	customize_stagearea_for_image "fullupdate"
-	install_default_kernel ${DEFAULT_KERNEL}
-
-	rm -rf ${FINAL_CHROOT_DIR}/cf
-	rm -rf ${FINAL_CHROOT_DIR}/conf
-	rm -f ${FINAL_CHROOT_DIR}/etc/dh-parameters.*
-	rm -f ${FINAL_CHROOT_DIR}/etc/rc.conf
-	rm -f ${FINAL_CHROOT_DIR}/etc/pwd.db 2>/dev/null
-	rm -f ${FINAL_CHROOT_DIR}/etc/group 2>/dev/null
-	rm -f ${FINAL_CHROOT_DIR}/etc/spwd.db 2>/dev/null
-	rm -f ${FINAL_CHROOT_DIR}/etc/passwd 2>/dev/null
-	rm -f ${FINAL_CHROOT_DIR}/etc/master.passwd 2>/dev/null
-	rm -f ${FINAL_CHROOT_DIR}/etc/fstab 2>/dev/null
-	rm -f ${FINAL_CHROOT_DIR}/etc/bogons 2>/dev/null
-	# Remove loader.conf and friends.  Ticket #560
-	rm ${FINAL_CHROOT_DIR}/boot/loader.conf 2>/dev/null
-	rm ${FINAL_CHROOT_DIR}/boot/loader.conf.local 2>/dev/null
-
-	# Old systems will run (pre|post)_upgrade_command from /tmp
-	if [ -f ${FINAL_CHROOT_DIR}${PRODUCT_SHARE_DIR}/pre_upgrade_command ]; then
-		cp -p \
-			${FINAL_CHROOT_DIR}${PRODUCT_SHARE_DIR}/pre_upgrade_command \
-			${FINAL_CHROOT_DIR}/tmp
-	fi
-	if [ -f ${FINAL_CHROOT_DIR}${PRODUCT_SHARE_DIR}/post_upgrade_command ]; then
-		cp -p \
-			${FINAL_CHROOT_DIR}${PRODUCT_SHARE_DIR}/post_upgrade_command \
-			${FINAL_CHROOT_DIR}/tmp
-	fi
-
-	echo ">>> Creating ${UPDATES_TARBALL_FILENAME} ..." | tee -a ${LOGFILE}
-	tar --exclude=./dev -czPf ${UPDATES_TARBALL_FILENAME} -C ${FINAL_CHROOT_DIR} .
-}
-
-# Outputs various set variables aka env
-print_flags() {
-
-	echo
-	printf "             Product version: %s\n" $PRODUCT_VERSION
-	printf "                   Stage DIR: %s\n" $STAGE_CHROOT_DIR
-	printf "                 Updates dir: %s\n" $UPDATESDIR
-	printf " Image Preparation Stage DIR: %s\n" $FINAL_CHROOT_DIR
-	printf "                  Source DIR: %s\n" $FREEBSD_SRC_DIR
-	printf "          FreeBSD repository: %s\n" $FREEBSD_REPO_BASE
-	printf "          FreeBSD-src branch: %s\n" $FREEBSD_BRANCH
-	printf "               BUILD_KERNELS: %s\n" $BUILD_KERNELS
-	printf "           Git Branch or Tag: %s\n" $GIT_REPO_BRANCH_OR_TAG
-	printf "            MODULES_OVERRIDE: %s\n" $MODULES_OVERRIDE
-	printf "    VMDK_DISK_CAPACITY_IN_GB: %s\n" $VMDK_DISK_CAPACITY_IN_GB
-	printf "                 OVFTEMPLATE: %s\n" $OVFTEMPLATE
-	printf "                     OVFVMDK: %s\n" $OVFVMDK
-	printf "                    SRC_CONF: %s\n" $SRC_CONF
-	printf "                     ISOPATH: %s\n" $ISOPATH
-	printf "                MEMSTICKPATH: %s\n" $MEMSTICKPATH
-	printf "    UPDATES_TARBALL_FILENAME: %s\n" $UPDATES_TARBALL_FILENAME
-if [ -n "$SHOW_ENV" ]; then
-	for LINE in $(env | egrep -v '(terminal|PASS|NAME|USER|SSH|GROUP|HOST)'); do
-		echo "SHOW_ENV: $LINE"
-	done
-fi
-	echo
-}
-
 # This builds FreeBSD (make buildworld)
 # Imported from FreeSBIE
 make_world() {
-
 	LOGFILE=${BUILDER_LOGS}/buildworld.${TARGET}
+	echo ">>> LOGFILE set to $LOGFILE." | tee -a ${LOGFILE}
 	if [ -n "${NO_BUILDWORLD}" ]; then
 		echo ">>> NO_BUILDWORLD set, skipping build" | tee -a ${LOGFILE}
 		return
 	fi
 
-	# Set SRC_CONF variable if it's not already set.
-	if [ -z "${SRC_CONF}" ]; then
-		echo ">>> SRC_CONF is unset make sure this is what you want!" | tee -a ${LOGFILE}
-	else
-		echo ">>> Setting SRC_CONF to $SRC_CONF" | tee -a ${LOGFILE}
-	fi
-
-	# Set default parameters
-	export MAKE_ARGS="${MAKEJ_WORLD} __MAKE_CONF=${MAKE_CONF} SRCCONF=${SRC_CONF} TARGET=${TARGET} TARGET_ARCH=${TARGET_ARCH}"
-
-	echo ">>> LOGFILE set to $LOGFILE." | tee -a ${LOGFILE}
-	makeargs="${MAKE_ARGS}"
-	echo ">>> Building world for ${TARGET} architecture... (Starting - $(LC_ALL=C date))" | tee -a ${LOGFILE}
-	echo ">>> Builder is running the command: env LOCAL_ITOOLS=\"${EXTRA_TOOLS}\" script -aq $LOGFILE make -C ${FREEBSD_SRC_DIR} -DNO_CLEAN ${makeargs} buildworld" | tee -a ${LOGFILE}
-	(env LOCAL_ITOOLS="${EXTRA_TOOLS}" script -aq $LOGFILE make -C ${FREEBSD_SRC_DIR} -DNO_CLEAN ${makeargs} buildworld || print_error_pfS;) | egrep '^>>>' | tee -a ${LOGFILE}
-	echo ">>> Building world for ${TARGET} architecture... (Finished - $(LC_ALL=C date))" | tee -a ${LOGFILE}
+	echo ">>> $(LC_ALL=C date) - Starting build world for ${TARGET} architecture..." | tee -a ${LOGFILE}
+	script -aq $LOGFILE ${BUILDER_SCRIPTS}/build_freebsd.sh -K -s ${FREEBSD_SRC_DIR} \
+		|| print_error_pfS
+	echo ">>> $(LC_ALL=C date) - Finished build world for ${TARGET} architecture..." | tee -a ${LOGFILE}
 
 	LOGFILE=${BUILDER_LOGS}/installworld.${TARGET}
 	echo ">>> LOGFILE set to $LOGFILE." | tee -a ${LOGFILE}
-	# Create if cleaned up
-	makeargs="${MAKE_ARGS} DESTDIR=${STAGE_CHROOT_DIR} WITHOUT_TOOLCHAIN=1"
-	echo ">>> Installing world for ${TARGET} architecture... (Starting - $(LC_ALL=C date))" | tee -a ${LOGFILE}
-	echo ">>> Builder is running the command: env LOCAL_ITOOLS=\"${EXTRA_TOOLS}\" script -aq $LOGFILE make -C ${FREEBSD_SRC_DIR} ${makeargs} installworld" | tee -a ${LOGFILE}
-	(env LOCAL_ITOOLS="${EXTRA_TOOLS}" script -aq $LOGFILE make -C ${FREEBSD_SRC_DIR} ${makeargs} installworld || print_error_pfS;) | egrep '^>>>' | tee -a ${LOGFILE}
-	echo ">>> Installing world for ${TARGET} architecture... (Finished - $(LC_ALL=C date))" | tee -a ${LOGFILE}
 
-	makeargs="${MAKE_ARGS} DESTDIR=${STAGE_CHROOT_DIR}"
-	echo ">>> Distribution world for ${TARGET} architecture... (Starting - $(LC_ALL=C date))" | tee -a ${LOGFILE}
-	echo ">>> Builder is running the command: script -aq $LOGFILE make -C ${FREEBSD_SRC_DIR} ${makeargs} distribution " | tee -a ${LOGFILE}
-	(script -aq $LOGFILE make -C ${FREEBSD_SRC_DIR} ${makeargs} distribution  || print_error_pfS;) | egrep '^>>>' | tee -a ${LOGFILE}
-	echo ">>> Distribution world for ${TARGET} architecture... (Finished - $(LC_ALL=C date))" | tee -a ${LOGFILE}
+	[ -d "${INSTALLER_CHROOT_DIR}" ] \
+		|| mkdir -p ${INSTALLER_CHROOT_DIR}
 
+	echo ">>> Installing world with bsdinstall for ${TARGET} architecture..." | tee -a ${LOGFILE}
+	script -aq $LOGFILE ${BUILDER_SCRIPTS}/install_freebsd.sh -i -K \
+		-s ${FREEBSD_SRC_DIR} \
+		-d ${INSTALLER_CHROOT_DIR} \
+		|| print_error_pfS
+
+	# XXX set root password since we don't have nullok enabled
+	pw -R ${INSTALLER_CHROOT_DIR} usermod root -w yes
+
+	echo ">>> Installing world without bsdinstall for ${TARGET} architecture..." | tee -a ${LOGFILE}
+	script -aq $LOGFILE ${BUILDER_SCRIPTS}/install_freebsd.sh -K \
+		-s ${FREEBSD_SRC_DIR} \
+		-d ${STAGE_CHROOT_DIR} \
+		|| print_error_pfS
+
+	# XXX It must go to the scripts
 	[ -d "${STAGE_CHROOT_DIR}/usr/local/bin" ] \
 		|| mkdir -p ${STAGE_CHROOT_DIR}/usr/local/bin
-	makeargs="${MAKE_ARGS} DESTDIR=${STAGE_CHROOT_DIR}"
+	makeargs="DESTDIR=${STAGE_CHROOT_DIR}"
 	echo ">>> Building and installing crypto tools and athstats for ${TARGET} architecture... (Starting - $(LC_ALL=C date))" | tee -a ${LOGFILE}
-	echo ">>> Builder is running the command: script -aq $LOGFILE make -C ${FREEBSD_SRC_DIR}/tools/tools/crypto ${makeargs} clean all install " | tee -a ${LOGFILE}
 	(script -aq $LOGFILE make -C ${FREEBSD_SRC_DIR}/tools/tools/crypto ${makeargs} clean all install || print_error_pfS;) | egrep '^>>>' | tee -a ${LOGFILE}
-	echo ">>> Builder is running the command: script -aq $LOGFILE make -C ${FREEBSD_SRC_DIR}/tools/tools/ath/athstats ${makeargs} clean" | tee -a ${LOGFILE}
-	(script -aq $LOGFILE make -C ${FREEBSD_SRC_DIR}/tools/tools/ath/athstats ${makeargs} clean || print_error_pfS;) | egrep '^>>>' | tee -a ${LOGFILE}
-	echo ">>> Builder is running the command: script -aq $LOGFILE make -C ${FREEBSD_SRC_DIR}/tools/tools/ath/athstats ${makeargs} all" | tee -a ${LOGFILE}
-	(script -aq $LOGFILE make -C ${FREEBSD_SRC_DIR}/tools/tools/ath/athstats ${makeargs} all || print_error_pfS;) | egrep '^>>>' | tee -a ${LOGFILE}
-	echo ">>> Builder is running the command: script -aq $LOGFILE make -C ${FREEBSD_SRC_DIR}/tools/tools/ath/athstats ${makeargs} install" | tee -a ${LOGFILE}
-	(script -aq $LOGFILE make -C ${FREEBSD_SRC_DIR}/tools/tools/ath/athstats ${makeargs} install || print_error_pfS;) | egrep '^>>>' | tee -a ${LOGFILE}
+	# XXX FIX IT
+#	(script -aq $LOGFILE make -C ${FREEBSD_SRC_DIR}/tools/tools/ath/athstats ${makeargs} clean all install || print_error_pfS;) | egrep '^>>>' | tee -a ${LOGFILE}
 	echo ">>> Building and installing crypto tools and athstats for ${TARGET} architecture... (Finished - $(LC_ALL=C date))" | tee -a ${LOGFILE}
 
 	unset makeargs
-}
-
-nanobsd_image_filename() {
-	local _size="$1"
-	local _type="$2"
-	local _upgrade="$3"
-
-	if [ -z "$_upgrade" ]; then
-		local _template=${NANOBSD_IMG_TEMPLATE}
-	else
-		local _template=${NANOBSD_UPGRADE_TEMPLATE}
-	fi
-
-	echo "$_template" | sed \
-		-e "s,%%SIZE%%,${_size},g" \
-		-e "s,%%TYPE%%,${_type},g"
-
-	return 0
-}
-
-# This routine originated in nanobsd.sh
-nanobsd_set_flash_details () {
-	a1=$(echo $1 | tr '[:upper:]' '[:lower:]')
-
-	# Source:
-	#	SanDisk CompactFlash Memory Card
-	#	Product Manual
-	#	Version 10.9
-	#	Document No. 20-10-00038
-	#	April 2005
-	# Table 2-7
-	# NB: notice math error in SDCFJ-4096-388 line.
-	#
-	case "${a1}" in
-		2048|2048m|2048mb|2g)
-			NANO_MEDIASIZE=$((1989999616/512))
-			;;
-		4096|4096m|4096mb|4g)
-			NANO_MEDIASIZE=$((3989999616/512))
-			;;
-		8192|8192m|8192mb|8g)
-			NANO_MEDIASIZE=$((7989999616/512))
-			;;
-		16384|16384m|16384mb|16g)
-			NANO_MEDIASIZE=$((15989999616/512))
-			;;
-		*)
-			echo "Unknown Flash capacity"
-			exit 2
-			;;
-	esac
-
-	NANO_HEADS=16
-	NANO_SECTS=63
-
-	echo ">>> [nanoo] $1"
-	echo ">>> [nanoo] NANO_MEDIASIZE: $NANO_MEDIASIZE"
-	echo ">>> [nanoo] NANO_HEADS: $NANO_HEADS"
-	echo ">>> [nanoo] NANO_SECTS: $NANO_SECTS"
-	echo ">>> [nanoo] NANO_BOOT0CFG: $NANO_BOOT0CFG"
-}
-
-# This routine originated in nanobsd.sh
-create_nanobsd_diskimage () {
-	if [ -z "${1}" ]; then
-		echo ">>> ERROR: Type of image has not been specified"
-		print_error_pfS
-	fi
-	if [ -z "${2}" ]; then
-		echo ">>> ERROR: Size of image has not been specified"
-		print_error_pfS
-	fi
-
-	if [ "${1}" = "nanobsd" ]; then
-		# It's serial
-		export NANO_BOOTLOADER="boot/boot0sio"
-	elif [ "${1}" = "nanobsd-vga" ]; then
-		# It's vga
-		export NANO_BOOTLOADER="boot/boot0"
-	else
-		echo ">>> ERROR: Type of image to create unknown"
-		print_error_pfS
-	fi
-
-	if [ -z "${2}" ]; then
-		echo ">>> ERROR: Media size(s) not specified."
-		print_error_pfS
-	fi
-
-	if [ -z "${2}" ]; then
-		echo ">>> ERROR: FLASH_SIZE is not set."
-		print_error_pfS
-	fi
-
-	LOGFILE=${BUILDER_LOGS}/${1}.${TARGET}
-	# Prepare folder to be put in image
-	customize_stagearea_for_image "${1}"
-	install_default_kernel ${DEFAULT_KERNEL} "no"
-
-	echo ">>> Fixing up NanoBSD Specific items..." | tee -a ${LOGFILE}
-
-	echo "nanobsd" > $FINAL_CHROOT_DIR/etc/platform
-
-	local BOOTCONF=${FINAL_CHROOT_DIR}/boot.config
-	local LOADERCONF=${FINAL_CHROOT_DIR}/boot/loader.conf
-
-	if [ "${1}" = "nanobsd" ]; then
-		# Tell loader to use serial console early.
-		echo "-S115200 -h" >> ${BOOTCONF}
-
-		# Remove old console options if present.
-		[ -f "${LOADERCONF}" ] \
-			&& sed -i "" -Ee "/(console|boot_multicons|boot_serial|hint.uart)/d" ${LOADERCONF}
-		# Activate serial console+video console in loader.conf
-		echo 'loader_color="NO"' >> ${LOADERCONF}
-		echo 'beastie_disable="YES"' >> ${LOADERCONF}
-		echo 'boot_serial="YES"' >> ${LOADERCONF}
-		echo 'console="comconsole"' >> ${LOADERCONF}
-		echo 'comconsole_speed="115200"' >> ${LOADERCONF}
-	fi
-	echo 'autoboot_delay="5"' >> ${LOADERCONF}
-
-	# Old systems will run (pre|post)_upgrade_command from /tmp
-	if [ -f ${FINAL_CHROOT_DIR}${PRODUCT_SHARE_DIR}/pre_upgrade_command ]; then
-		cp -p \
-			${FINAL_CHROOT_DIR}${PRODUCT_SHARE_DIR}/pre_upgrade_command \
-			${FINAL_CHROOT_DIR}/tmp
-	fi
-	if [ -f ${FINAL_CHROOT_DIR}${PRODUCT_SHARE_DIR}/post_upgrade_command ]; then
-		cp -p \
-			${FINAL_CHROOT_DIR}${PRODUCT_SHARE_DIR}/post_upgrade_command \
-			${FINAL_CHROOT_DIR}/tmp
-	fi
-
-	for _NANO_MEDIASIZE in ${2}; do
-		if [ -z "${_NANO_MEDIASIZE}" ]; then
-			continue;
-		fi
-
-		echo ">>> building NanoBSD(${1}) disk image with size ${_NANO_MEDIASIZE} for platform (${TARGET})..." | tee -a ${LOGFILE}
-		echo "" > $BUILDER_LOGS/nanobsd_cmds.sh
-
-		IMG="${IMAGES_FINAL_DIR}/$(nanobsd_image_filename ${_NANO_MEDIASIZE} ${1})"
-		IMGUPDATE="${IMAGES_FINAL_DIR}/$(nanobsd_image_filename ${_NANO_MEDIASIZE} ${1} 1)"
-
-		nanobsd_set_flash_details ${_NANO_MEDIASIZE}
-
-		# These are defined in FlashDevice and on builder_default.sh
-		echo $NANO_MEDIASIZE \
-			$NANO_IMAGES \
-			$NANO_SECTS \
-			$NANO_HEADS \
-			$NANO_CODESIZE \
-			$NANO_CONFSIZE \
-			$NANO_DATASIZE |
-awk '
-{
-	printf "# %s\n", $0
-
-	# size of cylinder in sectors
-	cs = $3 * $4
-
-	# number of full cylinders on media
-	cyl = int ($1 / cs)
-
-	# output fdisk geometry spec, truncate cyls to 1023
-	if (cyl <= 1023)
-		print "g c" cyl " h" $4 " s" $3
-	else
-		print "g c" 1023 " h" $4 " s" $3
-
-	if ($7 > 0) {
-		# size of data partition in full cylinders
-		dsl = int (($7 + cs - 1) / cs)
-	} else {
-		dsl = 0;
-	}
-
-	# size of config partition in full cylinders
-	csl = int (($6 + cs - 1) / cs)
-
-	if ($5 == 0) {
-		# size of image partition(s) in full cylinders
-		isl = int ((cyl - dsl - csl) / $2)
-	} else {
-		isl = int (($5 + cs - 1) / cs)
-	}
-
-	# First image partition start at second track
-	print "p 1 165 " $3, isl * cs - $3
-	c = isl * cs;
-
-	# Second image partition (if any) also starts offset one
-	# track to keep them identical.
-	if ($2 > 1) {
-		print "p 2 165 " $3 + c, isl * cs - $3
-		c += isl * cs;
-	}
-
-	# Config partition starts at cylinder boundary.
-	print "p 3 165 " c, csl * cs
-	c += csl * cs
-
-	# Data partition (if any) starts at cylinder boundary.
-	if ($7 > 0) {
-		print "p 4 165 " c, dsl * cs
-	} else if ($7 < 0 && $1 > c) {
-		print "p 4 165 " c, $1 - c
-	} else if ($1 < c) {
-		print "Disk space overcommitted by", \
-		    c - $1, "sectors" > "/dev/stderr"
-		exit 2
-	}
-
-	# Force slice 1 to be marked active. This is necessary
-	# for booting the image from a USB device to work.
-	print "a 1"
-}
-	' > ${IMAGES_FINAL_DIR}/_.fdisk
-
-		MNT=${IMAGES_FINAL_DIR}/_.mnt
-		mkdir -p ${MNT}
-
-		dd if=/dev/zero of=${IMG} bs=${NANO_SECTS}b \
-			count=0 seek=$((${NANO_MEDIASIZE}/${NANO_SECTS})) 2>&1 >> ${LOGFILE}
-
-		MD=$(mdconfig -a -t vnode -f ${IMG} -x ${NANO_SECTS} -y ${NANO_HEADS})
-		trap "mdconfig -d -u ${MD}; return" 1 2 15 EXIT
-
-		fdisk -i -f ${IMAGES_FINAL_DIR}/_.fdisk ${MD} 2>&1 >> ${LOGFILE}
-		fdisk ${MD} 2>&1 >> ${LOGFILE}
-
-		boot0cfg -t 100 -B -b ${FINAL_CHROOT_DIR}/${NANO_BOOTLOADER} ${NANO_BOOT0CFG} ${MD} 2>&1 >> ${LOGFILE}
-
-		# Create first image
-		bsdlabel -m i386 -w -B -b ${FINAL_CHROOT_DIR}/boot/boot ${MD}s1 2>&1 >> ${LOGFILE}
-		bsdlabel -m i386 ${MD}s1 2>&1 >> ${LOGFILE}
-		local _label=$(lc ${PRODUCT_NAME})
-		newfs -L ${_label}0 ${NANO_NEWFS} /dev/${MD}s1a 2>&1 >> ${LOGFILE}
-		mount /dev/ufs/${_label}0 ${MNT}
-		if [ $? -ne 0 ]; then
-			echo ">>> ERROR: Something wrong happened during mount of first slice image creation. STOPPING!" | tee -a ${LOGFILE}
-			print_error_pfS
-		fi
-		# Consider the unmounting as well
-		trap "umount /dev/ufs/${_label}0; mdconfig -d -u ${MD}; return" 1 2 15 EXIT
-
-		clone_directory_contents ${FINAL_CHROOT_DIR} ${MNT}
-
-		# Set NanoBSD image size
-		echo "${_NANO_MEDIASIZE}" > ${MNT}/etc/nanosize.txt
-
-		echo "/dev/ufs/${_label}0 / ufs ro,sync,noatime 1 1" > ${MNT}/etc/fstab
-		if [ $NANO_CONFSIZE -gt 0 ] ; then
-			echo "/dev/ufs/cf /cf ufs ro,sync,noatime 1 1" >> ${MNT}/etc/fstab
-		fi
-
-		umount ${MNT}
-		# Restore the original trap
-		trap "mdconfig -d -u ${MD}; return" 1 2 15 EXIT
-
-		# Setting NANO_IMAGES to 1 and NANO_INIT_IMG2 will tell
-		# NanoBSD to only create one partition.  We default to 2
-		# partitions in case anything happens to the first the
-		# operator can boot from the 2nd and should be OK.
-
-		# Before just going to use dd for duplicate think!
-		# The images are created as sparse so lets take advantage
-		# of that by just exec some commands.
-		if [ $NANO_IMAGES -gt 1 -a $NANO_INIT_IMG2 -gt 0 ] ; then
-			# Duplicate to second image (if present)
-			echo ">>> Creating NanoBSD second slice by duplicating first slice." | tee -a ${LOGFILE}
-			# Create second image
-			dd if=/dev/${MD}s1 of=/dev/${MD}s2 conv=sparse bs=64k 2>&1 >> ${LOGFILE}
-			tunefs -L ${_label}1 /dev/${MD}s2a 2>&1 >> ${LOGFILE}
-			mount /dev/ufs/${_label}1 ${MNT}
-			if [ $? -ne 0 ]; then
-				echo ">>> ERROR: Something wrong happened during mount of second slice image creation. STOPPING!" | tee -a ${LOGFILE}
-				print_error_pfS
-			fi
-			# Consider the unmounting as well
-			trap "umount /dev/ufs/${_label}1; mdconfig -d -u ${MD}; return" 1 2 15 EXIT
-
-			echo "/dev/ufs/${_label}1 / ufs ro,sync,noatime 1 1" > ${MNT}/etc/fstab
-			if [ $NANO_CONFSIZE -gt 0 ] ; then
-				echo "/dev/ufs/cf /cf ufs ro,sync,noatime 1 1" >> ${MNT}/etc/fstab
-			fi
-
-			umount ${MNT}
-			# Restore the trap back
-			trap "mdconfig -d -u ${MD}; return" 1 2 15 EXIT
-		fi
-
-		# Create Data slice, if any.
-		# Note the changing of the variable to NANO_CONFSIZE
-		# from NANO_DATASIZE.  We also added glabel support
-		# and populate the Product configuration from the /cf
-		# directory located in FINAL_CHROOT_DIR
-		if [ $NANO_CONFSIZE -gt 0 ] ; then
-			echo ">>> Creating /cf area to hold config.xml"
-			newfs -L cf ${NANO_NEWFS} /dev/${MD}s3 2>&1 >> ${LOGFILE}
-			# Mount data partition and copy contents of /cf
-			# Can be used later to create custom default config.xml while building
-			mount /dev/ufs/cf ${MNT}
-			if [ $? -ne 0 ]; then
-				echo ">>> ERROR: Something wrong happened during mount of cf slice image creation. STOPPING!" | tee -a ${LOGFILE}
-				print_error_pfS
-			fi
-			# Consider the unmounting as well
-			trap "umount /dev/ufs/cf; mdconfig -d -u ${MD}; return" 1 2 15 EXIT
-
-			clone_directory_contents ${FINAL_CHROOT_DIR}/cf ${MNT}
-
-			umount ${MNT}
-			# Restore the trap back
-			trap "mdconfig -d -u ${MD}; return" 1 2 15 EXIT
-		else
-			">>> [nanoo] NANO_CONFSIZE is not set. Not adding a /conf partition.. You sure about this??" | tee -a ${LOGFILE}
-		fi
-
-		echo ">>> [nanoo] Creating NanoBSD upgrade file from first slice..." | tee -a ${LOGFILE}
-		dd if=/dev/${MD}s1 of=$IMGUPDATE conv=sparse bs=64k 2>&1 >> ${LOGFILE}
-
-		mdconfig -d -u $MD
-		# Restore default action
-		trap "-" 1 2 15 EXIT
-
-		# Check each image and ensure that they are over
-		# 3 megabytes.  If either image is under 20 megabytes
-		# in size then error out.
-		IMGSIZE=$(stat -f "%z" ${IMG})
-		IMGUPDATESIZE=$(stat -f "%z" ${IMGUPDATE})
-		CHECKSIZE="20040710"
-		if [ "$IMGSIZE" -lt "$CHECKSIZE" ]; then
-			echo ">>> ERROR: Something went wrong when building NanoBSD.  The image size is under 20 megabytes!" | tee -a ${LOGFILE}
-			print_error_pfS
-		fi
-		if [ "$IMGUPDATESIZE" -lt "$CHECKSIZE" ]; then
-			echo ">>> ERROR: Something went wrong when building NanoBSD upgrade image.  The image size is under 20 megabytes!" | tee -a ${LOGFILE}
-			print_error_pfS
-		fi
-
-		# Wrap up the show, Johnny
-		echo ">>> NanoBSD Image completed for size: $_NANO_MEDIASIZE." | tee -a ${LOGFILE}
-
-		gzip -qf $IMG &
-		_bg_pids="${_bg_pids}${_bg_pids:+ }$!"
-		gzip -qf $IMGUPDATE &
-		_bg_pids="${_bg_pids}${_bg_pids:+ }$!"
-	done
-
-	unset IMG
-	unset IMGUPDATE
-	unset IMGUPDATESIZE
-	unset IMGSIZE
-
-	ls -lah $IMAGES_FINAL_DIR
 }
 
 # This routine creates a ova image that contains
@@ -875,10 +282,15 @@ create_ova_image() {
 
 	LOGFILE=${BUILDER_LOGS}/ova.${TARGET}.log
 
-	[ -d "${OVA_TMP}" ] \
-		&& rm -rf ${OVA_TMP}
+	if [ -d "${OVA_TMP}" ]; then
+		chflags -R noschg ${OVA_TMP}
+		rm -rf ${OVA_TMP}
+	fi
 
-	mkdir -p ${OVA_TMP}
+	mkdir -p $(dirname ${OVAPATH})
+
+	local _mntdir=${OVA_TMP}/mnt
+	mkdir -p ${_mntdir}
 
 	if [ -z "${OVA_SWAP_PART_SIZE_IN_GB}" -o "${OVA_SWAP_PART_SIZE_IN_GB}" = "0" ]; then
 		# first partition size (freebsd-ufs)
@@ -913,38 +325,36 @@ create_ova_image() {
 
 	# Create / partition
 	echo -n ">>> Creating / partition... " | tee -a ${LOGFILE}
-	makefs \
-		-B little \
-		-o label=${PRODUCT_NAME},version=2,bsize=32768,fsize=4096,maxbpg=4096,density=8192,minfree=8 \
-		-s ${OVA_FIRST_PART_SIZE} \
-		${OVA_TMP}/${OVFUFS} \
-		${FINAL_CHROOT_DIR} 2>&1 >> ${LOGFILE}
+	truncate -s ${OVA_FIRST_PART_SIZE} ${OVA_TMP}/${OVFUFS}
+	local _md=$(mdconfig -a -f ${OVA_TMP}/${OVFUFS})
+	trap "mdconfig -d -u ${_md}; return" 1 2 15 EXIT
 
-	if [ $? -ne 0 -o ! -f ${OVA_TMP}/${OVFUFS} ]; then
-		if [ -f ${OVA_TMP}/${OVFUFS} ]; then
-			rm -f ${OVA_TMP}/${OVFUFS}
-		fi
+	newfs -L ${PRODUCT_NAME} -j /dev/${_md} 2>&1 >>${LOGFILE}
+
+	if ! mount /dev/${_md} ${_mntdir} 2>&1 >>${LOGFILE}; then
 		echo "Failed!" | tee -a ${LOGFILE}
-		echo ">>> ERROR: Error creating vmdk / partition. STOPPING!" | tee -a ${LOGFILE}
+		echo ">>> ERROR: Error mounting temporary vmdk image. STOPPING!" | tee -a ${LOGFILE}
 		print_error_pfS
 	fi
+	trap "sync; sleep 3; umount ${_mntdir} || umount -f ${_mntdir}; mdconfig -d -u ${_md}; return" 1 2 15 EXIT
+
 	echo "Done!" | tee -a ${LOGFILE}
 
-	echo -n ">>> Enabling SUJ on recently created disk... " | tee -a ${LOGFILE}
-	if ! tunefs -j enable ${OVA_TMP}/${OVFUFS} 2>&1 >>${LOGFILE}; then
-		echo "Failed!" | tee -a ${LOGFILE}
-		echo ">>> ERROR: Error enabling SUJ on disk. STOPPING!" | tee -a ${LOGFILE}
-		print_error_pfS
-	fi
-	echo "Done!" | tee -a ${LOGFILE}
+	clone_directory_contents ${FINAL_CHROOT_DIR} ${_mntdir}
+
+	sync
+	sleep 3
+	umount ${_mntdir} || umount -f ${_mntdir} >>${LOGFILE} 2>&1
+	mdconfig -d -u ${_md}
+	trap "-" 1 2 15 EXIT
 
 	# Create raw disk
 	echo -n ">>> Creating raw disk... " | tee -a ${LOGFILE}
 	mkimg \
 		-s gpt \
 		-f raw \
-		-b /boot/pmbr \
-		-p freebsd-boot:=/boot/gptboot \
+		-b ${FINAL_CHROOT_DIR}/boot/pmbr \
+		-p freebsd-boot:=${FINAL_CHROOT_DIR}/boot/gptboot \
 		-p freebsd-ufs/${PRODUCT_NAME}:=${OVA_TMP}/${OVFUFS} \
 		${OVA_SWAP_PART_PARAM} \
 		-o ${OVA_TMP}/${OVFRAW} 2>&1 >> ${LOGFILE}
@@ -982,7 +392,7 @@ create_ova_image() {
 	fi
 	echo "Done!" | tee -a ${LOGFILE}
 
-	rm -f ${OVA_TMP}/i${OVFRAW}
+	rm -f ${OVA_TMP}/${OVFRAW}
 
 	ova_setup_ovf_template
 
@@ -1009,10 +419,6 @@ ova_setup_ovf_template() {
 		local _os_id="78"
 		local _os_type="freebsd64Guest"
 		local _os_descr="FreeBSD 64-Bit"
-	elif [ "${TARGET}" = "i386" ]; then
-		local _os_id="42"
-		local _os_type="freebsdGuest"
-		local _os_descr="FreeBSD"
 	else
 		echo ">>> ERROR: Platform not supported for OVA (${TARGET})"
 		print_error_pfS
@@ -1035,7 +441,7 @@ ova_setup_ovf_template() {
 		-e "s,%%PRODUCT_URL%%,${PRODUCT_URL},g" \
 		-e "s#%%VENDOR_NAME%%#${VENDOR_NAME}#g" \
 		-e "s#%%OVF_INFO%%#${OVF_INFO}#g" \
-		-e "/^%%PRODUCT_LICENSE%%/r ${BUILDER_ROOT}/license.txt" \
+		-e "/^%%PRODUCT_LICENSE%%/r ${BUILDER_ROOT}/LICENSE" \
 		-e "/^%%PRODUCT_LICENSE%%/d" \
 		${OVFTEMPLATE} > ${OVA_TMP}/${PRODUCT_NAME}.ovf
 }
@@ -1048,15 +454,21 @@ clean_builder() {
 	staginareas_clean_each_run
 
 	if [ -d "${STAGE_CHROOT_DIR}" ]; then
-		BASENAME=$(basename ${STAGE_CHROOT_DIR})
-		echo -n ">>> Cleaning ${STAGE_CHROOT_DIR} ..."
+		echo -n ">>> Cleaning ${STAGE_CHROOT_DIR}... "
 		chflags -R noschg ${STAGE_CHROOT_DIR} 2>&1 >/dev/null
 		rm -rf ${STAGE_CHROOT_DIR}/* 2>/dev/null
 		echo "Done."
 	fi
 
+	if [ -d "${INSTALLER_CHROOT_DIR}" ]; then
+		echo -n ">>> Cleaning ${INSTALLER_CHROOT_DIR}... "
+		chflags -R noschg ${INSTALLER_CHROOT_DIR} 2>&1 >/dev/null
+		rm -rf ${INSTALLER_CHROOT_DIR}/* 2>/dev/null
+		echo "Done."
+	fi
+
 	if [ -z "${NO_CLEAN_FREEBSD_OBJ}" -a -d "${FREEBSD_SRC_DIR}" ]; then
-		OBJTREE=$(env TARGET=${TARGET} TARGET_ARCH=${TARGET_ARCH} make -C ${FREEBSD_SRC_DIR} -V OBJTREE)
+		OBJTREE=$(make -C ${FREEBSD_SRC_DIR} -V OBJTREE)
 		if [ -d "${OBJTREE}" ]; then
 			echo -n ">>> Cleaning FreeBSD objects dir staging..."
 			echo -n "."
@@ -1075,16 +487,7 @@ clean_builder() {
 
 	echo -n ">>> Cleaning previously built images..."
 	rm -rf $IMAGES_FINAL_DIR/*
-	rm -rf $STAGINGAREA/*
 	echo "Done!"
-
-	if [ -z "${NO_CLEAN_FREEBSD_SRC}" ]; then
-		if [ -d "$FREEBSD_SRC_DIR" ]; then
-			echo -n ">>> Ensuring $FREEBSD_SRC_DIR is clean..."
-			rm -rf ${FREEBSD_SRC_DIR}
-			echo "Done!"
-		fi
-	fi
 
 	echo -n ">>> Cleaning previous builder logs..."
 	if [ -d "$BUILDER_LOGS" ]; then
@@ -1127,9 +530,6 @@ clone_to_staging_area() {
 			${STAGE_CHROOT_DIR}/usr/local/sbin/${PRODUCT_NAME}-upgrade
 	fi
 
-	if [ -f ${STAGE_CHROOT_DIR}/etc/master.passwd ]; then
-		chroot ${STAGE_CHROOT_DIR} pwd_mkdb /etc/master.passwd
-	fi
 	mkdir -p ${STAGE_CHROOT_DIR}/etc/mtree
 	mtree -Pcp ${STAGE_CHROOT_DIR}/var > ${STAGE_CHROOT_DIR}/etc/mtree/var.dist
 	mtree -Pcp ${STAGE_CHROOT_DIR}/etc > ${STAGE_CHROOT_DIR}/etc/mtree/etc.dist
@@ -1145,7 +545,7 @@ clone_to_staging_area() {
 		cp $SCRATCHDIR/build_commit_info.txt $STAGE_CHROOT_DIR/etc/version.lastcommit
 	fi
 
-	local _exclude_files="${CORE_PKG_TMP}/base_exclude_files"
+	local _exclude_files="${SCRATCHDIR}/base_exclude_files"
 	sed \
 		-e "s,%%PRODUCT_NAME%%,${PRODUCT_NAME},g" \
 		-e "s,%%VERSION%%,${_version},g" \
@@ -1173,34 +573,8 @@ clone_to_staging_area() {
 		-X ${_exclude_files} \
 		.
 
-	local _share_repos_path="${SCRATCHDIR}/repo-tmp/${PRODUCT_SHARE_DIR}/pkg/repos"
-	rm -rf ${SCRATCHDIR}/repo-tmp >/dev/null 2>&1
-	mkdir -p ${_share_repos_path} >/dev/null 2>&1
-
-	setup_pkg_repo \
-		${PKG_REPO_DEFAULT} \
-		${_share_repos_path}/${PRODUCT_NAME}-repo.conf \
-		${TARGET} \
-		${TARGET_ARCH}
-
-	cp -f ${PKG_REPO_DEFAULT%%.conf}.descr ${_share_repos_path}
-
-	# Add additional repos
-	for _template in ${PKG_REPO_BASE}/${PRODUCT_NAME}-repo-*.conf; do
-		_template_filename=$(basename ${_template})
-		setup_pkg_repo \
-			${_template} \
-			${_share_repos_path}/${_template_filename} \
-			${TARGET} \
-			${TARGET_ARCH}
-		cp -f ${_template%%.conf}.descr ${_share_repos_path}
-	done
-
-	core_pkg_create repo "" ${CORE_PKG_VERSION} ${SCRATCHDIR}/repo-tmp
-
 	core_pkg_create rc "" ${CORE_PKG_VERSION} ${STAGE_CHROOT_DIR}
 	core_pkg_create base "" ${CORE_PKG_VERSION} ${STAGE_CHROOT_DIR}
-	core_pkg_create base-nanobsd "" ${CORE_PKG_VERSION} ${STAGE_CHROOT_DIR}
 	core_pkg_create default-config "" ${CORE_PKG_VERSION} ${STAGE_CHROOT_DIR}
 
 	local DEFAULTCONF=${STAGE_CHROOT_DIR}/conf.default/config.xml
@@ -1235,6 +609,15 @@ clone_to_staging_area() {
 	# Make sure pkg is present
 	pkg_bootstrap ${STAGE_CHROOT_DIR}
 
+	# Make sure correct repo is available on tmp dir
+	mkdir -p ${STAGE_CHROOT_DIR}/tmp/pkg-repos
+	setup_pkg_repo \
+		${PKG_REPO_DEFAULT} \
+		${STAGE_CHROOT_DIR}/tmp/pkg-repos/repo.conf \
+		${TARGET} \
+		${TARGET_ARCH} \
+		staging
+
 	echo "Done!"
 }
 
@@ -1263,12 +646,12 @@ create_final_staging_area() {
 
 customize_stagearea_for_image() {
 	local _image_type="$1"
-	local _default_config=""
+	local _default_config="" # filled with $2 below
+	local _image_variant="$3"
 
 	if [ -n "$2" ]; then
 		_default_config="$2"
-	elif [ "${_image_type}" = "nanobsd" -o \
-	     "${_image_type}" = "memstickserial" -o \
+	elif [ "${_image_type}" = "memstickserial" -o \
 	     "${_image_type}" = "memstickadi" ]; then
 		_default_config="default-config-serial"
 	elif [ "${_image_type}" = "ova" ]; then
@@ -1281,32 +664,14 @@ customize_stagearea_for_image() {
 	create_final_staging_area
 
 	pkg_chroot_add ${FINAL_CHROOT_DIR} rc
-	pkg_chroot_add ${FINAL_CHROOT_DIR} repo
-
-	if [ "${_image_type}" = "nanobsd" -o \
-	     "${_image_type}" = "nanobsd-vga" ]; then
-
-		mkdir -p ${FINAL_CHROOT_DIR}/root/var/db \
-			 ${FINAL_CHROOT_DIR}/root/var/cache \
-			 ${FINAL_CHROOT_DIR}/var/db/pkg \
-			 ${FINAL_CHROOT_DIR}/var/cache/pkg
-		mv -f ${FINAL_CHROOT_DIR}/var/db/pkg ${FINAL_CHROOT_DIR}/root/var/db
-		mv -f ${FINAL_CHROOT_DIR}/var/cache/pkg ${FINAL_CHROOT_DIR}/root/var/cache
-		ln -sf ../../root/var/db/pkg ${FINAL_CHROOT_DIR}/var/db/pkg
-		ln -sf ../../root/var/cache/pkg ${FINAL_CHROOT_DIR}/var/cache/pkg
-
-		pkg_chroot_add ${FINAL_CHROOT_DIR} base-nanobsd
-	else
-		pkg_chroot_add ${FINAL_CHROOT_DIR} base
-	fi
+	pkg_chroot_add ${FINAL_CHROOT_DIR} base
 
 	if [ "${_image_type}" = "iso" -o \
 	     "${_image_type}" = "memstick" -o \
 	     "${_image_type}" = "memstickserial" -o \
 	     "${_image_type}" = "memstickadi" ]; then
-		install_bsdinstaller
 		mkdir -p ${FINAL_CHROOT_DIR}/pkgs
-		cp ${CORE_PKG_REAL_PATH}/All/*default-config*.txz ${FINAL_CHROOT_DIR}/pkgs
+		cp ${CORE_PKG_ALL_PATH}/*default-config*.txz ${FINAL_CHROOT_DIR}/pkgs
 	fi
 
 	pkg_chroot_add ${FINAL_CHROOT_DIR} ${_default_config}
@@ -1327,48 +692,70 @@ customize_stagearea_for_image() {
 			/usr/local/bin/sqlite3 ${_db} "update repodata set value='${_new}' where key='packagesite'"
 		done
 	fi
+
+	if [ -n "$_image_variant" -a \
+	    -d ${BUILDER_TOOLS}/templates/custom_logos/${_image_variant} ]; then
+		mkdir -p ${FINAL_CHROOT_DIR}/usr/local/share/${PRODUCT_NAME}/custom_logos
+		cp -f \
+			${BUILDER_TOOLS}/templates/custom_logos/${_image_variant}/*.png \
+			${FINAL_CHROOT_DIR}/usr/local/share/${PRODUCT_NAME}/custom_logos
+	fi
+
+	# Remove temporary repo conf
+	rm -rf ${FINAL_CHROOT_DIR}/tmp/pkg-repos
 }
 
 create_distribution_tarball() {
-	mkdir -p ${FINAL_CHROOT_DIR}/install
+	mkdir -p ${INSTALLER_CHROOT_DIR}/usr/freebsd-dist
 
-	tar -C ${FINAL_CHROOT_DIR} --exclude ./install --exclude ./pkgs -cJf ${FINAL_CHROOT_DIR}/install/${PRODUCT_NAME}.txz .
+	echo -n ">>> Creating distribution tarball... " | tee -a ${LOGFILE}
+	tar -C ${FINAL_CHROOT_DIR} --exclude ./pkgs \
+		-cJf ${INSTALLER_CHROOT_DIR}/usr/freebsd-dist/base.txz .
+	echo "Done!" | tee -a ${LOGFILE}
+
+	echo -n ">>> Creating manifest... " | tee -a ${LOGFILE}
+	(cd ${INSTALLER_CHROOT_DIR}/usr/freebsd-dist && \
+		sh ${FREEBSD_SRC_DIR}/release/scripts/make-manifest.sh base.txz) \
+		> ${INSTALLER_CHROOT_DIR}/usr/freebsd-dist/MANIFEST
+	echo "Done!" | tee -a ${LOGFILE}
 }
 
 create_iso_image() {
 	LOGFILE=${BUILDER_LOGS}/isoimage.${TARGET}
-	echo ">>> Building bootable ISO image for ${TARGET}" | tee -a ${LOGFILE}
-	if [ -z "${DEFAULT_KERNEL}" ]; then
-		echo ">>> ERROR: Could not identify DEFAULT_KERNEL to install on image!" | tee -a ${LOGFILE}
-		print_error_pfS
+
+	if [ -z "${ISOPATH}" ]; then
+		echo ">>> ISOPATH is empty skipping generation of ISO image!" | tee -a ${LOGFILE}
+		return
 	fi
+
+	echo ">>> Building bootable ISO image for ${TARGET}" | tee -a ${LOGFILE}
+
+	mkdir -p $(dirname ${ISOPATH})
 
 	customize_stagearea_for_image "iso"
 	install_default_kernel ${DEFAULT_KERNEL}
 
-	echo cdrom > $FINAL_CHROOT_DIR/etc/platform
+	BOOTCONF=${INSTALLER_CHROOT_DIR}/boot.config
+	LOADERCONF=${INSTALLER_CHROOT_DIR}/boot/loader.conf
 
-	FSLABEL=$(echo ${PRODUCT_NAME} | tr '[:lower:]' '[:upper:]')
-	echo "/dev/iso9660/${FSLABEL} / cd9660 ro 0 0" > ${FINAL_CHROOT_DIR}/etc/fstab
+	rm -f ${LOADERCONF} ${BOOTCONF} >/dev/null 2>&1
 
-	# This check is for supporting create memstick/ova images
-	echo -n ">>> Running command: script -aq $LOGFILE makefs -t cd9660 -o bootimage=\"i386;${FINAL_CHROOT_DIR}/boot/cdboot \"-o no-emul-boot -o rockridge " | tee -a ${LOGFILE}
-	echo "-o label=${FSLABEL} -o publisher=\"${PRODUCT_NAME} project.\" $ISOPATH ${FINAL_CHROOT_DIR}" | tee -a ${LOGFILE}
+	touch ${FINAL_CHROOT_DIR}/boot/loader.conf
 
 	create_distribution_tarball
 
-	# Remove /rescue from iso since cd9660 cannot deal with hardlinks
-	rm -rf ${FINAL_CHROOT_DIR}/rescue
+	FSLABEL=$(echo ${PRODUCT_NAME} | tr '[:lower:]' '[:upper:]')
 
-	makefs -t cd9660 -o bootimage="i386;${FINAL_CHROOT_DIR}/boot/cdboot" -o no-emul-boot -o rockridge \
-		-o label=${FSLABEL} -o publisher="${PRODUCT_NAME} project." $ISOPATH ${FINAL_CHROOT_DIR} 2>&1 >> ${LOGFILE}
-	if [ $? -ne 0 -o ! -f $ISOPATH ]; then
-		if [ -f ${ISOPATH} ]; then
-			rm -f $ISOPATH
-		fi
-		echo ">>> ERROR: Something wrong happened during ISO image creation. STOPPING!" | tee -a ${LOGFILE}
+	sh ${FREEBSD_SRC_DIR}/release/${TARGET}/mkisoimages.sh -b \
+		${FSLABEL} \
+		${ISOPATH} \
+		${INSTALLER_CHROOT_DIR}
+
+	if [ ! -f "${ISOPATH}" ]; then
+		echo "ERROR! ISO image was not built"
 		print_error_pfS
 	fi
+
 	gzip -qf $ISOPATH &
 	_bg_pids="${_bg_pids}${_bg_pids:+ }$!"
 
@@ -1376,6 +763,7 @@ create_iso_image() {
 }
 
 create_memstick_image() {
+	local _variant="$1"
 
 	LOGFILE=${BUILDER_LOGS}/memstick.${TARGET}
 	if [ "${MEMSTICKPATH}" = "" ]; then
@@ -1383,34 +771,40 @@ create_memstick_image() {
 		return
 	fi
 
-	customize_stagearea_for_image "memstick"
+	mkdir -p $(dirname ${MEMSTICKPATH})
+
+	local _image_path=${MEMSTICKPATH}
+	if [ -n "${_variant}" ]; then
+		_image_path=$(echo "$_image_path" | \
+			sed "s/-memstick-/-memstick-${_variant}-/")
+		VARIANTIMAGES="${VARIANTIMAGES}${VARIANTIMAGES:+ }${_image_path}"
+	fi
+
+	customize_stagearea_for_image "memstick" "" $_variant
 	install_default_kernel ${DEFAULT_KERNEL}
 
-	echo cdrom > $FINAL_CHROOT_DIR/etc/platform
-
-	echo ">>> Creating memstick to ${MEMSTICKPATH}." 2>&1 | tee -a ${LOGFILE}
-	echo "/dev/ufs/${PRODUCT_NAME} / ufs ro 0 0" > ${FINAL_CHROOT_DIR}/etc/fstab
+	echo ">>> Creating memstick to ${_image_path}." 2>&1 | tee -a ${LOGFILE}
 	echo "kern.cam.boot_delay=10000" >> ${FINAL_CHROOT_DIR}/boot/loader.conf.local
+
+	BOOTCONF=${INSTALLER_CHROOT_DIR}/boot.config
+	LOADERCONF=${INSTALLER_CHROOT_DIR}/boot/loader.conf
+
+	rm -f ${LOADERCONF} ${BOOTCONF} >/dev/null 2>&1
+
+	touch ${FINAL_CHROOT_DIR}/boot/loader.conf
 
 	create_distribution_tarball
 
-	makefs -B little -o label=${PRODUCT_NAME},version=2 ${MEMSTICKPATH} ${FINAL_CHROOT_DIR}
-	if [ $? -ne 0 ]; then
-		if [ -f ${MEMSTICKPATH} ]; then
-			rm -f $MEMSTICKPATH
-		fi
-		echo ">>> ERROR: Something wrong happened during MEMSTICK image creation. STOPPING!" | tee -a ${LOGFILE}
+	sh ${FREEBSD_SRC_DIR}/release/${TARGET}/make-memstick.sh \
+		${INSTALLER_CHROOT_DIR} \
+		${_image_path}
+
+	if [ ! -f "${_image_path}" ]; then
+		echo "ERROR! memstick image was not built"
 		print_error_pfS
 	fi
-	MD=$(mdconfig -a -t vnode -f $MEMSTICKPATH)
-	# Just in case
-	trap "mdconfig -d -u ${MD}" 1 2 15 EXIT
-	gpart create -s BSD ${MD} 2>&1 >> ${LOGFILE}
-	gpart bootcode -b ${FINAL_CHROOT_DIR}/boot/boot ${MD} 2>&1 >> ${LOGFILE}
-	gpart add -t freebsd-ufs ${MD} 2>&1 >> ${LOGFILE}
-	trap "-" 1 2 15 EXIT
-	mdconfig -d -u ${MD} 2>&1 | tee -a ${LOGFILE}
-	gzip -qf $MEMSTICKPATH &
+
+	gzip -qf $_image_path &
 	_bg_pids="${_bg_pids}${_bg_pids:+ }$!"
 
 	echo ">>> MEMSTICK created: $(LC_ALL=C date)" | tee -a ${LOGFILE}
@@ -1423,53 +817,40 @@ create_memstick_serial_image() {
 		return
 	fi
 
+	mkdir -p $(dirname ${MEMSTICKSERIALPATH})
+
 	customize_stagearea_for_image "memstickserial"
 	install_default_kernel ${DEFAULT_KERNEL}
 
-	echo cdrom > $FINAL_CHROOT_DIR/etc/platform
-
-	echo "/dev/ufs/${PRODUCT_NAME} / ufs ro 0 0" > ${FINAL_CHROOT_DIR}/etc/fstab
+	echo ">>> Creating serial memstick to ${MEMSTICKSERIALPATH}." 2>&1 | tee -a ${LOGFILE}
 	echo "kern.cam.boot_delay=10000" >> ${FINAL_CHROOT_DIR}/boot/loader.conf.local
 
-	echo ">>> Creating serial memstick to ${MEMSTICKSERIALPATH}." 2>&1 | tee -a ${LOGFILE}
-
-	BOOTCONF=${FINAL_CHROOT_DIR}/boot.config
-	LOADERCONF=${FINAL_CHROOT_DIR}/boot/loader.conf
+	BOOTCONF=${INSTALLER_CHROOT_DIR}/boot.config
+	LOADERCONF=${INSTALLER_CHROOT_DIR}/boot/loader.conf
 
 	echo ">>> Activating serial console..." 2>&1 | tee -a ${LOGFILE}
-	# Activate serial console in boot.config
-	if [ -f ${BOOTCONF} ]; then
-		sed -i "" '/-D$/d' ${BOOTCONF}
-	fi
-	echo "-S115200 -D" >> ${BOOTCONF}
+	echo "-S115200 -D" > ${BOOTCONF}
 
-	# Remove old console options if present.
-	[ -f "${LOADERCONF}" ] \
-		&& sed -i "" -Ee "/(console|boot_multicons|boot_serial)/d" ${LOADERCONF}
 	# Activate serial console+video console in loader.conf
-	echo 'boot_multicons="YES"' >>  ${LOADERCONF}
+	echo 'boot_multicons="YES"' >  ${LOADERCONF}
 	echo 'boot_serial="YES"' >> ${LOADERCONF}
 	echo 'console="comconsole,vidconsole"' >> ${LOADERCONF}
 	echo 'comconsole_speed="115200"' >> ${LOADERCONF}
 
+	cat ${BOOTCONF} >> ${FINAL_CHROOT_DIR}/boot.config
+	cat ${LOADERCONF} >> ${FINAL_CHROOT_DIR}/boot/loader.conf
+
 	create_distribution_tarball
 
-	makefs -B little -o label=${PRODUCT_NAME},version=2 ${MEMSTICKSERIALPATH} ${FINAL_CHROOT_DIR}
-	if [ $? -ne 0 ]; then
-		if [ -f ${MEMSTICKSERIALPATH} ]; then
-			rm -f $MEMSTICKSERIALPATH
-		fi
-		echo ">>> ERROR: Something wrong happened during MEMSTICKSERIAL image creation. STOPPING!" | tee -a ${LOGFILE}
+	sh ${FREEBSD_SRC_DIR}/release/${TARGET}/make-memstick.sh \
+		${INSTALLER_CHROOT_DIR} \
+		${MEMSTICKSERIALPATH}
+
+	if [ ! -f "${MEMSTICKSERIALPATH}" ]; then
+		echo "ERROR! memstick serial image was not built"
 		print_error_pfS
 	fi
-	MD=$(mdconfig -a -t vnode -f $MEMSTICKSERIALPATH)
-	# Just in case
-	trap "mdconfig -d -u ${MD}" 1 2 15 EXIT
-	gpart create -s BSD ${MD} 2>&1 >> ${LOGFILE}
-	gpart bootcode -b ${FINAL_CHROOT_DIR}/boot/boot ${MD} 2>&1 >> ${LOGFILE}
-	gpart add -t freebsd-ufs ${MD} 2>&1 >> ${LOGFILE}
-	trap "-" 1 2 15 EXIT
-	mdconfig -d -u ${MD} 2>&1 >> ${LOGFILE}
+
 	gzip -qf $MEMSTICKSERIALPATH &
 	_bg_pids="${_bg_pids}${_bg_pids:+ }$!"
 
@@ -1483,55 +864,42 @@ create_memstick_adi_image() {
 		return
 	fi
 
+	mkdir -p $(dirname ${MEMSTICKADIPATH})
+
 	customize_stagearea_for_image "memstickadi"
 	install_default_kernel ${DEFAULT_KERNEL}
 
-	echo cdrom > $FINAL_CHROOT_DIR/etc/platform
-
-	echo "/dev/ufs/${PRODUCT_NAME} / ufs ro 0 0" > ${FINAL_CHROOT_DIR}/etc/fstab
+	echo ">>> Creating serial memstick to ${MEMSTICKADIPATH}." 2>&1 | tee -a ${LOGFILE}
 	echo "kern.cam.boot_delay=10000" >> ${FINAL_CHROOT_DIR}/boot/loader.conf.local
 
-	echo ">>> Creating serial memstick to ${MEMSTICKADIPATH}." 2>&1 | tee -a ${LOGFILE}
-
-	BOOTCONF=${FINAL_CHROOT_DIR}/boot.config
-	LOADERCONF=${FINAL_CHROOT_DIR}/boot/loader.conf
+	BOOTCONF=${INSTALLER_CHROOT_DIR}/boot.config
+	LOADERCONF=${INSTALLER_CHROOT_DIR}/boot/loader.conf
 
 	echo ">>> Activating serial console..." 2>&1 | tee -a ${LOGFILE}
-	# Activate serial console in boot.config
-	if [ -f ${BOOTCONF} ]; then
-		sed -i "" '/-[Dh]$/d' ${BOOTCONF}
-	fi
-	echo "-S115200 -h" >> ${BOOTCONF}
+	echo "-S115200 -h" > ${BOOTCONF}
 
-	# Remove old console options if present.
-	[ -f "${LOADERCONF}" ] \
-		&& sed -i "" -Ee "/(console|boot_multicons|boot_serial|hint.uart)/d" ${LOADERCONF}
 	# Activate serial console+video console in loader.conf
-	echo 'boot_serial="YES"' >> ${LOADERCONF}
+	echo 'boot_serial="YES"' > ${LOADERCONF}
 	echo 'console="comconsole"' >> ${LOADERCONF}
 	echo 'comconsole_speed="115200"' >> ${LOADERCONF}
 	echo 'comconsole_port="0x2F8"' >> ${LOADERCONF}
 	echo 'hint.uart.0.flags="0x00"' >> ${LOADERCONF}
 	echo 'hint.uart.1.flags="0x10"' >> ${LOADERCONF}
 
+	cat ${BOOTCONF} >> ${FINAL_CHROOT_DIR}/boot.config
+	cat ${LOADERCONF} >> ${FINAL_CHROOT_DIR}/boot/loader.conf
+
 	create_distribution_tarball
 
-	makefs -B little -o label=${PRODUCT_NAME},version=2 ${MEMSTICKADIPATH} ${FINAL_CHROOT_DIR}
-	if [ $? -ne 0 ]; then
-		if [ -f ${MEMSTICKADIPATH} ]; then
-			rm -f $MEMSTICKADIPATH
-		fi
-		echo ">>> ERROR: Something wrong happened during MEMSTICKADI image creation. STOPPING!" | tee -a ${LOGFILE}
+	sh ${FREEBSD_SRC_DIR}/release/${TARGET}/make-memstick.sh \
+		${INSTALLER_CHROOT_DIR} \
+		${MEMSTICKADIPATH}
+
+	if [ ! -f "${MEMSTICKADIPATH}" ]; then
+		echo "ERROR! memstick ADI image was not built"
 		print_error_pfS
 	fi
-	MD=$(mdconfig -a -t vnode -f $MEMSTICKADIPATH)
-	# Just in case
-	trap "mdconfig -d -u ${MD}" 1 2 15 EXIT
-	gpart create -s BSD ${MD} 2>&1 >> ${LOGFILE}
-	gpart bootcode -b ${FINAL_CHROOT_DIR}/boot/boot ${MD} 2>&1 >> ${LOGFILE}
-	gpart add -t freebsd-ufs ${MD} 2>&1 >> ${LOGFILE}
-	trap "-" 1 2 15 EXIT
-	mdconfig -d -u ${MD} 2>&1 >> ${LOGFILE}
+
 	gzip -qf $MEMSTICKADIPATH &
 	_bg_pids="${_bg_pids}${_bg_pids:+ }$!"
 
@@ -1575,6 +943,7 @@ setup_pkg_repo() {
 		-e "s/%%PKG_REPO_BRANCH_RELEASE%%/${_pkg_repo_branch_release}/g" \
 		-e "s,%%PKG_REPO_SERVER_DEVEL%%,${_pkg_repo_server_devel},g" \
 		-e "s,%%PKG_REPO_SERVER_RELEASE%%,${_pkg_repo_server_release},g" \
+		-e "s,%%POUDRIERE_PORTS_NAME%%,${POUDRIERE_PORTS_NAME},g" \
 		-e "s/%%PRODUCT_NAME%%/${PRODUCT_NAME}/g" \
 		${_template} \
 		> ${_target}
@@ -1620,42 +989,28 @@ update_freebsd_sources() {
 		local _clone_params="--depth 1 --single-branch"
 	fi
 
-	if [ ! -d "${FREEBSD_SRC_DIR}" ]; then
-		mkdir -p ${FREEBSD_SRC_DIR}
-	fi
-
 	if [ -n "${NO_BUILDWORLD}" -a -n "${NO_BUILDKERNEL}" ]; then
 		echo ">>> NO_BUILDWORLD and NO_BUILDKERNEL set, skipping update of freebsd sources" | tee -a ${LOGFILE}
 		return
 	fi
 
-	echo -n ">>> Obtaining FreeBSD sources ${FREEBSD_BRANCH}..."
-	local _FREEBSD_BRANCH=${FREEBSD_BRANCH:-"devel"}
-	local _CLONE=1
+	echo ">>> Obtaining FreeBSD sources (${FREEBSD_BRANCH})..."
+	${BUILDER_SCRIPTS}/git_checkout.sh \
+		-r ${FREEBSD_REPO_BASE} \
+		-d ${FREEBSD_SRC_DIR} \
+		-b ${FREEBSD_BRANCH}
 
-	if [ -d "${FREEBSD_SRC_DIR}/.git" ]; then
-		CUR_BRANCH=$(cd ${FREEBSD_SRC_DIR} && git branch | grep '^\*' | cut -d' ' -f2)
-		if [ ${_full} -eq 0 -a "${CUR_BRANCH}" = "${_FREEBSD_BRANCH}" ]; then
-			_CLONE=0
-			( cd ${FREEBSD_SRC_DIR} && git clean -fd; git fetch origin; git reset --hard origin/${_FREEBSD_BRANCH} ) 2>&1 | grep -C3 -i -E 'error|fatal'
-		else
-			rm -rf ${FREEBSD_SRC_DIR}
-		fi
-	fi
-
-	if [ ${_CLONE} -eq 1 ]; then
-		( git clone --branch ${_FREEBSD_BRANCH} ${_clone_params} ${FREEBSD_REPO_BASE} ${FREEBSD_SRC_DIR} ) 2>&1 | grep -C3 -i -E 'error|fatal'
-	fi
-
-	if [ ! -d "${FREEBSD_SRC_DIR}/.git" ]; then
+	if [ $? -ne 0 -o ! -d "${FREEBSD_SRC_DIR}/.git" ]; then
 		echo ">>> ERROR: It was not possible to clone FreeBSD src repo"
 		print_error_pfS
 	fi
 
 	if [ -n "${GIT_FREEBSD_COSHA1}" ]; then
-		( cd ${FREEBSD_SRC_DIR} && git checkout ${GIT_FREEBSD_COSHA1} ) 2>&1 | grep -C3 -i -E 'error|fatal'
+		echo -n ">>> Checking out desired commit (${GIT_FREEBSD_COSHA1})... "
+		( git -C  ${FREEBSD_SRC_DIR} checkout ${GIT_FREEBSD_COSHA1} ) 2>&1 | \
+			grep -C3 -i -E 'error|fatal'
+		echo "Done!"
 	fi
-	echo "Done!"
 }
 
 pkg_chroot() {
@@ -1679,7 +1034,12 @@ pkg_chroot() {
 	/sbin/mount -t devfs devfs ${_root}/dev
 	cp -f /etc/resolv.conf ${_root}/etc/resolv.conf
 	touch ${BUILDER_LOGS}/install_pkg_install_ports.txt
-	script -aq ${BUILDER_LOGS}/install_pkg_install_ports.txt pkg -c ${_root} $@ >/dev/null 2>&1
+	local _params=""
+	if [ -f "${_root}/tmp/pkg-repos/repo.conf" ]; then
+		_params="--repo-conf-dir /tmp/pkg-repos "
+	fi
+	script -aq ${BUILDER_LOGS}/install_pkg_install_ports.txt \
+		pkg -c ${_root} ${_params}$@ >/dev/null 2>&1
 	local result=$?
 	rm -f ${_root}/etc/resolv.conf
 	/sbin/umount -f ${_root}/dev
@@ -1702,12 +1062,12 @@ pkg_chroot_add() {
 		print_error_pfS
 	fi
 
-	if [ ! -f ${CORE_PKG_REAL_PATH}/All/${_pkg} ]; then
+	if [ ! -f ${CORE_PKG_ALL_PATH}/${_pkg} ]; then
 		echo ">>> ERROR: Package ${_pkg} not found"
 		print_error_pfS
 	fi
 
-	cp ${CORE_PKG_REAL_PATH}/All/${_pkg} ${_target}
+	cp ${CORE_PKG_ALL_PATH}/${_pkg} ${_target}
 	pkg_chroot ${_target} add /${_pkg}
 	rm -f ${_target}/${_pkg}
 }
@@ -1758,30 +1118,6 @@ install_pkg_install_ports() {
 	echo "Done!"
 }
 
-install_bsdinstaller() {
-	local _params=""
-
-	# Use staging repo on RELEASE
-	if [ -n "${_IS_RELEASE}" ]; then
-		mkdir -p ${FINAL_CHROOT_DIR}/tmp/pkg-repo
-		cp -f ${STAGE_CHROOT_DIR}${PKG_REPO_PATH} \
-			${FINAL_CHROOT_DIR}/tmp/pkg-repo
-		_params="--repo-conf-dir /tmp/pkg-repo "
-	fi
-
-	echo ">>> Installing BSDInstaller in chroot (${FINAL_CHROOT_DIR})... (starting)"
-	pkg_chroot ${FINAL_CHROOT_DIR} ${_params}install -f bsdinstaller
-	sed -i '' -e "s,%%PRODUCT_NAME%%,${PRODUCT_NAME}," \
-		  -e "s,%%PRODUCT_VERSION%%,${PRODUCT_VERSION}," \
-		  -e "s,%%ARCH%%,${TARGET}," \
-		  ${FINAL_CHROOT_DIR}/usr/local/share/dfuibe_lua/conf/pfSense.lua \
-		  ${FINAL_CHROOT_DIR}/usr/local/share/dfuibe_lua/conf/pfSense_rescue.lua
-	if [ -n "${_IS_RELEASE}" ]; then
-		rm -rf ${FINAL_CHROOT_DIR}/tmp/pkg-repo
-	fi
-	echo ">>> Installing BSDInstaller in chroot (${FINAL_CHROOT_DIR})... (finished)"
-}
-
 staginareas_clean_each_run() {
 	echo -n ">>> Cleaning build directories: "
 	if [ -d "${FINAL_CHROOT_DIR}" ]; then
@@ -1795,48 +1131,50 @@ staginareas_clean_each_run() {
 
 # Imported from FreeSBIE
 buildkernel() {
+	local _kernconf=${1:-${KERNCONF}}
+
 	if [ -n "${NO_BUILDKERNEL}" ]; then
 		echo ">>> NO_BUILDKERNEL set, skipping build" | tee -a ${LOGFILE}
 		return
 	fi
 
-	if [ -z "${KERNCONF}" ]; then
+	if [ -z "${_kernconf}" ]; then
 		echo ">>> ERROR: No kernel configuration defined probably this is not what you want! STOPPING!" | tee -a ${LOGFILE}
 		print_error_pfS
 	fi
 
-	if [ -n "${KERNELCONF}" ]; then
-		export KERNCONFDIR=$(dirname ${KERNELCONF})
-		export KERNCONF=$(basename ${KERNELCONF})
-	fi
+	local _old_kernconf=${KERNCONF}
+	export KERNCONF=${_kernconf}
 
-	SRCCONFBASENAME=$(basename ${SRC_CONF})
-	echo ">>> KERNCONFDIR: ${KERNCONFDIR}"
-	echo ">>> ARCH:        ${TARGET}"
-	echo ">>> SRC_CONF:    ${SRCCONFBASENAME}"
+	echo ">>> $(LC_ALL=C date) - Starting build kernel for ${TARGET} architecture..." | tee -a ${LOGFILE}
+	script -aq $LOGFILE ${BUILDER_SCRIPTS}/build_freebsd.sh -W -s ${FREEBSD_SRC_DIR} \
+		|| print_error_pfS
+	echo ">>> $(LC_ALL=C date) - Finished build kernel for ${TARGET} architecture..." | tee -a ${LOGFILE}
 
-	makeargs="${MAKEJ_KERNEL} SRCCONF=${SRC_CONF} __MAKE_CONF=${MAKE_CONF} TARGET_ARCH=${TARGET_ARCH} TARGET=${TARGET}"
-	echo ">>> Builder is running the command: script -aq $LOGFILE make -DNO_KERNELCLEAN $makeargs buildkernel KERNCONF=${KERNCONF}" | tee -a $LOGFILE
-	(script -q $LOGFILE make -C ${FREEBSD_SRC_DIR} -DNO_KERNELCLEAN $makeargs buildkernel KERNCONF=${KERNCONF} || print_error_pfS;) | egrep '^>>>'
+	export KERNCONF=${_old_kernconf}
 }
 
 # Imported from FreeSBIE
 installkernel() {
-	if [ -z "${KERNCONF}" ]; then
+	local _destdir=${1:-${KERNEL_DESTDIR}}
+	local _kernconf=${2:-${KERNCONF}}
+
+	if [ -z "${_kernconf}" ]; then
 		echo ">>> ERROR: No kernel configuration defined probably this is not what you want! STOPPING!" | tee -a ${LOGFILE}
 		print_error_pfS
 	fi
 
-	if [ -n "${KERNELCONF}" ]; then
-		export KERNCONFDIR=$(dirname ${KERNELCONF})
-		export KERNCONF=$(basename ${KERNELCONF})
-	fi
+	local _old_kernconf=${KERNCONF}
+	export KERNCONF=${_kernconf}
 
 	mkdir -p ${STAGE_CHROOT_DIR}/boot
-	makeargs="${MAKEJ_KERNEL} SRCCONF=${SRC_CONF} __MAKE_CONF=${MAKE_CONF} TARGET_ARCH=${TARGET_ARCH} TARGET=${TARGET} DESTDIR=${KERNEL_DESTDIR}"
-	echo ">>> Builder is running the command: script -aq $LOGFILE make ${makeargs} installkernel KERNCONF=${KERNCONF}"  | tee -a $LOGFILE
-	(script -aq $LOGFILE make -C ${FREEBSD_SRC_DIR} ${makeargs} installkernel KERNCONF=${KERNCONF} || print_error_pfS;) | egrep '^>>>'
-	gzip -f9 $KERNEL_DESTDIR/boot/kernel/kernel
+	echo ">>> Installing kernel (${_kernconf}) for ${TARGET} architecture..." | tee -a ${LOGFILE}
+	script -aq $LOGFILE ${BUILDER_SCRIPTS}/install_freebsd.sh -W -D -z \
+		-s ${FREEBSD_SRC_DIR} \
+		-d ${_destdir} \
+		|| print_error_pfS
+
+	export KERNCONF=${_old_kernconf}
 }
 
 # Launch is ran first to setup a few variables that we need
@@ -1855,9 +1193,14 @@ finish() {
 
 pkg_repo_rsync() {
 	local _repo_path_param="${1}"
+	local _ignore_final_rsync="${2}"
 
 	if [ -z "${_repo_path_param}" -o ! -d "${_repo_path_param}" ]; then
 		return
+	fi
+
+	if [ -n "${SKIP_FINAL_RSYNC}" ]; then
+		_ignore_final_rsync="1"
 	fi
 
 	# Sanitize path
@@ -1875,8 +1218,7 @@ pkg_repo_rsync() {
 		local _logfile="${LOGFILE}"
 	fi
 
-	if [ -n "${PKG_REPO_SIGNING_COMMAND}" ]; then
-
+	if [ -n "${PKG_REPO_SIGNING_COMMAND}" -a -z "${DO_NOT_SIGN_PKG_REPO}" ]; then
 		# Detect poudriere directory structure
 		if [ -L "${_repo_path}/.latest" ]; then
 			local _real_repo_path=$(readlink -f ${_repo_path}/.latest)
@@ -1920,42 +1262,63 @@ pkg_repo_rsync() {
 		return
 	fi
 
-	# Make sure destination directory exist
-	ssh -p ${PKG_RSYNC_SSH_PORT} \
-		${PKG_RSYNC_USERNAME}@${PKG_RSYNC_HOSTNAME} \
-		"mkdir -p ${PKG_RSYNC_DESTDIR}"
+	for _pkg_rsync_hostname in ${PKG_RSYNC_HOSTNAME}; do
+		# Make sure destination directory exist
+		ssh -p ${PKG_RSYNC_SSH_PORT} \
+			${PKG_RSYNC_USERNAME}@${_pkg_rsync_hostname} \
+			"mkdir -p ${PKG_RSYNC_DESTDIR}"
 
-	echo -n ">>> Sending updated repository to ${PKG_RSYNC_HOSTNAME}... " | tee -a ${_logfile}
-	if script -aq ${_logfile} rsync -ave "ssh -p ${PKG_RSYNC_SSH_PORT}" \
-		--timeout=60 --delete-delay ${_repo_path} \
-		${PKG_RSYNC_USERNAME}@${PKG_RSYNC_HOSTNAME}:${PKG_RSYNC_DESTDIR} >/dev/null 2>&1
-	then
-		echo "Done!" | tee -a ${_logfile}
-	else
-		echo "Failed!" | tee -a ${_logfile}
-		echo ">>> ERROR: An error occurred sending repo to remote hostname"
-		print_error_pfS
-	fi
-
-	if [ -z "${USE_PKG_REPO_STAGING}" -o -n "${SKIP_FINAL_RSYNC}" ]; then
-		return
-	fi
-
-	if [ -n "${_IS_RELEASE}" -o "${_repo_path_param}" = "${CORE_PKG_PATH}" ]; then
-		local _cmd="rsync -ave \"ssh -p ${PKG_FINAL_RSYNC_SSH_PORT}\" \
-			--timeout=60 --delete-delay ${PKG_RSYNC_DESTDIR}/./${_repo_base%%-core}* \
-			${PKG_FINAL_RSYNC_USERNAME}@${PKG_FINAL_RSYNC_HOSTNAME}:${PKG_FINAL_RSYNC_DESTDIR}"
-
-		echo -n ">>> Sending updated repositories to ${PKG_FINAL_RSYNC_HOSTNAME}... " | tee -a ${_logfile}
-		if script -aq ${_logfile} ssh -p ${PKG_RSYNC_SSH_PORT} \
-			${PKG_RSYNC_USERNAME}@${PKG_RSYNC_HOSTNAME} ${_cmd} >/dev/null 2>&1; then
+		echo -n ">>> Sending updated repository to ${_pkg_rsync_hostname}... " | tee -a ${_logfile}
+		if script -aq ${_logfile} rsync -Have "ssh -p ${PKG_RSYNC_SSH_PORT}" \
+			--timeout=60 --delete-delay ${_repo_path} \
+			${PKG_RSYNC_USERNAME}@${_pkg_rsync_hostname}:${PKG_RSYNC_DESTDIR} >/dev/null 2>&1
+		then
 			echo "Done!" | tee -a ${_logfile}
 		else
 			echo "Failed!" | tee -a ${_logfile}
-			echo ">>> ERROR: An error occurred sending repo to final hostname"
+			echo ">>> ERROR: An error occurred sending repo to remote hostname"
 			print_error_pfS
 		fi
-	fi
+
+		if [ -z "${USE_PKG_REPO_STAGING}" -o -n "${_ignore_final_rsync}" ]; then
+			return
+		fi
+
+		if [ -n "${_IS_RELEASE}" -o "${_repo_path_param}" = "${CORE_PKG_PATH}" ]; then
+			for _pkg_final_rsync_hostname in ${PKG_FINAL_RSYNC_HOSTNAME}; do
+				# Send .real* directories first to prevent having a broken repo while transfer happens
+				local _cmd="rsync -Have \"ssh -p ${PKG_FINAL_RSYNC_SSH_PORT}\" \
+					--timeout=60 ${PKG_RSYNC_DESTDIR}/./${_repo_base%%-core}* \
+					--include=\"/*\" --include=\"*/.real*\" --include=\"*/.real*/***\" \
+					--exclude=\"*\" \
+					${PKG_FINAL_RSYNC_USERNAME}@${_pkg_final_rsync_hostname}:${PKG_FINAL_RSYNC_DESTDIR}"
+
+				echo -n ">>> Sending updated packages to ${_pkg_final_rsync_hostname}... " | tee -a ${_logfile}
+				if script -aq ${_logfile} ssh -p ${PKG_RSYNC_SSH_PORT} \
+					${PKG_RSYNC_USERNAME}@${_pkg_rsync_hostname} ${_cmd} >/dev/null 2>&1; then
+					echo "Done!" | tee -a ${_logfile}
+				else
+					echo "Failed!" | tee -a ${_logfile}
+					echo ">>> ERROR: An error occurred sending repo to final hostname"
+					print_error_pfS
+				fi
+
+				_cmd="rsync -Have \"ssh -p ${PKG_FINAL_RSYNC_SSH_PORT}\" \
+					--timeout=60 --delete-delay ${PKG_RSYNC_DESTDIR}/./${_repo_base%%-core}* \
+					${PKG_FINAL_RSYNC_USERNAME}@${_pkg_final_rsync_hostname}:${PKG_FINAL_RSYNC_DESTDIR}"
+
+				echo -n ">>> Sending updated repositories metadata to ${_pkg_final_rsync_hostname}... " | tee -a ${_logfile}
+				if script -aq ${_logfile} ssh -p ${PKG_RSYNC_SSH_PORT} \
+					${PKG_RSYNC_USERNAME}@${_pkg_rsync_hostname} ${_cmd} >/dev/null 2>&1; then
+					echo "Done!" | tee -a ${_logfile}
+				else
+					echo "Failed!" | tee -a ${_logfile}
+					echo ">>> ERROR: An error occurred sending repo to final hostname"
+					print_error_pfS
+				fi
+			done
+		fi
+	done
 }
 
 poudriere_possible_archs() {
@@ -2204,7 +1567,6 @@ EOF
 		fi
 
 		echo -n ">>> Creating jail ${jail_name}, it may take some time... " | tee -a ${LOGFILE}
-		# XXX: Change -m to git when it's available in poudriere
 		if ! script -aq ${LOGFILE} poudriere jail -c -j "${jail_name}" -v ${FREEBSD_BRANCH} \
 				-a ${jail_arch} -m git -U ${FREEBSD_REPO_BASE_POUDRIERE} ${native_xtools} >/dev/null 2>&1; then
 			echo "" | tee -a ${LOGFILE}
@@ -2288,8 +1650,18 @@ poudriere_bulk() {
 		mkdir -p /usr/local/etc/poudriere.d
 
 	if [ -f "${BUILDER_TOOLS}/conf/pfPorts/make.conf" ]; then
-		cp -f "${BUILDER_TOOLS}/conf/pfPorts/make.conf" /usr/local/etc/poudriere.d/${POUDRIERE_PORTS_NAME}-make.conf
+		cp -f "${BUILDER_TOOLS}/conf/pfPorts/make.conf" \
+			/usr/local/etc/poudriere.d/${POUDRIERE_PORTS_NAME}-make.conf
 	fi
+
+	cat <<EOF >>/usr/local/etc/poudriere.d/${POUDRIERE_PORTS_NAME}-make.conf
+PKG_REPO_BRANCH_DEVEL=${PKG_REPO_BRANCH_DEVEL}
+PKG_REPO_BRANCH_RELEASE=${PKG_REPO_BRANCH_RELEASE}
+PKG_REPO_SERVER_DEVEL=${PKG_REPO_SERVER_DEVEL}
+PKG_REPO_SERVER_RELEASE=${PKG_REPO_SERVER_RELEASE}
+POUDRIERE_PORTS_NAME=${POUDRIERE_PORTS_NAME}
+PRODUCT_NAME=${PRODUCT_NAME}
+EOF
 
 	# Change version of pfSense meta ports for snapshots
 	if [ -z "${_IS_RELEASE}" ]; then
@@ -2297,8 +1669,14 @@ poudriere_bulk() {
 		sed -i '' \
 			-e "/^DISTVERSION/ s,^.*,DISTVERSION=	${_meta_pkg_version}," \
 			-e "/^PORTREVISION=/d" \
-			/usr/local/poudriere/ports/${POUDRIERE_PORTS_NAME}/security/${PRODUCT_NAME}/Makefile
+			/usr/local/poudriere/ports/${POUDRIERE_PORTS_NAME}/security/${PRODUCT_NAME}/Makefile \
+			/usr/local/poudriere/ports/${POUDRIERE_PORTS_NAME}/sysutils/${PRODUCT_NAME}-repo/Makefile
 	fi
+
+	# Copy over pkg repo templates to pfSense-repo
+	mkdir -p /usr/local/poudriere/ports/${POUDRIERE_PORTS_NAME}/sysutils/${PRODUCT_NAME}-repo/files
+	cp -f ${BUILDER_TOOLS}/templates/pkg_repos/* \
+		/usr/local/poudriere/ports/${POUDRIERE_PORTS_NAME}/sysutils/${PRODUCT_NAME}-repo/files
 
 	for jail_arch in ${_archs}; do
 		jail_name=$(poudriere_jail_name ${jail_arch})
@@ -2317,6 +1695,14 @@ poudriere_bulk() {
 		_bulk=${SCRATCHDIR}/poudriere_bulk.${POUDRIERE_BRANCH}
 		sed -e "s,%%PRODUCT_NAME%%,${PRODUCT_NAME},g" ${_ref_bulk} > ${_bulk}
 
+		local _exclude_bulk="${POUDRIERE_BULK}.exclude.${jail_arch}"
+		if [ -f "${_exclude_bulk}" ]; then
+			mv ${_bulk} ${_bulk}.tmp
+			sed -e "s,%%PRODUCT_NAME%%,${PRODUCT_NAME},g" ${_exclude_bulk} > ${_bulk}.exclude
+			cat ${_bulk}.tmp ${_bulk}.exclude | sort | uniq -u > ${_bulk}
+			rm -f ${_bulk}.tmp ${_bulk}.exclude
+		fi
+
 		if ! poudriere bulk -f ${_bulk} -j ${jail_name} -p ${POUDRIERE_PORTS_NAME}; then
 			echo ">>> ERROR: Something went wrong..."
 			print_error_pfS
@@ -2334,8 +1720,6 @@ poudriere_bulk() {
 
 # This routine is called to write out to stdout
 # a string. The string is appended to $SNAPSHOTSLOGFILE
-# and we scp the log file to the builder host if
-# needed for the real time logging functions.
 snapshots_update_status() {
 	if [ -z "$1" ]; then
 		return
@@ -2345,32 +1729,6 @@ snapshots_update_status() {
 	fi
 	echo "$*"
 	echo "`date` -|- $*" >> $SNAPSHOTSLOGFILE
-	if [ -z "${DO_NOT_UPLOAD}" -a -n "${SNAPSHOTS_RSYNCIP}" ]; then
-		LU=$(cat $SNAPSHOTSLASTUPDATE 2>/dev/null)
-		CT=$(date "+%H%M%S")
-		# Only update every minute
-		if [ "$LU" != "$CT" ]; then
-			ssh ${SNAPSHOTS_RSYNCUSER}@${SNAPSHOTS_RSYNCIP} \
-				"mkdir -p ${SNAPSHOTS_RSYNCLOGS}"
-			scp -q $SNAPSHOTSLOGFILE \
-				${SNAPSHOTS_RSYNCUSER}@${SNAPSHOTS_RSYNCIP}:${SNAPSHOTS_RSYNCLOGS}/build.log
-			date "+%H%M%S" > $SNAPSHOTSLASTUPDATE
-		fi
-	fi
-}
-
-# Copy the current log file to $filename.old on
-# the snapshot www server (real time logs)
-snapshots_rotate_logfile() {
-	if [ -z "${DO_NOT_UPLOAD}" -a -n "${SNAPSHOTS_RSYNCIP}" ]; then
-		scp -q $SNAPSHOTSLOGFILE \
-			${SNAPSHOTS_RSYNCUSER}@${SNAPSHOTS_RSYNCIP}:${SNAPSHOTS_RSYNCLOGS}/build.log.old
-	fi
-
-	# Cleanup log file
-	rm -f $SNAPSHOTSLOGFILE;    touch $SNAPSHOTSLOGFILE
-	rm -f $SNAPSHOTSLASTUPDATE; touch $SNAPSHOTSLASTUPDATE
-
 }
 
 create_sha256() {
@@ -2406,137 +1764,47 @@ snapshots_create_latest_symlink() {
 	ln -sf $(basename ${_image}).sha256 ${_symlink}.sha256
 }
 
-snapshots_copy_to_staging_nanobsd() {
-	for NANOTYPE in nanobsd nanobsd-vga; do
-		for FILESIZE in ${1}; do
-			FILENAMEFULL="$(nanobsd_image_filename ${FILESIZE} ${NANOTYPE}).gz"
-			FILENAMEUPGRADE="$(nanobsd_image_filename ${FILESIZE} ${NANOTYPE} 1).gz"
-			mkdir -p $STAGINGAREA/nanobsd
-			mkdir -p $STAGINGAREA/nanobsdupdates
-
-			cp -l $IMAGES_FINAL_DIR/$FILENAMEFULL $STAGINGAREA/nanobsd/ 2>/dev/null
-			cp -l $IMAGES_FINAL_DIR/$FILENAMEUPGRADE $STAGINGAREA/nanobsdupdates 2>/dev/null
-
-			if [ -f $STAGINGAREA/nanobsd/$FILENAMEFULL ]; then
-				create_sha256 $STAGINGAREA/nanobsd/$FILENAMEFULL
-			fi
-			if [ -f $STAGINGAREA/nanobsdupdates/$FILENAMEUPGRADE ]; then
-				create_sha256 $STAGINGAREA/nanobsdupdates/$FILENAMEUPGRADE
-			fi
-
-			# Copy NanoBSD auto update:
-			if [ -f $STAGINGAREA/nanobsdupdates/$FILENAMEUPGRADE ]; then
-				cp -l $STAGINGAREA/nanobsdupdates/$FILENAMEUPGRADE $STAGINGAREA/latest-${NANOTYPE}-$FILESIZE.img.gz 2>/dev/null
-				create_sha256 $STAGINGAREAA/latest-${NANOTYPE}-$FILESIZE.img.gz
-				# NOTE: Updates need a file with output similar to date output
-				# Use the file generated at start of snapshots_dobuilds() to be consistent on times
-				cp $BUILTDATESTRINGFILE $STAGINGAREA/version-${NANOTYPE}-$FILESIZE
-			fi
-		done
-	done
-}
-
-snapshots_copy_to_staging_iso_updates() {
+snapshots_create_sha256() {
 	local _img=""
 
-	for _img in ${ISOPATH} ${MEMSTICKPATH} ${MEMSTICKSERIALPATH} ${MEMSTICKADIPATH}; do
-		if [ ! -f "${_img}.gz" ]; then
+	for _img in ${ISOPATH} ${MEMSTICKPATH} ${MEMSTICKSERIALPATH} ${MEMSTICKADIPATH} ${OVAPATH} ${VARIANTIMAGES}; do
+		if [ -f "${_img}.gz" ]; then
+			_img="${_img}.gz"
+		fi
+		if [ ! -f "${_img}" ]; then
 			continue
 		fi
-		_img="${_img}.gz"
 		create_sha256 ${_img}
-		cp -l ${_img}* $STAGINGAREA/ 2>/dev/null
-		snapshots_create_latest_symlink ${STAGINGAREA}/$(basename ${_img})
+		snapshots_create_latest_symlink ${_img}
 	done
-
-	if [ -f "${UPDATES_TARBALL_FILENAME}" ]; then
-		create_sha256 ${UPDATES_TARBALL_FILENAME}
-		cp -l ${UPDATES_TARBALL_FILENAME}* $STAGINGAREA/ 2>/dev/null
-		snapshots_create_latest_symlink ${STAGINGAREA}/$(basename ${UPDATES_TARBALL_FILENAME})
-	fi
-
-	if [ -f "${OVAPATH}" ]; then
-		mkdir -p ${STAGINGAREA}/virtualization
-		create_sha256 ${OVAPATH}
-		cp -l ${OVAPATH}* $STAGINGAREA/virtualization 2>/dev/null
-		snapshots_create_latest_symlink ${STAGINGAREA}/virtualization/$(basename ${OVAPATH})
-	fi
-
-	# NOTE: Updates need a file with output similar to date output
-	# Use the file generated at start of snapshots_dobuilds() to be consistent on times
-	if [ -z "${_IS_RELEASE}" ]; then
-		cp $BUILTDATESTRINGFILE $STAGINGAREA/version 2>/dev/null
-	fi
 }
 
 snapshots_scp_files() {
 	if [ -z "${RSYNC_COPY_ARGUMENTS}" ]; then
-		RSYNC_COPY_ARGUMENTS="-ave ssh --timeout=60 --bwlimit=${RSYNCKBYTELIMIT}" #--bwlimit=50
+		RSYNC_COPY_ARGUMENTS="-ave ssh --timeout=60"
 	fi
 
 	snapshots_update_status ">>> Copying core pkg repo to ${PKG_RSYNC_HOSTNAME}"
 	pkg_repo_rsync "${CORE_PKG_PATH}"
 	snapshots_update_status ">>> Finished copying core pkg repo"
 
-	snapshots_update_status ">>> Copying files to ${RSYNCIP}"
+	for _rsyncip in ${RSYNCIP}; do
+		snapshots_update_status ">>> Copying files to ${_rsyncip}"
 
-	# Ensure directory(s) are available
-	ssh ${RSYNCUSER}@${RSYNCIP} "mkdir -p ${RSYNCPATH}/installer"
-	ssh ${RSYNCUSER}@${RSYNCIP} "mkdir -p ${RSYNCPATH}/updates"
-	ssh ${RSYNCUSER}@${RSYNCIP} "mkdir -p ${RSYNCPATH}/nanobsd"
-	if [ -d $STAGINGAREA/virtualization ]; then
-		ssh ${RSYNCUSER}@${RSYNCIP} "mkdir -p ${RSYNCPATH}/virtualization"
-	fi
-	ssh ${RSYNCUSER}@${RSYNCIP} "mkdir -p ${RSYNCPATH}/.updaters"
-	# ensure permissions are correct for r+w
-	ssh ${RSYNCUSER}@${RSYNCIP} "chmod -R ug+rw ${RSYNCPATH}/."
-	rsync $RSYNC_COPY_ARGUMENTS $STAGINGAREA/${PRODUCT_NAME}${PRODUCT_NAME_SUFFIX}-*iso* \
-		${RSYNCUSER}@${RSYNCIP}:${RSYNCPATH}/installer/
-	rsync $RSYNC_COPY_ARGUMENTS $STAGINGAREA/${PRODUCT_NAME}${PRODUCT_NAME_SUFFIX}-memstick* \
-		${RSYNCUSER}@${RSYNCIP}:${RSYNCPATH}/installer/
-	rsync $RSYNC_COPY_ARGUMENTS $STAGINGAREA/${PRODUCT_NAME}${PRODUCT_NAME_SUFFIX}-*Update* \
-		${RSYNCUSER}@${RSYNCIP}:${RSYNCPATH}/updates/
-	rsync $RSYNC_COPY_ARGUMENTS $STAGINGAREA/nanobsd/* \
-		${RSYNCUSER}@${RSYNCIP}:${RSYNCPATH}/nanobsd/
-	rsync $RSYNC_COPY_ARGUMENTS $STAGINGAREA/nanobsdupdates/* \
-		${RSYNCUSER}@${RSYNCIP}:${RSYNCPATH}/updates/
-	if [ -d $STAGINGAREA/virtualization ]; then
-		rsync $RSYNC_COPY_ARGUMENTS $STAGINGAREA/virtualization/* \
-			${RSYNCUSER}@${RSYNCIP}:${RSYNCPATH}/virtualization/
-	fi
+		# Ensure directory(s) are available
+		ssh ${RSYNCUSER}@${_rsyncip} "mkdir -p ${RSYNCPATH}/installer"
+		if [ -d $IMAGES_FINAL_DIR/virtualization ]; then
+			ssh ${RSYNCUSER}@${_rsyncip} "mkdir -p ${RSYNCPATH}/virtualization"
+		fi
+		# ensure permissions are correct for r+w
+		ssh ${RSYNCUSER}@${_rsyncip} "chmod -R ug+rw ${RSYNCPATH}/."
+		rsync $RSYNC_COPY_ARGUMENTS $IMAGES_FINAL_DIR/installer/* \
+			${RSYNCUSER}@${_rsyncip}:${RSYNCPATH}/installer/
+		if [ -d $IMAGES_FINAL_DIR/virtualization ]; then
+			rsync $RSYNC_COPY_ARGUMENTS $IMAGES_FINAL_DIR/virtualization/* \
+				${RSYNCUSER}@${_rsyncip}:${RSYNCPATH}/virtualization/
+		fi
 
-	# Rather than copy these twice, use ln to link to the latest one.
-
-	ssh ${RSYNCUSER}@${RSYNCIP} "rm -f ${RSYNCPATH}/.updaters/latest.tgz"
-	ssh ${RSYNCUSER}@${RSYNCIP} "rm -f ${RSYNCPATH}/.updaters/latest.tgz.sha256"
-
-	LATESTFILENAME=$(basename ${UPDATES_TARBALL_FILENAME})
-	ssh ${RSYNCUSER}@${RSYNCIP} "ln -s ${RSYNCPATH}/updates/${LATESTFILENAME} \
-		${RSYNCPATH}/.updaters/latest.tgz"
-	ssh ${RSYNCUSER}@${RSYNCIP} "ln -s ${RSYNCPATH}/updates/${LATESTFILENAME}.sha256 \
-		${RSYNCPATH}/.updaters/latest.tgz.sha256"
-
-	for i in ${FLASH_SIZE}
-	do
-		ssh ${RSYNCUSER}@${RSYNCIP} "rm -f ${RSYNCPATH}/.updaters/latest-nanobsd-${i}.img.gz"
-		ssh ${RSYNCUSER}@${RSYNCIP} "rm -f ${RSYNCPATH}/.updaters/latest-nanobsd-${i}.img.gz.sha256"
-		ssh ${RSYNCUSER}@${RSYNCIP} "rm -f ${RSYNCPATH}/.updaters/latest-nanobsd-vga-${i}.img.gz"
-		ssh ${RSYNCUSER}@${RSYNCIP} "rm -f ${RSYNCPATH}/.updaters/latest-nanobsd-vga-${i}.img.gz.sha256"
-
-		FILENAMEUPGRADE="$(nanobsd_image_filename ${i} nanobsd 1).gz"
-		ssh ${RSYNCUSER}@${RSYNCIP} "ln -s ${RSYNCPATH}/updates/${FILENAMEUPGRADE} \
-			${RSYNCPATH}/.updaters/latest-nanobsd-${i}.img.gz"
-		ssh ${RSYNCUSER}@${RSYNCIP} "ln -s ${RSYNCPATH}/updates/${FILENAMEUPGRADE}.sha256 \
-			${RSYNCPATH}/.updaters/latest-nanobsd-${i}.img.gz.sha256"
-
-		FILENAMEUPGRADE="$(nanobsd_image_filename ${i} nanobsd-vga 1).gz"
-		ssh ${RSYNCUSER}@${RSYNCIP} "ln -s ${RSYNCPATH}/updates/${FILENAMEUPGRADE} \
-			${RSYNCPATH}/.updaters/latest-nanobsd-vga-${i}.img.gz"
-		ssh ${RSYNCUSER}@${RSYNCIP} "ln -s ${RSYNCPATH}/updates/${FILENAMEUPGRADE}.sha256 \
-			${RSYNCPATH}/.updaters/latest-nanobsd-vga-${i}.img.gz.sha256"
+		snapshots_update_status ">>> Finished copying files."
 	done
-
-	rsync $RSYNC_COPY_ARGUMENTS $STAGINGAREA/version* \
-		${RSYNCUSER}@${RSYNCIP}:${RSYNCPATH}/.updaters
-	snapshots_update_status ">>> Finished copying files."
 }
